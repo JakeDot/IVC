@@ -264,6 +264,60 @@ Content-Type: application/json
 
 ---
 
+### 4. Foreign Services API (`/api/services.php`)
+
+Allows registering, querying, pinging, and executing commands on foreign services operating under different hosts.
+
+#### List Foreign Services (GET)
+```http
+GET /api/services.php?action=list HTTP/1.1
+Host: chat.yourdomain.com
+```
+
+#### Register Foreign Service (POST)
+```http
+POST /api/services.php HTTP/1.1
+Content-Type: application/json
+
+{
+  "action": "register",
+  "service_name": "HELPBOT",
+  "host": "help.external-domain.org",
+  "api_endpoint": "https://help.external-domain.org/api/irc",
+  "metadata": "External AI Help Service"
+}
+```
+
+#### Dispatch Command to Foreign Service (POST)
+```http
+POST /api/services.php HTTP/1.1
+Content-Type: application/json
+
+{
+  "action": "execute",
+  "service_name": "HELPBOT",
+  "sender": "CyberFox",
+  "command": "SEARCH WebRTC encryption"
+}
+```
+
+---
+
+## 🤖 IRC System Bots & Services Directory
+
+IVC includes a full IRC Services suite operating natively and supporting foreign services:
+
+| Bot / Service | Function | Key Commands |
+| :--- | :--- | :--- |
+| **`NAMESERV`** | Nickname Registration & Authentication | `/msg NAMESERV REGISTER <pass> [email]`, `/msg NAMESERV IDENTIFY <pass>` |
+| **`CHANSERV`** | Channel Registration, Topic & OPs | `/msg CHANSERV REGISTER <#chan>`, `/msg CHANSERV OP <#chan> <nick>`, `/topic <new_topic>` |
+| **`MOTDSERV`** | Serverwide Message of the Day | `/msg MOTDSERV SET <new_motd>`, `/motd` |
+| **`MEMOSERV`** | Offline Messaging & Memo Storage | `/msg MEMOSERV SEND <nick> <msg>`, `/msg MEMOSERV READ [num]`, `/memo` |
+| **`HOSTSERV`** | User Virtual Host (VHost) Management | `/msg HOSTSERV REQUEST <vhost>`, `/msg HOSTSERV ON`, `/vhost` |
+| **`SERVICESERV`** | Network & Foreign Services Directory | `/msg SERVICESERV LIST`, `/msg SERVICESERV REGISTER <name> <host> <endpoint>` |
+
+---
+
 ## 🧪 Testing
 
 Execute the automated backend test suite:
@@ -272,7 +326,7 @@ Execute the automated backend test suite:
 php tests/WebRtcSiteTest.php
 ```
 
-All 16 security and signaling assertions should pass.
+All 49 security, signaling, IRC bot, and foreign service assertions should pass.
 
 ---
 

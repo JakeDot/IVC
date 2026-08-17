@@ -229,6 +229,35 @@ class Database
                 nickname VARCHAR(64) NOT NULL,
                 role VARCHAR(16) DEFAULT 'MEMBER',
                 added_at INT NOT NULL
+            );",
+
+            // Table for MEMOSERV stored memos
+            "CREATE TABLE IF NOT EXISTS memoserv_memos (
+                id {$autoInc},
+                sender_nick VARCHAR(64) NOT NULL,
+                recipient_nick VARCHAR(64) NOT NULL,
+                message TEXT NOT NULL,
+                sent_at INT NOT NULL,
+                is_read TINYINT DEFAULT 0
+            );",
+
+            // Table for HOSTSERV assigned virtual hosts
+            "CREATE TABLE IF NOT EXISTS hostserv_vhosts (
+                nickname VARCHAR(64) PRIMARY KEY,
+                vhost VARCHAR(128) NOT NULL,
+                status VARCHAR(32) DEFAULT 'ACTIVE',
+                assigned_at INT NOT NULL
+            );",
+
+            // Table for foreign services operating under different hosts
+            "CREATE TABLE IF NOT EXISTS foreign_services (
+                service_name VARCHAR(64) PRIMARY KEY,
+                host VARCHAR(128) NOT NULL,
+                api_endpoint VARCHAR(255) NOT NULL,
+                status VARCHAR(32) DEFAULT 'ACTIVE',
+                registered_at INT NOT NULL,
+                last_ping INT NOT NULL,
+                metadata TEXT NULL
             );"
         ];
 
@@ -277,6 +306,9 @@ class Database
         self::$pdo->exec("DELETE FROM nameserv_nicks;");
         self::$pdo->exec("DELETE FROM chanserv_channels;");
         self::$pdo->exec("DELETE FROM channel_users;");
+        self::$pdo->exec("DELETE FROM memoserv_memos;");
+        self::$pdo->exec("DELETE FROM hostserv_vhosts;");
+        self::$pdo->exec("DELETE FROM foreign_services;");
         self::seedDefaultSettings();
     }
 }

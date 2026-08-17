@@ -140,29 +140,64 @@ final class RoomManager
 
     private static function broadcastSignalInternal(array $rooms, string $roomId, string $senderId, array $payload, bool $excludeSender = true): array
     {
-        if (!isset($rooms[$roomId])) {
-            return $rooms;
+        $targetPeer = $payload['target'] ?? null;
+        $isSupersilent = !empty($payload['supersilent']) || !empty($payload['is_supersilent']);
+
+        // Deliver to target room
+        if (isset($rooms[$roomId])) {
+            $message = array_merge($payload, [
+                'sender' => $senderId,
+                'room' => $roomId,
+                'time' => time()
+            ]);
+
+            foreach ($rooms[$roomId] as $peerId => &$peerData) {
+                if ($excludeSender && $peerId === $senderId) {
+                    continue;
+                }
+
+                if ($targetPeer !== null && is_string($targetPeer) && $peerId !== $targetPeer) {
+                    continue;
+                }
+
+                $peerData['messages'][] = $message;
+                if (count($peerData['messages']) > 50) {
+                    array_shift($peerData['messages']);
+                }
+            }
+            unset($peerData);
         }
 
-        $targetPeer = $payload['target'] ?? null;
-        $message = array_merge($payload, [
-            'sender' => $senderId,
-            'time' => time()
-        ]);
+        // Deliver to subrooms if message is not supersilent and not targeted to a specific peer
+        if (!$isSupersilent && $targetPeer === null) {
+            $superRoomPrefix = $roomId . '/';
+            foreach ($rooms as $subRoomId => &$subPeers) {
+                if ($subRoomId === $roomId) {
+                    continue;
+                }
 
-        foreach ($rooms[$roomId] as $peerId => &$peerData) {
-            if ($excludeSender && $peerId === $senderId) {
-                continue;
-            }
+                if (str_starts_with($subRoomId, $superRoomPrefix)) {
+                    $subMessage = array_merge($payload, [
+                        'sender' => $senderId,
+                        'room' => $roomId,
+                        'super_room' => $roomId,
+                        'time' => time()
+                    ]);
 
-            if ($targetPeer !== null && is_string($targetPeer) && $peerId !== $targetPeer) {
-                continue;
-            }
+                    foreach ($subPeers as $peerId => &$peerData) {
+                        if ($excludeSender && $peerId === $senderId) {
+                            continue;
+                        }
 
-            $peerData['messages'][] = $message;
-            if (count($peerData['messages']) > 50) {
-                array_shift($peerData['messages']);
+                        $peerData['messages'][] = $subMessage;
+                        if (count($peerData['messages']) > 50) {
+                            array_shift($peerData['messages']);
+                        }
+                    }
+                    unset($peerData);
+                }
             }
+            unset($subPeers);
         }
 
         return $rooms;

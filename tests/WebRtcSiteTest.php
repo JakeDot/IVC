@@ -230,6 +230,50 @@ assertTest(count($allChans) > 0 && $allChans[0] instanceof Channel, 'ChannelRepo
 $settingRepo = SettingRepository::findByKey('network_name');
 assertTest($settingRepo !== null && $settingRepo->getSettingValue() === 'IVC-IRC Network', 'SettingRepository::findByKey retrieved IrcSetting object');
 
+// Test 13: Grouped Subchats (#room/sub-room) and /supersilent Command
+echo "\n13. Testing Grouped Subchats (#room/sub-room) & /supersilent Command...\n";
+assertTest(Sanitizer::sanitizeRoomId('#tech/dev') === '#tech/dev', 'Sanitize subroom #tech/dev syntax');
+assertTest(Sanitizer::sanitizeRoomId('tech/dev/backend') === '#tech/dev/backend', 'Normalize subroom syntax and prepend #');
+assertTest(Sanitizer::sanitizeRoomId('#tech//dev/') === '#tech/dev', 'Collapse slashes and trim trailing slash in subroom name');
+
+// Reset RoomManager and set up super room and subroom clients
+RoomManager::reset();
+$superRoom = '#tech';
+$subRoom1 = '#tech/dev';
+$subRoom2 = '#tech/dev/backend';
+$otherRoom = '#general';
+
+$uSuper = 'peer-super';
+$uSub1 = 'peer-sub1';
+$uSub2 = 'peer-sub2';
+$uOther = 'peer-other';
+
+RoomManager::joinRoom($superRoom, $uSuper);
+RoomManager::joinRoom($subRoom1, $uSub1);
+RoomManager::joinRoom($subRoom2, $uSub2);
+RoomManager::joinRoom($otherRoom, $uOther);
+
+// Broadcast standard message in super room
+RoomManager::broadcastSignal($superRoom, $uSuper, ['type' => 'chat', 'message' => 'Announcement to all tech subrooms'], true);
+
+$msgSub1 = RoomManager::pollMessages($subRoom1, $uSub1);
+$msgSub2 = RoomManager::pollMessages($subRoom2, $uSub2);
+$msgOther = RoomManager::pollMessages($otherRoom, $uOther);
+
+assertTest(count($msgSub1) === 1 && $msgSub1[0]['message'] === 'Announcement to all tech subrooms', 'Subroom #tech/dev received super room message');
+assertTest(count($msgSub2) === 1 && $msgSub2[0]['message'] === 'Announcement to all tech subrooms', 'Nested subroom #tech/dev/backend received super room message');
+assertTest(count($msgOther) === 0, 'Unrelated room #general did not receive super room message');
+
+// Test /supersilent command usage and override
+$ssUsage = IrcServices::processCommand($uSuper, $superRoom, '/supersilent');
+assertTest($ssUsage !== null && str_contains($ssUsage['response'], 'Usage: /supersilent'), 'Returned usage info for /supersilent command');
+
+$ssCmd = IrcServices::processCommand($uSuper, $superRoom, '/supersilent Local super room announcement only');
+assertTest($ssCmd !== null && $ssCmd['service'] === 'SUPERSILENT', 'Processed /supersilent message');
+
+$ssSub1Msgs = RoomManager::pollMessages($subRoom1, $uSub1);
+assertTest(count($ssSub1Msgs) === 0, 'Subroom #tech/dev did NOT receive /supersilent message (override behavior)');
+
 echo "\n-----------------------------------------\n";
 echo "Test Results: $testsPassed Passed, $testsFailed Failed.\n";
 echo "-----------------------------------------\n\n";

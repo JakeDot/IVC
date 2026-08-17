@@ -100,7 +100,7 @@ if ($method === 'POST') {
 
     if ($result !== null) {
         $broadcast = $data['broadcast'] ?? true;
-        if ($broadcast) {
+        if ($broadcast && empty($result['skip_bot_broadcast'])) {
             RoomManager::broadcastSignal($channel, 'SYSTEM_BOT', [
                 'type' => 'chat',
                 'sender' => $result['service'],

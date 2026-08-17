@@ -1,0 +1,131 @@
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/../../src/Security/SecurityHeaders.php';
+require_once __DIR__ . '/../../src/Security/Sanitizer.php';
+require_once __DIR__ . '/../../src/Security/RateLimiter.php';
+require_once __DIR__ . '/../../src/Security/TokenManager.php';
+require_once __DIR__ . '/../../src/Signaling/RoomManager.php';
+
+use Fortress\Security\SecurityHeaders;
+use Fortress\Security\Sanitizer;
+use Fortress\Security\RateLimiter;
+use Fortress\Security\TokenManager;
+use Fortress\Signaling\RoomManager;
+
+// Enforce Fortress IT Security Headers
+SecurityHeaders::apply();
+
+header('Content-Type: application/json');
+
+// Rate limiting check based on session ID or anonymized IP hash
+$clientKey = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+if (!RateLimiter::check($clientKey, 120, 60)) {
+    http_response_code(429);
+    echo json_encode(['error' => 'Rate limit exceeded. Please wait.'], JSON_THROW_ON_ERROR);
+    exit;
+}
+
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+
+if ($method === 'GET') {
+    // Poll messages or check SSE
+    $roomId = Sanitizer::sanitizeRoomId($_GET['room'] ?? '');
+    $clientId = Sanitizer::sanitizeClientId($_GET['client'] ?? '');
+    $mode = $_GET['mode'] ?? 'poll';
+
+    if (empty($roomId) || empty($clientId)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Room ID and Client ID required'], JSON_THROW_ON_ERROR);
+        exit;
+    }
+
+    if ($mode === 'sse') {
+        // SSE (Server-Sent Events) realtime streaming mode
+        header('Content-Type: text/event-stream');
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Connection: keep-alive');
+        header('X-Accel-Buffering: no');
+
+        RoomManager::joinRoom($roomId, $clientId);
+
+        $start = time();
+        while (time() - $start < 25) { // Run SSE loop max 25s per connection
+            $messages = RoomManager::pollMessages($roomId, $clientId);
+            if (!empty($messages)) {
+                foreach ($messages as $msg) {
+                    echo "data: " . json_encode($msg, JSON_THROW_ON_ERROR) . "\n\n";
+                }
+                if (ob_get_level() > 0) {
+                    ob_flush();
+                }
+                flush();
+            } else {
+                // Send keep-alive ping comment
+                echo ": keepalive\n\n";
+                if (ob_get_level() > 0) {
+                    ob_flush();
+                }
+                flush();
+            }
+            usleep(200000); // 200ms poll delay
+        }
+        exit;
+    }
+
+    // Standard HTTP Poll Mode
+    $roomInfo = RoomManager::joinRoom($roomId, $clientId);
+    $messages = RoomManager::pollMessages($roomId, $clientId);
+
+    echo json_encode([
+        'status' => 'ok',
+        'peers' => $roomInfo['peers'],
+        'messages' => $messages,
+        'csrf_token' => TokenManager::generateCsrfToken()
+    ], JSON_THROW_ON_ERROR);
+    exit;
+}
+
+if ($method === 'POST') {
+    $rawPayload = file_get_contents('php://input');
+    if ($rawPayload === false) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid request payload'], JSON_THROW_ON_ERROR);
+        exit;
+    }
+
+    $payload = Sanitizer::validateSignalPayload($rawPayload);
+    if ($payload === null) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid or malformed signal payload'], JSON_THROW_ON_ERROR);
+        exit;
+    }
+
+    $roomId = Sanitizer::sanitizeRoomId($payload['room'] ?? $_GET['room'] ?? '');
+    $clientId = Sanitizer::sanitizeClientId($payload['client'] ?? $_GET['client'] ?? '');
+
+    if (empty($roomId) || empty($clientId)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Room ID and Client ID required'], JSON_THROW_ON_ERROR);
+        exit;
+    }
+
+    $action = $payload['type'] ?? '';
+
+    if ($action === 'leave') {
+        RoomManager::leaveRoom($roomId, $clientId);
+        echo json_encode(['status' => 'left'], JSON_THROW_ON_ERROR);
+        exit;
+    }
+
+    // Join & broadcast signal (offer, answer, ice-candidate, etc)
+    RoomManager::joinRoom($roomId, $clientId);
+    RoomManager::broadcastSignal($roomId, $clientId, $payload, true);
+
+    echo json_encode(['status' => 'sent'], JSON_THROW_ON_ERROR);
+    exit;
+}
+
+http_response_code(405);
+echo json_encode(['error' => 'Method Not Allowed'], JSON_THROW_ON_ERROR);

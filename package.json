@@ -47,9 +47,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "crypto": "^1.0.1",
-    "events": "^3.3.0",
-    "zlib": "^1.0.5"
+    "events": "^3.3.0"
   },
   "engines": {
     "node": ">=18.0.0",

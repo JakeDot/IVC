@@ -271,6 +271,33 @@ class IrcServices
             ];
         }
 
+        if ($first === '/supersilent') {
+            $msgText = trim(substr($text, strlen($parts[0])));
+            if ($msgText === '') {
+                return [
+                    'is_service_command' => true,
+                    'service' => 'SERVICESERV',
+                    'response' => 'Usage: /supersilent <message> — Post a message to super room only without propagating to subrooms.',
+                    'channel' => $channel
+                ];
+            }
+
+            \Fortress\Signaling\RoomManager::broadcastSignal($channel, $senderNick, [
+                'type' => 'chat',
+                'sender' => $senderNick,
+                'message' => $msgText,
+                'supersilent' => true
+            ], false);
+
+            return [
+                'is_service_command' => true,
+                'service' => 'SUPERSILENT',
+                'response' => "[SUPERSILENT to {$channel}] {$msgText}",
+                'channel' => $channel,
+                'skip_bot_broadcast' => true
+            ];
+        }
+
         if ($first === '/help') {
             $helpMsg = "Available IRC Commands:\n" .
                        "• /msg NAMESERV REGISTER <pass> [email] — Register your nickname\n" .
@@ -286,7 +313,8 @@ class IrcServices
                        "• /vhost [REQUEST|ON|OFF|INFO] — HostServ shortcut\n" .
                        "• /motd [new_motd] — View/update Message of the Day\n" .
                        "• /topic <new_topic> — Change channel topic\n" .
-                       "• /settings [SET <key> <value>] — Manage server settings";
+                       "• /supersilent <message> — Post a message to super room only without propagating to subrooms\n" .
+                       "• /settings [SET <key> <value>] — View or update serverwide settings in MySQL";
 
             return [
                 'is_service_command' => true,

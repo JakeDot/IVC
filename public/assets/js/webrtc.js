@@ -17,7 +17,7 @@
         return `${adj}${anim}#${num}`;
     }
 
-    // Helper: Normalize channel name to start with #
+    // Helper: Normalize channel name to start with # and support grouped subchats (#room/sub-room)
     function normalizeChannel(name) {
         if (!name) return '#lobby';
         name = name.trim();
@@ -25,7 +25,7 @@
         if (!name.startsWith('#') && !name.startsWith('&')) {
             name = '#' + name;
         }
-        return name.replace(/[^a-zA-Z0-9\-_#&]/g, '');
+        return name.replace(/[^a-zA-Z0-9\-_#&\/]/g, '').replace(/\/+/g, '/').replace(/\/$/, '');
     }
 
     // Global Client ID
@@ -528,8 +528,14 @@
 
             case 'chat':
                 const msgType = signal.is_bot ? 'bot' : 'peer';
+                let senderName = signal.sender || 'Peer';
+                if (signal.super_room && signal.super_room !== channelId) {
+                    senderName = `[${signal.super_room}] ${senderName}`;
+                } else if (signal.room && signal.room !== channelId) {
+                    senderName = `[${signal.room}] ${senderName}`;
+                }
                 addMessageToTab(channelId, {
-                    sender: signal.sender || 'Peer',
+                    sender: senderName,
                     text: signal.message || signal.text,
                     type: msgType
                 });
@@ -718,16 +724,15 @@
         // Standard Chat Message via DataChannel & Signaling Fallback
         if (tab.dataChannel && tab.dataChannel.readyState === 'open') {
             tab.dataChannel.send(text);
-        } else {
-            // Send via signaling as fallback
-            sendSignal(activeTabId, {
-                type: 'chat',
-                room: activeTabId,
-                client: myClientId,
-                nickname: myNickname,
-                message: text
-            });
         }
+        // Always transmit via signaling so super-room messages propagate to subrooms in RAM
+        sendSignal(activeTabId, {
+            type: 'chat',
+            room: activeTabId,
+            client: myClientId,
+            nickname: myNickname,
+            message: text
+        });
 
         addMessageToTab(activeTabId, {
             sender: myNickname,

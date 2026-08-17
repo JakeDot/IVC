@@ -19,11 +19,16 @@ final class Sanitizer
             return '#room-' . bin2hex(random_bytes(4));
         }
 
-        // Retain # or & prefix if present
-        $hasHash = str_starts_with($trimmed, '#') || str_starts_with($trimmed, '&');
+        $clean = preg_replace('/[^a-zA-Z0-9\-_\/]/', '', $trimmed);
+        if ($clean === null) {
+            return '#room-' . bin2hex(random_bytes(4));
+        }
 
-        $clean = preg_replace('/[^a-zA-Z0-9\-_]/', '', $trimmed);
-        if ($clean === null || strlen($clean) < 2) {
+        // Normalize slashes: collapse multiple slashes into one, trim leading/trailing slashes
+        $clean = preg_replace('/\/+/', '/', $clean);
+        $clean = trim((string)$clean, '/');
+
+        if (strlen($clean) < 2) {
             return '#room-' . bin2hex(random_bytes(4));
         }
 

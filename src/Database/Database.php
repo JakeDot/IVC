@@ -110,6 +110,21 @@ class Database
                 nickname VARCHAR(64) NOT NULL,
                 role VARCHAR(16) DEFAULT 'MEMBER',
                 added_at INT NOT NULL
+            );",
+
+            // Table for QUOTESERV quotes
+            "CREATE TABLE IF NOT EXISTS quotes (
+                id {$autoInc},
+                quote_text TEXT NOT NULL,
+                author VARCHAR(64) DEFAULT 'Anonymous',
+                created_by VARCHAR(64) DEFAULT 'System',
+                created_at INT NOT NULL
+            );",
+
+            // Table for QUOTESERV subscriptions
+            "CREATE TABLE IF NOT EXISTS quotes_subscriptions (
+                nickname VARCHAR(64) PRIMARY KEY,
+                subscribed_at INT NOT NULL
             );"
         ];
 
@@ -117,8 +132,8 @@ class Database
             self::$pdo->exec($sql);
         }
 
-        // Initialize default serverwide settings if not present
         self::seedDefaultSettings();
+        self::seedDefaultQuotes();
     }
 
     private static function seedDefaultSettings(): void
@@ -149,6 +164,25 @@ class Database
         }
     }
 
+    private static function seedDefaultQuotes(): void
+    {
+        $count = (int)self::$pdo->query("SELECT COUNT(*) FROM quotes")->fetchColumn();
+        if ($count > 0) return;
+
+        $quotes = [
+            ["Security is not a product, but a process.", "Bruce Schneier"],
+            ["Encryption works. Properly implemented strong crypto systems are one of the few things that you can rely on.", "Edward Snowden"],
+            ["Talk is cheap. Show me the code.", "Linus Torvalds"],
+            ["The only truly secure system is one that is powered off, cast in a block of concrete and sealed in a lead-lined room.", "Gene Spafford"]
+        ];
+
+        $stmt = self::$pdo->prepare("INSERT INTO quotes (quote_text, author, created_by, created_at) VALUES (:text, :author, 'System', :time)");
+        $now = time();
+        foreach ($quotes as [$text, $author]) {
+            $stmt->execute([':text' => $text, ':author' => $author, ':time' => $now]);
+        }
+    }
+
     public static function resetDatabase(): void
     {
         if (self::$pdo === null) {
@@ -158,6 +192,9 @@ class Database
         self::$pdo->exec("DELETE FROM nameserv_nicks;");
         self::$pdo->exec("DELETE FROM chanserv_channels;");
         self::$pdo->exec("DELETE FROM channel_users;");
+        self::$pdo->exec("DELETE FROM quotes;");
+        self::$pdo->exec("DELETE FROM quotes_subscriptions;");
         self::seedDefaultSettings();
+        self::seedDefaultQuotes();
     }
 }

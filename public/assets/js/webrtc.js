@@ -1,6 +1,6 @@
 /**
  * Fortress / IVC WebRTC Client & Multi-Tab IRC Infrastructure
- * Supports #channel hash navigation, multi-tab room sessions, #stats connection stats, and NAMESERV/CHANSERV integration.
+ * Supports #channel hash navigation, multi-tab room sessions, #stats connection stats, and NAMESERV/CHANSERV/MOTDSERV/QUOTESERV integration.
  */
 
 (() => {
@@ -37,6 +37,8 @@
     const openTabs = {};
     let activeTabId = null;
     let statsInterval = null;
+    let quoteInterval = null;
+    let isSubscribedQuotes = false;
 
     // WebRTC STUN Server configuration
     const rtcConfig = {
@@ -703,6 +705,12 @@
                         text: data.response,
                         type: 'bot'
                     });
+
+                    if (data.service === 'QUOTESERV' && text.toLowerCase().includes('sub')) {
+                        isSubscribedQuotes = true;
+                        startQuoteDelivery();
+                    }
+
                     if (data.service === 'CHANSERV' && text.toLowerCase().includes('topic')) {
                         // Refresh channel topic
                         tab.topic = data.response;
@@ -734,6 +742,25 @@
             text: text,
             type: 'self'
         });
+    }
+
+    function startQuoteDelivery() {
+        if (quoteInterval) return;
+        quoteInterval = setInterval(async () => {
+            if (!isSubscribedQuotes || !activeTabId || activeTabId === '#stats') return;
+            try {
+                const res = await fetch('/api/irc.php?action=random_quote');
+                const data = await res.json();
+                if (data.status === 'ok' && data.quote) {
+                    const q = data.quote;
+                    addMessageToTab(activeTabId, {
+                        sender: 'QUOTESERV (Private)',
+                        text: `Quote #${q.id}: "${q.quote_text}" — ${q.author}`,
+                        type: 'bot'
+                    });
+                }
+            } catch (e) {}
+        }, 30000); // Deliver quote every 30s when subscribed
     }
 
     /**

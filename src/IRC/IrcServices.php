@@ -6,7 +6,7 @@ namespace Fortress\IRC;
 
 /**
  * IRC Service Command Dispatcher & Parser
- * Handles interaction with NAMESERV, CHANSERV, MOTDSERV, and Serverwide Settings via IRC-style slash commands or direct messages.
+ * Handles interaction with NAMESERV, CHANSERV, MOTDSERV, QUOTESERV, and Serverwide Settings via IRC-style slash commands or direct messages.
  */
 class IrcServices
 {
@@ -45,6 +45,10 @@ class IrcServices
             if ($targetService === MotdServ::SERVICE_NAME) {
                 return self::handleMotdServCommand($senderNick, $channel, $cmd, $args);
             }
+
+            if ($targetService === QuoteServ::SERVICE_NAME) {
+                return self::handleQuoteServCommand($senderNick, $channel, $cmd, $args);
+            }
         }
 
         if ($first === '/nameserv' || $first === '/nickserv') {
@@ -65,7 +69,30 @@ class IrcServices
             return self::handleMotdServCommand($senderNick, $channel, $cmd, $args);
         }
 
+        if ($first === '/quoteserv') {
+            $cmd = strtoupper($parts[1] ?? '');
+            $args = array_slice($parts, 2);
+            return self::handleQuoteServCommand($senderNick, $channel, $cmd, $args);
+        }
+
         // 2. Convenience Slash Commands
+        if ($first === '/quote') {
+            $quoteText = trim(substr($text, strlen($parts[0])));
+            if ($quoteText === '') {
+                $q = QuoteServ::getRandomQuote();
+                $resp = $q ? "Random Quote #{$q['id']}: \"{$q['quote_text']}\" — {$q['author']}" : "QUOTESERV: No quotes found in database.";
+            } else {
+                $res = QuoteServ::addQuote($quoteText, $senderNick);
+                $resp = $res['message'];
+            }
+            return [
+                'is_service_command' => true,
+                'service' => QuoteServ::SERVICE_NAME,
+                'response' => $resp,
+                'channel' => $channel
+            ];
+        }
+
         if ($first === '/motd') {
             $newMotd = trim(substr($text, strlen($parts[0])));
             if ($newMotd === '') {
@@ -185,11 +212,15 @@ class IrcServices
             $helpMsg = "Available IRC Commands:\n" .
                        "• /msg NAMESERV REGISTER <pass> [email] — Register your current nickname\n" .
                        "• /msg NAMESERV IDENTIFY <pass> — Identify with your password\n" .
-                       "• /msg NAMESERV INFO [nick] — View nickname registration info\n" .
                        "• /msg CHANSERV REGISTER <#channel> [passkey] — Register a new channel\n" .
                        "• /msg CHANSERV OP <#channel> <nick> — Grant channel operator status\n" .
-                       "• /msg CHANSERV DEOP <#channel> <nick> — Remove channel operator status\n" .
                        "• /msg MOTDSERV SET <new_motd> — Update serverwide Message of the Day\n" .
+                       "• /msg QUOTESERV ADD <quote> — Add a quote\n" .
+                       "• /msg QUOTESERV RANDOM — Get a random quote\n" .
+                       "• /msg QUOTESERV SUB — Subscribe to periodic quotes in private chat\n" .
+                       "• /msg QUOTESERV EDIT <id> <new_text> — (Admin) Edit a quote\n" .
+                       "• /msg QUOTESERV DEL <id> — (Admin) Delete a quote\n" .
+                       "• /quote [text] — Create or fetch a random quote\n" .
                        "• /motd [new_motd] — View or update server Message of the Day\n" .
                        "• /topic <new_topic> — Change channel topic\n" .
                        "• /settings [SET <key> <value>] — View or update serverwide settings in MySQL";
@@ -300,6 +331,63 @@ class IrcServices
         return [
             'is_service_command' => true,
             'service' => MotdServ::SERVICE_NAME,
+            'response' => $res['message'],
+            'channel' => $channel
+        ];
+    }
+
+    private static function handleQuoteServCommand(string $senderNick, string $channel, string $cmd, array $args): array
+    {
+        switch ($cmd) {
+            case 'ADD':
+            case 'CREATE':
+                $text = trim(implode(' ', $args));
+                $res = QuoteServ::addQuote($text, $senderNick);
+                break;
+
+            case 'RANDOM':
+            case 'GET':
+                $q = QuoteServ::getRandomQuote();
+                $msg = $q ? "Quote #{$q['id']}: \"{$q['quote_text']}\" — {$q['author']}" : "QUOTESERV: No quotes found.";
+                $res = ['message' => $msg];
+                break;
+
+            case 'EDIT':
+                $id = (int)($args[0] ?? 0);
+                $newText = trim(implode(' ', array_slice($args, 1)));
+                $res = QuoteServ::editQuote($id, $newText);
+                break;
+
+            case 'DELETE':
+            case 'DEL':
+            case 'REMOVE':
+                $id = (int)($args[0] ?? 0);
+                $res = QuoteServ::deleteQuote($id);
+                break;
+
+            case 'SUB':
+            case 'SUBSCRIBE':
+                $res = QuoteServ::subscribe($senderNick);
+                break;
+
+            case 'UNSUB':
+            case 'UNSUBSCRIBE':
+                $res = QuoteServ::unsubscribe($senderNick);
+                break;
+
+            default:
+                $quotes = QuoteServ::listQuotes();
+                $lines = ["QUOTESERV Available Quotes:"];
+                foreach (array_slice($quotes, 0, 10) as $q) {
+                    $lines[] = "• #{$q['id']}: \"{$q['quote_text']}\" — {$q['author']}";
+                }
+                $res = ['message' => implode("\n", $lines)];
+                break;
+        }
+
+        return [
+            'is_service_command' => true,
+            'service' => QuoteServ::SERVICE_NAME,
             'response' => $res['message'],
             'channel' => $channel
         ];

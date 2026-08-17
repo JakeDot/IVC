@@ -11,6 +11,7 @@ require_once __DIR__ . '/../../src/IRC/SettingsManager.php';
 require_once __DIR__ . '/../../src/IRC/NameServ.php';
 require_once __DIR__ . '/../../src/IRC/ChanServ.php';
 require_once __DIR__ . '/../../src/IRC/MotdServ.php';
+require_once __DIR__ . '/../../src/IRC/QuoteServ.php';
 require_once __DIR__ . '/../../src/IRC/IrcServices.php';
 require_once __DIR__ . '/../../src/Signaling/RoomManager.php';
 

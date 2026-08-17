@@ -11,6 +11,7 @@ require_once __DIR__ . '/../src/IRC/SettingsManager.php';
 require_once __DIR__ . '/../src/IRC/NameServ.php';
 require_once __DIR__ . '/../src/IRC/ChanServ.php';
 require_once __DIR__ . '/../src/IRC/MotdServ.php';
+require_once __DIR__ . '/../src/IRC/QuoteServ.php';
 require_once __DIR__ . '/../src/IRC/IrcServices.php';
 require_once __DIR__ . '/../src/Signaling/RoomManager.php';
 
@@ -22,6 +23,7 @@ use Fortress\IRC\SettingsManager;
 use Fortress\IRC\NameServ;
 use Fortress\IRC\ChanServ;
 use Fortress\IRC\MotdServ;
+use Fortress\IRC\QuoteServ;
 use Fortress\IRC\IrcServices;
 use Fortress\Signaling\RoomManager;
 
@@ -43,7 +45,7 @@ function assertTest(bool $condition, string $message): void {
     }
 }
 
-// Test 1: Sanitizer & IRC #room scheme
+// Test 1: Sanitizer & IRC #room channel scheme
 echo "1. Testing Sanitizer & IRC #room channel scheme...\n";
 assertTest(Sanitizer::sanitizeRoomId('room123!@#') === '#room123', 'Sanitize invalid characters and normalize to #room123');
 assertTest(Sanitizer::sanitizeRoomId('#fortress-channel') === '#fortress-channel', 'Retain existing leading # in channel name');
@@ -123,8 +125,24 @@ $motdSet = MotdServ::setMotd('Welcome to Fortress Admin Network', 'AdminUser');
 assertTest($motdSet['success'] === true, 'MOTDSERV updated serverwide Message of the Day');
 assertTest(MotdServ::getMotd() === 'Welcome to Fortress Admin Network', 'MOTDSERV getMotd returned updated message');
 
-// Test 8: IrcServices Command Parser & Dispatcher
-echo "\n8. Testing IrcServices Command Parser...\n";
+// Test 8: QUOTESERV (Quote Service)
+echo "\n8. Testing QUOTESERV Quote Creation & Admin Functionality...\n";
+$addQuoteRes = QuoteServ::addQuote('Code is poetry.', 'Developer');
+assertTest($addQuoteRes['success'] === true, 'QUOTESERV created new quote');
+
+$randQuote = QuoteServ::getRandomQuote();
+assertTest($randQuote !== null && isset($randQuote['quote_text']), 'QUOTESERV retrieved random quote');
+
+$allQuotes = QuoteServ::listQuotes();
+$firstId = (int)($allQuotes[0]['id'] ?? 1);
+$editQuoteRes = QuoteServ::editQuote($firstId, 'Security is a process, not a product.', 'Bruce Schneier');
+assertTest($editQuoteRes['success'] === true, 'QUOTESERV admin updated quote');
+
+$subRes = QuoteServ::subscribe('CyberFox');
+assertTest($subRes['success'] === true && QuoteServ::isSubscribed('CyberFox') === true, 'QUOTESERV subscribed CyberFox to random quotes');
+
+// Test 9: IrcServices Command Parser & Dispatcher
+echo "\n9. Testing IrcServices Command Parser...\n";
 $cmd1 = IrcServices::processCommand('Bob', '#lobby', '/msg CHANSERV REGISTER #lobby');
 assertTest($cmd1 !== null && $cmd1['is_service_command'] === true && $cmd1['service'] === 'CHANSERV', 'Parsed /msg CHANSERV REGISTER command');
 
@@ -134,11 +152,14 @@ assertTest($cmd2 !== null && $cmd2['service'] === 'CHANSERV', 'Parsed /topic com
 $cmd3 = IrcServices::processCommand('Admin', '#lobby', '/msg MOTDSERV SET Hello Admin World');
 assertTest($cmd3 !== null && $cmd3['service'] === 'MOTDSERV', 'Parsed /msg MOTDSERV SET command');
 
-$cmd4 = IrcServices::processCommand('Alice', '#fortress', '/help');
-assertTest($cmd4 !== null && str_contains($cmd4['response'], 'Available IRC Commands'), 'Parsed /help command');
+$cmd4 = IrcServices::processCommand('CyberFox', '#lobby', '/quote Simplicity is prerequisite for reliability.');
+assertTest($cmd4 !== null && $cmd4['service'] === 'QUOTESERV', 'Parsed /quote command for user creation');
 
-// Test 9: Room Manager & Ephemeral Signaling with #room names
-echo "\n9. Testing Ephemeral Non-Logging Room Manager with #room scheme...\n";
+$cmd5 = IrcServices::processCommand('Alice', '#fortress', '/help');
+assertTest($cmd5 !== null && str_contains($cmd5['response'], 'Available IRC Commands'), 'Parsed /help command');
+
+// Test 10: Room Manager & Ephemeral Signaling with #room names
+echo "\n10. Testing Ephemeral Non-Logging Room Manager with #room scheme...\n";
 RoomManager::reset();
 $room = '#test-channel';
 $user1 = 'user-1';

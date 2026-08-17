@@ -10,6 +10,7 @@ require_once __DIR__ . '/../../src/IRC/SettingsManager.php';
 require_once __DIR__ . '/../../src/IRC/NameServ.php';
 require_once __DIR__ . '/../../src/IRC/ChanServ.php';
 require_once __DIR__ . '/../../src/IRC/MotdServ.php';
+require_once __DIR__ . '/../../src/IRC/QuoteServ.php';
 require_once __DIR__ . '/../../src/IRC/IrcServices.php';
 require_once __DIR__ . '/../../src/Signaling/RoomManager.php';
 
@@ -20,6 +21,7 @@ use Fortress\IRC\SettingsManager;
 use Fortress\IRC\NameServ;
 use Fortress\IRC\ChanServ;
 use Fortress\IRC\MotdServ;
+use Fortress\IRC\QuoteServ;
 use Fortress\IRC\IrcServices;
 use Fortress\Signaling\RoomManager;
 
@@ -54,6 +56,18 @@ if ($method === 'GET') {
     if ($action === 'motd') {
         $motd = MotdServ::getMotd();
         echo json_encode(['status' => 'ok', 'motd' => $motd], JSON_THROW_ON_ERROR);
+        exit;
+    }
+
+    if ($action === 'random_quote') {
+        $q = QuoteServ::getRandomQuote();
+        echo json_encode(['status' => 'ok', 'quote' => $q], JSON_THROW_ON_ERROR);
+        exit;
+    }
+
+    if ($action === 'quotes') {
+        $quotes = QuoteServ::listQuotes();
+        echo json_encode(['status' => 'ok', 'quotes' => $quotes], JSON_THROW_ON_ERROR);
         exit;
     }
 

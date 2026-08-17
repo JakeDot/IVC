@@ -53,7 +53,7 @@ body {
     backdrop-filter: blur(12px);
     border: 1px solid var(--card-border);
     border-radius: var(--radius-lg);
-    margin-bottom: 20px;
+    margin-bottom: 16px;
 }
 
 .brand {
@@ -91,6 +91,81 @@ body {
 .badge.purple { color: #c084fc; border-color: rgba(192, 132, 252, 0.3); }
 .badge.blue { color: #38bdf8; border-color: rgba(56, 189, 248, 0.3); }
 
+/* Tabs Navigation Bar */
+.tabs-nav-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(12px);
+    padding: 10px 16px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--card-border);
+    margin-bottom: 20px;
+}
+
+.tabs-bar {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    flex: 1;
+    scrollbar-width: thin;
+}
+
+.room-tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    user-select: none;
+    white-space: nowrap;
+    transition: all 0.2s;
+}
+
+.room-tab:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text-bright);
+}
+
+.room-tab.active {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
+}
+
+.room-tab .close-tab {
+    font-size: 1.1rem;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 4px;
+    opacity: 0.7;
+    margin-left: 4px;
+}
+
+.room-tab .close-tab:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.25);
+    color: var(--danger-color);
+}
+
+.room-tab .unread-badge {
+    background: var(--danger-color);
+    color: #fff;
+    font-size: 0.75rem;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: bold;
+}
+
 /* Main layout */
 .main-content {
     display: flex;
@@ -123,7 +198,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    max-width: 600px;
+    max-width: 650px;
 }
 
 .input-row {
@@ -328,23 +403,37 @@ video {
     padding: 0 20px;
 }
 
-/* Chat Card */
+/* Chat Card & IRC Layout */
 .chat-card {
     display: flex;
     flex-direction: column;
-    height: 300px;
+    height: 380px;
 }
 
 .chat-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
+}
+
+.channel-topic {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-top: 2px;
 }
 
 .chat-security-label {
     font-size: 0.8rem;
     color: var(--success-color);
+}
+
+.chat-body-container {
+    display: flex;
+    gap: 12px;
+    flex: 1;
+    min-height: 0;
+    margin-bottom: 12px;
 }
 
 .chat-messages {
@@ -357,20 +446,55 @@ video {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin-bottom: 12px;
+}
+
+.user-list-sidebar {
+    width: 180px;
+    background: rgba(15, 23, 42, 0.6);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--card-border);
+    padding: 10px;
+    overflow-y: auto;
+}
+
+.user-list-sidebar h4 {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+}
+
+.user-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.user-item {
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    word-break: break-all;
+}
+
+.user-item .op-tag {
+    color: #f59e0b;
+    font-weight: bold;
 }
 
 .chat-msg {
     padding: 8px 12px;
     border-radius: 8px;
-    max-width: 80%;
+    max-width: 85%;
     font-size: 0.9rem;
     word-break: break-word;
 }
 
 .chat-msg .sender-tag {
     font-size: 0.75rem;
-    opacity: 0.8;
+    opacity: 0.85;
     margin-bottom: 4px;
     font-weight: bold;
 }
@@ -385,6 +509,12 @@ video {
     background: var(--secondary-color);
 }
 
+.chat-msg.bot {
+    align-self: flex-start;
+    background: #4c1d95;
+    border: 1px solid #7c3aed;
+}
+
 .system-message {
     text-align: center;
     font-size: 0.8rem;
@@ -395,6 +525,67 @@ video {
 .chat-input-area {
     display: flex;
     gap: 10px;
+}
+
+/* Connection Stats View */
+.stats-card {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.stats-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--card-border);
+    padding-bottom: 12px;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+@media (max-width: 768px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.stats-panel {
+    background: rgba(15, 23, 42, 0.6);
+    padding: 16px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--card-border);
+}
+
+.stats-panel h3 {
+    font-size: 1.1rem;
+    margin-bottom: 14px;
+    color: var(--primary-color);
+}
+
+.stats-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 0.9rem;
+}
+
+.stats-row:last-child {
+    border-bottom: none;
+}
+
+.stats-label {
+    color: var(--text-muted);
+}
+
+.stats-value {
+    font-weight: 600;
+    color: var(--text-bright);
 }
 
 .hidden {

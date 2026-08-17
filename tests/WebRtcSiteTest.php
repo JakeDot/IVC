@@ -10,7 +10,9 @@ require_once __DIR__ . '/../src/Models/UserNick.php';
 require_once __DIR__ . '/../src/Models/Channel.php';
 require_once __DIR__ . '/../src/Models/ChannelUser.php';
 require_once __DIR__ . '/../src/Models/IrcSetting.php';
+require_once __DIR__ . '/../src/Models/SharedFile.php';
 require_once __DIR__ . '/../src/Database/Database.php';
+require_once __DIR__ . '/../src/Database/SharedFileRepository.php';
 require_once __DIR__ . '/../src/Database/UserNickRepository.php';
 require_once __DIR__ . '/../src/Database/ChannelRepository.php';
 require_once __DIR__ . '/../src/Database/ChannelUserRepository.php';
@@ -33,7 +35,9 @@ use Fortress\Models\UserNick;
 use Fortress\Models\Channel;
 use Fortress\Models\ChannelUser;
 use Fortress\Models\IrcSetting;
+use Fortress\Models\SharedFile;
 use Fortress\Database\Database;
+use Fortress\Database\SharedFileRepository;
 use Fortress\Database\UserNickRepository;
 use Fortress\Database\ChannelRepository;
 use Fortress\Database\ChannelUserRepository;
@@ -348,6 +352,27 @@ assertTest($themeConsCmd !== null && $themeConsCmd['service'] === 'THEMESERV' &&
 
 $themeXmasCmd = IrcServices::processCommand('User1', '#lobby', '/theme christmas');
 assertTest($themeXmasCmd !== null && $themeXmasCmd['service'] === 'THEMESERV' && str_contains($themeXmasCmd['response'], 'christmas'), 'Processed /theme christmas command');
+
+// Test 15: SharedFile Domain Model, E2EE Metadata & SharedFileRepository
+echo "\n15. Testing SharedFile Domain Model & SharedFileRepository...\n";
+$sharedFile = new SharedFile('file-test-999', '#lobby', 'peer-alice', 'E2EE_ENCRYPTED_BLOB_STRING', 'https://cloud.example.com/share/999');
+assertTest($sharedFile->getId() === 'file-test-999', 'SharedFile getter returns ID');
+assertTest($sharedFile->getChannelName() === '#lobby', 'SharedFile getter returns channel name');
+assertTest($sharedFile->getSharerClientId() === 'peer-alice', 'SharedFile getter returns sharer client ID');
+assertTest($sharedFile->getEncryptedMetadata() === 'E2EE_ENCRYPTED_BLOB_STRING', 'SharedFile getter returns encrypted metadata');
+assertTest($sharedFile->getCloudLink() === 'https://cloud.example.com/share/999', 'SharedFile getter returns cloud link');
+
+$savedFile = SharedFileRepository::save($sharedFile);
+assertTest($savedFile === true, 'SharedFileRepository successfully saved file record');
+
+$foundFile = SharedFileRepository::findById('file-test-999');
+assertTest($foundFile !== null && $foundFile->getSharerClientId() === 'peer-alice' && $foundFile->getCloudLink() === 'https://cloud.example.com/share/999', 'SharedFileRepository::findById retrieved record');
+
+$channelFiles = SharedFileRepository::findByChannel('#lobby');
+assertTest(count($channelFiles) >= 1 && $channelFiles[0]->getId() === 'file-test-999', 'SharedFileRepository::findByChannel retrieved channel files');
+
+$deletedFile = SharedFileRepository::deleteById('file-test-999');
+assertTest($deletedFile === true, 'SharedFileRepository::deleteById deleted file record');
 
 echo "\n-----------------------------------------\n";
 echo "Test Results: $testsPassed Passed, $testsFailed Failed.\n";

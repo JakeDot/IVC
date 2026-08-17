@@ -100,6 +100,8 @@
     const userList = document.getElementById('user-list');
     const chatInput = document.getElementById('chat-input');
     const btnSendChat = document.getElementById('btn-send-chat');
+    const btnAttachFile = document.getElementById('btn-attach-file');
+    const chatFileInput = document.getElementById('chat-file-input');
 
     const statsStage = document.getElementById('stats-stage');
     const btnRefreshStats = document.getElementById('btn-refresh-stats');
@@ -556,6 +558,11 @@
         if (e.key === 'Enter') handleChatSubmit();
     });
 
+    if (btnAttachFile && chatFileInput) {
+        btnAttachFile.addEventListener('click', () => chatFileInput.click());
+        chatFileInput.addEventListener('change', handleShareFileSelect);
+    }
+
     btnRefreshStats.addEventListener('click', loadConnectionStats);
 
     /**
@@ -603,6 +610,7 @@
             });
 
             initRoomSession(channelId, key);
+            loadChannelSharedFiles(channelId, key);
         }
 
         renderTabsNav();
@@ -766,6 +774,61 @@
                 div.className = 'system-message';
                 div.textContent = msg.text;
                 chatMessages.appendChild(div);
+            } else if (msg.type === 'file') {
+                const msgDiv = document.createElement('div');
+                msgDiv.className = `chat-msg ${msg.isSelf ? 'self' : 'peer'}`;
+
+                const senderTag = document.createElement('div');
+                senderTag.className = 'sender-tag';
+                senderTag.textContent = msg.sender || msg.sharerNick || 'Anonymous';
+
+                const fileCard = document.createElement('div');
+                fileCard.className = 'file-card';
+
+                const iconDiv = document.createElement('div');
+                iconDiv.className = 'file-card-icon';
+                iconDiv.textContent = getFileIcon(msg.fileName, msg.fileType);
+
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'file-card-info';
+
+                const nameDiv = document.createElement('div');
+                nameDiv.className = 'file-card-name';
+                nameDiv.textContent = msg.fileName;
+
+                const metaDiv = document.createElement('div');
+                metaDiv.className = 'file-card-meta';
+                const sizeStr = formatFileSize(msg.fileSize);
+                const isReady = !!localSharedFilesMap[msg.fileId];
+                if (msg.cloudLink) {
+                    metaDiv.textContent = `${sizeStr} • ☁️ Cloud Shared`;
+                } else {
+                    metaDiv.textContent = `${sizeStr} • ${isReady ? '🔒 Local Ready' : '📡 On Sharer'}`;
+                }
+
+                const dlBtn = document.createElement('button');
+                dlBtn.className = 'btn-file-dl';
+                if (isReady) {
+                    dlBtn.textContent = '💾 Save / DL';
+                } else if (msg.cloudLink) {
+                    dlBtn.textContent = '☁️ Open Link';
+                } else {
+                    dlBtn.textContent = '📥 Request File';
+                }
+
+                dlBtn.addEventListener('click', () => {
+                    handleFileDownloadOrRequest(tab.id, msg.fileId, msg.sharerClientId, msg.fileName, msg.fileType, msg.cloudLink, dlBtn);
+                });
+
+                infoDiv.appendChild(nameDiv);
+                infoDiv.appendChild(metaDiv);
+                fileCard.appendChild(iconDiv);
+                fileCard.appendChild(infoDiv);
+                fileCard.appendChild(dlBtn);
+
+                msgDiv.appendChild(senderTag);
+                msgDiv.appendChild(fileCard);
+                chatMessages.appendChild(msgDiv);
             } else {
                 const msgDiv = document.createElement('div');
                 msgDiv.className = `chat-msg ${msg.type}`;
@@ -1177,6 +1240,81 @@
                 });
                 break;
 
+            case 'file-shared':
+                if (signal.fileId && signal.encrypted_metadata) {
+                    const meta = await decryptMetadataE2EE(signal.encrypted_metadata, channelId, tab.key);
+                    if (meta && !tab.messages.some(m => m.type === 'file' && m.fileId === signal.fileId)) {
+                        addMessageToTab(channelId, {
+                            type: 'file',
+                            fileId: signal.fileId,
+                            sharerClientId: signal.sharer_client_id || signal.sender,
+                            sharerNick: meta.sharerNick || signal.sender,
+                            fileName: meta.fileName || meta.name || 'Shared File',
+                            fileSize: meta.fileSize || meta.size || 0,
+                            fileType: meta.fileType || meta.type || '',
+                            cloudLink: meta.cloudLink || signal.cloud_link || null,
+                            sender: meta.sharerNick || signal.sender,
+                            isSelf: (signal.sharer_client_id || signal.sender) === myClientId,
+                            createdAt: signal.created_at || Math.floor(Date.now() / 1000)
+                        });
+                    }
+                }
+                break;
+
+            case 'file-request':
+                if (signal.fileId && (signal.target === myClientId || !signal.target)) {
+                    const localFile = localSharedFilesMap[signal.fileId];
+                    if (localFile && localFile.blob) {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            sendSignal(channelId, {
+                                type: 'file-response',
+                                room: channelId,
+                                client: myClientId,
+                                target: signal.requesterId || signal.sender,
+                                fileId: signal.fileId,
+                                fileName: localFile.metadata.name || localFile.file.name,
+                                fileType: localFile.metadata.type || localFile.file.type,
+                                dataUrl: reader.result,
+                                key: tab.key
+                            });
+                        };
+                        reader.readAsDataURL(localFile.blob);
+                    }
+                }
+                break;
+
+            case 'file-response':
+                if (signal.fileId && signal.dataUrl && (signal.target === myClientId || !signal.target)) {
+                    try {
+                        const blobRes = await fetch(signal.dataUrl);
+                        const blob = await blobRes.blob();
+                        localSharedFilesMap[signal.fileId] = {
+                            blob: blob,
+                            file: blob,
+                            metadata: {
+                                id: signal.fileId,
+                                name: signal.fileName || 'download',
+                                type: signal.fileType || blob.type
+                            }
+                        };
+
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = signal.fileName || 'download';
+                        a.click();
+                        setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+                        if (activeTabId === channelId) {
+                            renderChatMessages(tab);
+                        }
+                    } catch (e) {
+                        console.error('Failed to process file response signal:', e);
+                    }
+                }
+                break;
+
             case 'peer-left':
                 removePeerFromTab(channelId, peerId);
                 break;
@@ -1325,7 +1463,64 @@
         const tab = openTabs[channelId];
         if (!tab) return;
 
-        channel.onmessage = (event) => {
+        channel.onmessage = async (event) => {
+            if (typeof event.data === 'string' && event.data.trim().startsWith('{')) {
+                try {
+                    const parsed = JSON.parse(event.data);
+                    if (parsed.type === 'file-request' && parsed.fileId) {
+                        const localFile = localSharedFilesMap[parsed.fileId];
+                        if (localFile && localFile.blob) {
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                                if (channel.readyState === 'open') {
+                                    channel.send(JSON.stringify({
+                                        type: 'file-response',
+                                        fileId: parsed.fileId,
+                                        fileName: localFile.metadata.name || localFile.file.name,
+                                        fileType: localFile.metadata.type || localFile.file.type,
+                                        dataUrl: reader.result
+                                    }));
+                                }
+                            };
+                            reader.readAsDataURL(localFile.blob);
+                        }
+                        return;
+                    }
+
+                    if (parsed.type === 'file-response' && parsed.fileId && parsed.dataUrl) {
+                        try {
+                            const blobRes = await fetch(parsed.dataUrl);
+                            const blob = await blobRes.blob();
+                            localSharedFilesMap[parsed.fileId] = {
+                                blob: blob,
+                                file: blob,
+                                metadata: {
+                                    id: parsed.fileId,
+                                    name: parsed.fileName || 'download',
+                                    type: parsed.fileType || blob.type
+                                }
+                            };
+
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = parsed.fileName || 'download';
+                            a.click();
+                            setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+                            if (activeTabId === channelId) {
+                                renderChatMessages(tab);
+                            }
+                        } catch (e) {
+                            console.error('Error handling DataChannel file response:', e);
+                        }
+                        return;
+                    }
+                } catch (e) {
+                    // Normal text message
+                }
+            }
+
             const nick = tab.peerNicks[peerId] || peerId;
             addMessageToTab(channelId, {
                 sender: nick,
@@ -1341,6 +1536,279 @@
                 type: 'system'
             });
         };
+    }
+
+    /* ==========================================================================
+       E2EE FILE SHARING & PERMANENT CHAT HISTORY PROTOCOL
+       ========================================================================== */
+
+    const localSharedFilesMap = {}; // fileId -> { blob, file, metadata }
+
+    function formatFileSize(bytes) {
+        if (!bytes || isNaN(bytes)) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    function getFileIcon(fileName = '', fileType = '') {
+        const ext = (fileName || '').split('.').pop().toLowerCase();
+        if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext) || (fileType && fileType.startsWith('image/'))) return '🖼️';
+        if (['mp4', 'webm', 'mov', 'avi'].includes(ext) || (fileType && fileType.startsWith('video/'))) return '🎥';
+        if (['mp3', 'wav', 'ogg', 'flac'].includes(ext) || (fileType && fileType.startsWith('audio/'))) return '🎵';
+        if (['pdf', 'doc', 'docx', 'txt', 'md', 'json'].includes(ext)) return '📄';
+        if (['zip', 'tar', 'gz', '7z', 'rar'].includes(ext)) return '📦';
+        return '📁';
+    }
+
+    async function deriveE2EEKey(channelId, channelPasskey = '') {
+        const secret = `IVC-E2EE-METADATA:${channelId}:${channelPasskey || 'default-room-salt'}`;
+        const enc = new TextEncoder();
+        const keyData = enc.encode(secret);
+        const hash = await crypto.subtle.digest('SHA-256', keyData);
+        return crypto.subtle.importKey(
+            'raw',
+            hash,
+            { name: 'AES-GCM' },
+            false,
+            ['encrypt', 'decrypt']
+        );
+    }
+
+    async function encryptMetadataE2EE(metadataObj, channelId, channelPasskey = '') {
+        try {
+            const cryptoKey = await deriveE2EEKey(channelId, channelPasskey);
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const enc = new TextEncoder();
+            const jsonStr = JSON.stringify(metadataObj);
+            const ciphertext = await crypto.subtle.encrypt(
+                { name: 'AES-GCM', iv: iv },
+                cryptoKey,
+                enc.encode(jsonStr)
+            );
+            const combined = new Uint8Array(iv.length + ciphertext.byteLength);
+            combined.set(iv, 0);
+            combined.set(new Uint8Array(ciphertext), iv.length);
+            return btoa(String.fromCharCode(...combined));
+        } catch (err) {
+            console.error('Metadata encryption error:', err);
+            return btoa(JSON.stringify(metadataObj));
+        }
+    }
+
+    async function decryptMetadataE2EE(encryptedBase64, channelId, channelPasskey = '') {
+        try {
+            const combined = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
+            if (combined.length <= 12) {
+                return JSON.parse(atob(encryptedBase64));
+            }
+            const iv = combined.slice(0, 12);
+            const ciphertext = combined.slice(12);
+            const cryptoKey = await deriveE2EEKey(channelId, channelPasskey);
+            const decrypted = await crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: iv },
+                cryptoKey,
+                ciphertext
+            );
+            const dec = new TextDecoder();
+            return JSON.parse(dec.decode(decrypted));
+        } catch (err) {
+            try {
+                return JSON.parse(atob(encryptedBase64));
+            } catch (e) {
+                console.error('Metadata decryption error:', err);
+                return null;
+            }
+        }
+    }
+
+    async function loadChannelSharedFiles(channelId, key = '') {
+        const tab = openTabs[channelId];
+        if (!tab) return;
+
+        try {
+            const res = await fetch(`/api/files.php?channel=${encodeURIComponent(channelId)}`);
+            const data = await res.json();
+            if (data.status === 'ok' && Array.isArray(data.files)) {
+                let added = false;
+                for (const fileRecord of data.files) {
+                    if (tab.messages.some(m => m.type === 'file' && m.fileId === fileRecord.id)) {
+                        continue;
+                    }
+
+                    const meta = await decryptMetadataE2EE(fileRecord.encrypted_metadata, channelId, key);
+                    if (meta) {
+                        tab.messages.push({
+                            type: 'file',
+                            fileId: fileRecord.id,
+                            sharerClientId: fileRecord.sharer_client_id,
+                            sharerNick: meta.sharerNick || fileRecord.sharer_client_id,
+                            fileName: meta.fileName || meta.name || 'Shared File',
+                            fileSize: meta.fileSize || meta.size || 0,
+                            fileType: meta.fileType || meta.type || 'application/octet-stream',
+                            cloudLink: meta.cloudLink || fileRecord.cloud_link || null,
+                            sender: meta.sharerNick || fileRecord.sharer_client_id,
+                            isSelf: fileRecord.sharer_client_id === myClientId,
+                            createdAt: fileRecord.created_at
+                        });
+                        added = true;
+                    }
+                }
+
+                if (added) {
+                    tab.messages.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+                    if (activeTabId === channelId) {
+                        renderChatMessages(tab);
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Failed to load shared files for channel:', err);
+        }
+    }
+
+    async function handleShareFileSelect(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        chatFileInput.value = '';
+
+        if (!activeTabId || activeTabId === '#stats') {
+            alert('Please select an active channel to share files.');
+            return;
+        }
+
+        const tab = openTabs[activeTabId];
+        if (!tab) return;
+
+        const cloudPrompt = prompt('Optional cloud URL/link if hosted externally (e.g. Nextcloud, S3, Drive link), or leave empty for pure P2P share:');
+        const cloudLink = cloudPrompt ? cloudPrompt.trim() : null;
+
+        const fileId = 'file_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
+
+        localSharedFilesMap[fileId] = {
+            file: file,
+            blob: file,
+            metadata: {
+                id: fileId,
+                name: file.name,
+                size: file.size,
+                type: file.type,
+                cloudLink: cloudLink,
+                sharerClientId: myClientId,
+                sharerNick: myNickname,
+                createdAt: Math.floor(Date.now() / 1000)
+            }
+        };
+
+        const metadataObj = {
+            id: fileId,
+            fileName: file.name,
+            fileSize: file.size,
+            fileType: file.type,
+            cloudLink: cloudLink,
+            sharerNick: myNickname,
+            sharerClientId: myClientId,
+            createdAt: Math.floor(Date.now() / 1000)
+        };
+
+        const encryptedMeta = await encryptMetadataE2EE(metadataObj, activeTabId, tab.key);
+
+        try {
+            await fetch('/api/files.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': window.FORTRESS_CSRF_TOKEN || ''
+                },
+                body: JSON.stringify({
+                    id: fileId,
+                    channel: activeTabId,
+                    sharer_client_id: myClientId,
+                    encrypted_metadata: encryptedMeta,
+                    cloud_link: cloudLink,
+                    created_at: metadataObj.createdAt
+                })
+            });
+        } catch (err) {
+            console.error('Error persisting E2EE file metadata:', err);
+        }
+
+        const fileMsg = {
+            type: 'file',
+            fileId: fileId,
+            sharerClientId: myClientId,
+            sharerNick: myNickname,
+            fileName: file.name,
+            fileSize: file.size,
+            fileType: file.type,
+            cloudLink: cloudLink,
+            sender: myNickname,
+            isSelf: true,
+            createdAt: metadataObj.createdAt
+        };
+
+        addMessageToTab(activeTabId, fileMsg);
+
+        sendSignal(activeTabId, {
+            type: 'file-shared',
+            room: activeTabId,
+            client: myClientId,
+            fileId: fileId,
+            sharer_client_id: myClientId,
+            encrypted_metadata: encryptedMeta,
+            cloud_link: cloudLink,
+            key: tab.key
+        });
+    }
+
+    function handleFileDownloadOrRequest(channelId, fileId, sharerClientId, fileName, fileType, cloudLink, btnElement) {
+        if (localSharedFilesMap[fileId] && localSharedFilesMap[fileId].blob) {
+            const url = URL.createObjectURL(localSharedFilesMap[fileId].blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName || 'download';
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            return;
+        }
+
+        if (cloudLink) {
+            window.open(cloudLink, '_blank', 'noopener,noreferrer');
+            return;
+        }
+
+        if (btnElement) {
+            btnElement.textContent = '🔄 Requesting...';
+            btnElement.disabled = true;
+        }
+
+        const tab = openTabs[channelId];
+        const key = tab ? tab.key : '';
+
+        sendSignal(channelId, {
+            type: 'file-request',
+            room: channelId,
+            client: myClientId,
+            fileId: fileId,
+            target: sharerClientId,
+            requesterId: myClientId,
+            requesterNick: myNickname,
+            key: key
+        });
+
+        if (tab && tab.dataChannels) {
+            Object.values(tab.dataChannels).forEach(dc => {
+                if (dc.readyState === 'open') {
+                    dc.send(JSON.stringify({
+                        type: 'file-request',
+                        fileId: fileId,
+                        requesterId: myClientId,
+                        requesterNick: myNickname
+                    }));
+                }
+            });
+        }
     }
 
     /**

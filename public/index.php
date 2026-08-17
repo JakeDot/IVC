@@ -179,6 +179,8 @@ if (!empty($uriPath) && !str_contains($uriPath, '.') && !str_starts_with($uriPat
                 </div>
                 <div class="chat-input-area">
                     <input type="text" id="chat-input" placeholder="Type a message or IRC command (/msg CHANSERV, /theme, /op, /topic, /help)..." autocomplete="off">
+                    <button id="btn-attach-file" class="btn btn-secondary" title="Share File / Attachment">📎 File</button>
+                    <input type="file" id="chat-file-input" class="hidden">
                     <button id="btn-send-chat" class="btn btn-primary">Send</button>
                 </div>
             </section>

@@ -33,7 +33,7 @@ class Database
             $pdo = new PDO($dsn, $user, $pass, [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                PDO::ATTR_TIMEOUT => 2,
+                PDO::ATTR_TIMEOUT => 1,
             ]);
             self::$driver = 'mysql';
             self::$pdo = $pdo;
@@ -110,6 +110,20 @@ class Database
                 nickname VARCHAR(64) NOT NULL,
                 role VARCHAR(16) DEFAULT 'MEMBER',
                 added_at INT NOT NULL
+            );",
+
+            // Table for QUOTESERV quotes
+            "CREATE TABLE IF NOT EXISTS quotes (
+                id {$autoInc},
+                quote_text TEXT NOT NULL,
+                created_by VARCHAR(64) NOT NULL,
+                created_at INT NOT NULL
+            );",
+
+            // Table for QUOTESERV subscriptions
+            "CREATE TABLE IF NOT EXISTS quotes_subscriptions (
+                nickname VARCHAR(64) PRIMARY KEY,
+                subscribed_at INT NOT NULL
             );"
         ];
 
@@ -158,6 +172,8 @@ class Database
         self::$pdo->exec("DELETE FROM nameserv_nicks;");
         self::$pdo->exec("DELETE FROM chanserv_channels;");
         self::$pdo->exec("DELETE FROM channel_users;");
+        self::$pdo->exec("DELETE FROM quotes;");
+        self::$pdo->exec("DELETE FROM quotes_subscriptions;");
         self::seedDefaultSettings();
     }
 }

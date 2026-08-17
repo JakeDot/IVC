@@ -38,6 +38,30 @@
     let activeTabId = null;
     let statsInterval = null;
 
+    // QUOTESERV Subscription & Periodic Quotes
+    let isQuoteSubscribed = false;
+    let quoteInterval = null;
+
+    function startQuoteDeliveryTimer() {
+        if (quoteInterval) return;
+        quoteInterval = setInterval(async () => {
+            if (!isQuoteSubscribed || !activeTabId || activeTabId === '#stats') return;
+            try {
+                const res = await fetch('/api/irc.php?action=random_quote');
+                const data = await res.json();
+                if (data.status === 'ok' && data.quote) {
+                    addMessageToTab(activeTabId, {
+                        sender: 'QUOTESERV',
+                        text: `[Periodic Quote #${data.quote.id}] "${data.quote.quote_text}" — ${data.quote.created_by}`,
+                        type: 'bot'
+                    });
+                }
+            } catch (err) {
+                console.error('Error fetching periodic quote:', err);
+            }
+        }, 30000);
+    }
+
     // WebRTC STUN Server configuration
     const rtcConfig = {
         iceServers: [
@@ -708,11 +732,20 @@
                         tab.topic = data.response;
                         channelTopicBar.textContent = `Topic: ${data.response}`;
                     }
-                    return;
+                    if (data.service === 'QUOTESERV') {
+                        const lower = text.toLowerCase();
+                        if ((lower.includes('sub') || lower.includes('subscribe')) && !lower.includes('unsub')) {
+                            isQuoteSubscribed = true;
+                            startQuoteDeliveryTimer();
+                        } else if (lower.includes('unsub') || lower.includes('unsubscribe')) {
+                            isQuoteSubscribed = false;
+                        }
+                    }
                 }
             } catch (err) {
                 console.error('Error sending IRC command:', err);
             }
+            return;
         }
 
         // Standard Chat Message via DataChannel & Signaling Fallback

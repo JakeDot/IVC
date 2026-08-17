@@ -11,6 +11,7 @@ require_once __DIR__ . '/../src/IRC/SettingsManager.php';
 require_once __DIR__ . '/../src/IRC/NameServ.php';
 require_once __DIR__ . '/../src/IRC/ChanServ.php';
 require_once __DIR__ . '/../src/IRC/MotdServ.php';
+require_once __DIR__ . '/../src/IRC/QuoteServ.php';
 require_once __DIR__ . '/../src/IRC/IrcServices.php';
 require_once __DIR__ . '/../src/Signaling/RoomManager.php';
 
@@ -22,6 +23,7 @@ use Fortress\IRC\SettingsManager;
 use Fortress\IRC\NameServ;
 use Fortress\IRC\ChanServ;
 use Fortress\IRC\MotdServ;
+use Fortress\IRC\QuoteServ;
 use Fortress\IRC\IrcServices;
 use Fortress\Signaling\RoomManager;
 
@@ -156,6 +158,29 @@ assertTest(count($user2Messages) === 1 && $user2Messages[0]['type'] === 'offer',
 
 RoomManager::leaveRoom($room, $user1);
 assertTest(RoomManager::getPeerCount($room) === 1, 'User 1 left #test-channel');
+
+// Test 10: QUOTESERV Bot & /quote command
+echo "\n10. Testing QUOTESERV Bot & /quote Command...\n";
+$qRes1 = QuoteServ::addQuote('The journey of a thousand miles begins with one step.', 'LaoTzu');
+assertTest($qRes1['success'] === true && $qRes1['id'] > 0, 'QUOTESERV created quote #1');
+
+$cmdQuote = IrcServices::processCommand('Alice', '#lobby', '/quote Cryptography is the ultimate form of non-violent direct action.');
+assertTest($cmdQuote !== null && $cmdQuote['service'] === 'QUOTESERV' && str_contains($cmdQuote['response'], 'added successfully'), 'Parsed /quote <text> command');
+
+$randomQ = QuoteServ::getRandomQuote();
+assertTest($randomQ !== null && !empty($randomQ['quote_text']), 'QuoteServ::getRandomQuote returns a quote');
+
+$editRes = QuoteServ::editQuote($qRes1['id'], 'The journey of a thousand miles begins with a single step.');
+assertTest($editRes['success'] === true, 'Admin successfully edited quote #' . $qRes1['id']);
+
+$subRes = QuoteServ::subscribe('CyberFox');
+assertTest($subRes['success'] === true && QuoteServ::isSubscribed('CyberFox') === true, 'CyberFox subscribed to periodic quotes');
+
+$unsubRes = QuoteServ::unsubscribe('CyberFox');
+assertTest($unsubRes['success'] === true && QuoteServ::isSubscribed('CyberFox') === false, 'CyberFox unsubscribed from periodic quotes');
+
+$delCmd = IrcServices::processCommand('AdminUser', '#lobby', "/msg QUOTESERV DEL {$qRes1['id']}");
+assertTest($delCmd !== null && str_contains($delCmd['response'], 'has been removed'), 'Parsed /msg QUOTESERV DEL command');
 
 echo "\n-----------------------------------------\n";
 echo "Test Results: $testsPassed Passed, $testsFailed Failed.\n";

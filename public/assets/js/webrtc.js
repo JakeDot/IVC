@@ -1,10 +1,17 @@
 /**
  * Fortress / IVC WebRTC Client & Multi-Tab IRC Infrastructure
  * High-Availability Multi-Peer WebRTC Mesh with Audio Speaking Detection & Talking-User First Sorting.
+ * Supports #channel hash navigation, multi-tab room sessions, #stats connection stats, NAMESERV/CHANSERV integration,
+ * and comprehensive theme support (light, dark, halloween, console, christmas, + user-defined custom themes).
  */
 
 (() => {
     'use strict';
+
+    // Theme Management Constants
+    const STORAGE_ACTIVE_THEME = 'ivc_theme_active';
+    const STORAGE_CUSTOM_THEMES = 'ivc_custom_themes';
+    const BUILTIN_THEMES = ['dark', 'light', 'halloween', 'console', 'christmas'];
 
     // Anonymous Name Generator
     const ADJECTIVES = ['Crypto', 'Cyber', 'Silent', 'Shadow', 'Fortress', 'Quantum', 'Stealth', 'Hyper', 'Neon', 'Matrix', 'Ghost', 'Vector'];
@@ -62,7 +69,7 @@
         ]
     };
 
-    // DOM Elements
+    // DOM Elements - App Components
     const tabsBar = document.getElementById('tabs-bar');
     const btnOpenNewTab = document.getElementById('btn-open-new-tab');
 
@@ -99,6 +106,369 @@
     const serverStatsContent = document.getElementById('server-stats-content');
     const clientStatsContent = document.getElementById('client-stats-content');
 
+    // DOM Elements - Theme Controls
+    const themeSelect = document.getElementById('theme-select');
+    const btnThemeModal = document.getElementById('btn-theme-modal');
+    const themeModal = document.getElementById('theme-modal');
+    const btnCloseThemeModal = document.getElementById('btn-close-theme-modal');
+    const customThemeForm = document.getElementById('custom-theme-form');
+
+    const themeNameInput = document.getElementById('theme-name-input');
+    const themeBgColor = document.getElementById('theme-bg-color');
+    const themeBgText = document.getElementById('theme-bg-text');
+    const themeCardBgColor = document.getElementById('theme-card-bg-color');
+    const themeCardBgText = document.getElementById('theme-card-bg-text');
+    const themeCardBorderColor = document.getElementById('theme-card-border-color');
+    const themeCardBorderText = document.getElementById('theme-card-border-text');
+    const themePrimaryColor = document.getElementById('theme-primary-color');
+    const themePrimaryText = document.getElementById('theme-primary-text');
+    const themeTextBrightColor = document.getElementById('theme-text-bright-color');
+    const themeTextBrightText = document.getElementById('theme-text-bright-text');
+    const themeTextMutedColor = document.getElementById('theme-text-muted-color');
+    const themeTextMutedText = document.getElementById('theme-text-muted-text');
+    const themeFontFamily = document.getElementById('theme-font-family');
+
+    const btnPreviewTheme = document.getElementById('btn-preview-theme');
+    const savedThemesContainer = document.getElementById('saved-themes-container');
+    const btnExportThemes = document.getElementById('btn-export-themes');
+    const btnImportThemes = document.getElementById('btn-import-themes');
+    const importThemeFile = document.getElementById('import-theme-file');
+
+    let editingCustomThemeId = null;
+
+    /* ==========================================================================
+       THEME MANAGEMENT & CUSTOM USER THEMES
+       ========================================================================== */
+
+    function getCustomThemes() {
+        try {
+            const json = localStorage.getItem(STORAGE_CUSTOM_THEMES);
+            return json ? JSON.parse(json) : {};
+        } catch (err) {
+            console.error('Error reading custom themes from storage:', err);
+            return {};
+        }
+    }
+
+    function saveCustomThemes(themesObj) {
+        try {
+            localStorage.setItem(STORAGE_CUSTOM_THEMES, JSON.stringify(themesObj));
+        } catch (err) {
+            console.error('Error saving custom themes to storage:', err);
+        }
+    }
+
+    function populateThemeDropdown() {
+        // Retain built-in options
+        themeSelect.innerHTML = `
+            <option value="dark">🌙 Dark (Default)</option>
+            <option value="light">☀️ Light</option>
+            <option value="halloween">🎃 Halloween</option>
+            <option value="console">📟 Console</option>
+            <option value="christmas">🎄 Christmas</option>
+        `;
+
+        const customThemes = getCustomThemes();
+        const customIds = Object.keys(customThemes);
+
+        if (customIds.length > 0) {
+            const optGroup = document.createElement('optgroup');
+            optGroup.label = '--- Custom Themes ---';
+            customIds.forEach(id => {
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = `✨ ${customThemes[id].name}`;
+                optGroup.appendChild(opt);
+            });
+            themeSelect.appendChild(optGroup);
+        }
+
+        const manageOpt = document.createElement('option');
+        manageOpt.value = 'manage-custom';
+        manageOpt.style.fontWeight = 'bold';
+        manageOpt.textContent = '➕ Custom Themes...';
+        themeSelect.appendChild(manageOpt);
+    }
+
+    function applyTheme(themeId, customThemeData = null) {
+        const root = document.documentElement;
+
+        // Reset dynamic inline CSS variable overrides
+        root.style.removeProperty('--bg-dark');
+        root.style.removeProperty('--bg-gradient');
+        root.style.removeProperty('--card-bg');
+        root.style.removeProperty('--card-border');
+        root.style.removeProperty('--input-bg');
+        root.style.removeProperty('--primary-color');
+        root.style.removeProperty('--primary-hover');
+        root.style.removeProperty('--secondary-color');
+        root.style.removeProperty('--secondary-hover');
+        root.style.removeProperty('--text-bright');
+        root.style.removeProperty('--text-muted');
+        root.style.removeProperty('--font-family');
+        root.style.removeProperty('--box-shadow');
+
+        if (BUILTIN_THEMES.includes(themeId)) {
+            root.setAttribute('data-theme', themeId);
+            localStorage.setItem(STORAGE_ACTIVE_THEME, themeId);
+            themeSelect.value = themeId;
+            return;
+        }
+
+        // Custom Theme
+        const customThemes = getCustomThemes();
+        const data = customThemeData || customThemes[themeId];
+
+        if (data) {
+            root.setAttribute('data-theme', 'custom');
+
+            root.style.setProperty('--bg-dark', data.bg || '#0f172a');
+            root.style.setProperty('--bg-gradient', data.bg.includes('gradient') ? data.bg : `radial-gradient(circle at top right, ${data.bg}, #000000 80%)`);
+            root.style.setProperty('--card-bg', data.cardBg || 'rgba(30, 41, 59, 0.75)');
+            root.style.setProperty('--card-border', data.cardBorder || 'rgba(255, 255, 255, 0.1)');
+            root.style.setProperty('--input-bg', data.cardBg ? data.cardBg : 'rgba(15, 23, 42, 0.6)');
+            root.style.setProperty('--primary-color', data.primary || '#3b82f6');
+            root.style.setProperty('--primary-hover', data.primary || '#2563eb');
+            root.style.setProperty('--text-bright', data.textBright || '#f8fafc');
+            root.style.setProperty('--text-muted', data.textMuted || '#94a3b8');
+            root.style.setProperty('--font-family', data.fontFamily || 'system-ui, -apple-system, sans-serif');
+
+            if (!customThemeData) {
+                localStorage.setItem(STORAGE_ACTIVE_THEME, themeId);
+                themeSelect.value = themeId;
+            }
+        } else {
+            // Fallback to dark theme if requested theme ID does not exist
+            root.setAttribute('data-theme', 'dark');
+            localStorage.setItem(STORAGE_ACTIVE_THEME, 'dark');
+            themeSelect.value = 'dark';
+        }
+    }
+
+    function initThemeSystem() {
+        populateThemeDropdown();
+        const activeTheme = localStorage.getItem(STORAGE_ACTIVE_THEME) || 'dark';
+        applyTheme(activeTheme);
+
+        // Bind Theme Selector Dropdown
+        themeSelect.addEventListener('change', (e) => {
+            const val = e.target.value;
+            if (val === 'manage-custom') {
+                openThemeModal();
+                // Restore selector to current active theme
+                themeSelect.value = localStorage.getItem(STORAGE_ACTIVE_THEME) || 'dark';
+            } else {
+                applyTheme(val);
+            }
+        });
+
+        // Sync Color Picker with Text Inputs
+        syncColorAndText(themeBgColor, themeBgText);
+        syncColorAndText(themeCardBgColor, themeCardBgText);
+        syncColorAndText(themeCardBorderColor, themeCardBorderText);
+        syncColorAndText(themePrimaryColor, themePrimaryText);
+        syncColorAndText(themeTextBrightColor, themeTextBrightText);
+        syncColorAndText(themeTextMutedColor, themeTextMutedText);
+
+        btnThemeModal.addEventListener('click', openThemeModal);
+        btnCloseThemeModal.addEventListener('click', closeThemeModal);
+
+        btnPreviewTheme.addEventListener('click', () => {
+            const previewData = getFormDataAsThemeData();
+            applyTheme('custom', previewData);
+        });
+
+        customThemeForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const themeData = getFormDataAsThemeData();
+
+            if (!themeData.name) {
+                alert('Please provide a theme name.');
+                return;
+            }
+
+            const customThemes = getCustomThemes();
+            const themeId = editingCustomThemeId || ('custom-' + Date.now());
+
+            customThemes[themeId] = themeData;
+            saveCustomThemes(customThemes);
+
+            populateThemeDropdown();
+            applyTheme(themeId);
+            renderSavedThemesList();
+
+            editingCustomThemeId = null;
+            customThemeForm.reset();
+            alert(`Theme "${themeData.name}" saved successfully!`);
+        });
+
+        btnExportThemes.addEventListener('click', exportCustomThemes);
+        btnImportThemes.addEventListener('click', () => importThemeFile.click());
+        importThemeFile.addEventListener('change', handleImportThemesFile);
+    }
+
+    function syncColorAndText(colorEl, textEl) {
+        colorEl.addEventListener('input', () => { textEl.value = colorEl.value; });
+        textEl.addEventListener('change', () => {
+            if (/^#[0-9A-F]{6}$/i.test(textEl.value.trim())) {
+                colorEl.value = textEl.value.trim();
+            }
+        });
+    }
+
+    function getFormDataAsThemeData() {
+        return {
+            name: themeNameInput.value.trim(),
+            bg: themeBgText.value.trim() || themeBgColor.value,
+            cardBg: themeCardBgText.value.trim() || themeCardBgColor.value,
+            cardBorder: themeCardBorderText.value.trim() || themeCardBorderColor.value,
+            primary: themePrimaryText.value.trim() || themePrimaryColor.value,
+            textBright: themeTextBrightText.value.trim() || themeTextBrightColor.value,
+            textMuted: themeTextMutedText.value.trim() || themeTextMutedColor.value,
+            fontFamily: themeFontFamily.value
+        };
+    }
+
+    function openThemeModal() {
+        renderSavedThemesList();
+        themeModal.classList.remove('hidden');
+    }
+
+    function closeThemeModal() {
+        themeModal.classList.add('hidden');
+        editingCustomThemeId = null;
+        // Re-apply saved active theme if user was previewing
+        const activeTheme = localStorage.getItem(STORAGE_ACTIVE_THEME) || 'dark';
+        applyTheme(activeTheme);
+    }
+
+    function renderSavedThemesList() {
+        const customThemes = getCustomThemes();
+        const ids = Object.keys(customThemes);
+
+        if (ids.length === 0) {
+            savedThemesContainer.innerHTML = '<p class="subtitle" style="font-size: 0.85rem;">No custom themes saved yet. Create one above!</p>';
+            return;
+        }
+
+        savedThemesContainer.innerHTML = '';
+        ids.forEach(id => {
+            const theme = customThemes[id];
+            const item = document.createElement('div');
+            item.className = 'custom-theme-item';
+
+            item.innerHTML = `
+                <div>
+                    <strong>✨ ${theme.name}</strong>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">
+                        Primary: <span style="color: ${theme.primary}; font-weight: bold;">■</span> |
+                        Bg: <span style="color: ${theme.textBright}; font-weight: bold;">■</span>
+                    </div>
+                </div>
+                <div class="theme-actions">
+                    <button class="btn btn-primary btn-sm btn-apply-theme" type="button">Apply</button>
+                    <button class="btn btn-secondary btn-sm btn-edit-theme" type="button">Edit</button>
+                    <button class="btn btn-danger btn-sm btn-delete-theme" type="button">Delete</button>
+                </div>
+            `;
+
+            item.querySelector('.btn-apply-theme').addEventListener('click', () => {
+                applyTheme(id);
+                closeThemeModal();
+            });
+
+            item.querySelector('.btn-edit-theme').addEventListener('click', () => {
+                editingCustomThemeId = id;
+                themeNameInput.value = theme.name;
+
+                themeBgText.value = theme.bg;
+                if (/^#[0-9A-F]{6}$/i.test(theme.bg)) themeBgColor.value = theme.bg;
+
+                themeCardBgText.value = theme.cardBg;
+                if (/^#[0-9A-F]{6}$/i.test(theme.cardBg)) themeCardBgColor.value = theme.cardBg;
+
+                themeCardBorderText.value = theme.cardBorder;
+                if (/^#[0-9A-F]{6}$/i.test(theme.cardBorder)) themeCardBorderColor.value = theme.cardBorder;
+
+                themePrimaryText.value = theme.primary;
+                if (/^#[0-9A-F]{6}$/i.test(theme.primary)) themePrimaryColor.value = theme.primary;
+
+                themeTextBrightText.value = theme.textBright;
+                if (/^#[0-9A-F]{6}$/i.test(theme.textBright)) themeTextBrightColor.value = theme.textBright;
+
+                themeTextMutedText.value = theme.textMuted;
+                if (/^#[0-9A-F]{6}$/i.test(theme.textMuted)) themeTextMutedColor.value = theme.textMuted;
+
+                if (theme.fontFamily) themeFontFamily.value = theme.fontFamily;
+            });
+
+            item.querySelector('.btn-delete-theme').addEventListener('click', () => {
+                if (confirm(`Delete custom theme "${theme.name}"?`)) {
+                    delete customThemes[id];
+                    saveCustomThemes(customThemes);
+                    populateThemeDropdown();
+                    renderSavedThemesList();
+
+                    if (localStorage.getItem(STORAGE_ACTIVE_THEME) === id) {
+                        applyTheme('dark');
+                    }
+                }
+            });
+
+            savedThemesContainer.appendChild(item);
+        });
+    }
+
+    function exportCustomThemes() {
+        const customThemes = getCustomThemes();
+        const blob = new Blob([JSON.stringify(customThemes, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ivc-custom-themes-${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    function handleImportThemesFile(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const importedObj = JSON.parse(event.target.result);
+                if (typeof importedObj !== 'object' || importedObj === null) {
+                    throw new Error('Invalid JSON structure');
+                }
+
+                const existingThemes = getCustomThemes();
+                let importedCount = 0;
+
+                Object.keys(importedObj).forEach(key => {
+                    const theme = importedObj[key];
+                    if (theme && theme.name) {
+                        const newKey = key.startsWith('custom-') ? key : ('custom-' + Math.random().toString(36).substring(2, 9));
+                        existingThemes[newKey] = theme;
+                        importedCount++;
+                    }
+                });
+
+                saveCustomThemes(existingThemes);
+                populateThemeDropdown();
+                renderSavedThemesList();
+                alert(`Successfully imported ${importedCount} custom theme(s)!`);
+            } catch (err) {
+                alert('Failed to import themes JSON: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    /* ==========================================================================
+       INITIALIZATION & MULTI-TAB SESSION LOGIC
+       ========================================================================== */
+
     // Initialize Nickname input
     nicknameInput.value = myNickname;
 
@@ -119,7 +489,9 @@
         return '#lobby';
     }
 
-    // Initialize Tabs on startup
+    // Initialize Theme System & Tabs on startup
+    initThemeSystem();
+
     const initialChan = parseChannelFromUrl();
     openTab(initialChan, false);
     openTab('#stats', false); // Always include #stats room tab
@@ -226,7 +598,7 @@
         if (!isStats) {
             openTabs[channelId].messages.push({
                 sender: 'SYSTEM',
-                text: `Joined channel ${channelId}. Direct P2P encrypted chat active. Type /help for IRC service commands.`,
+                text: `Joined channel ${channelId}. Direct P2P encrypted chat active. Type /help for IRC service commands or /theme <name> to change themes.`,
                 type: 'system'
             });
 
@@ -981,6 +1353,84 @@
         const tab = openTabs[activeTabId];
         chatInput.value = '';
 
+        // Check if message is the IRC /theme command
+        if (text.startsWith('/theme')) {
+            addMessageToTab(activeTabId, {
+                sender: myNickname,
+                text: text,
+                type: 'self'
+            });
+
+            const parts = text.split(/\s+/);
+            const arg = (parts[1] || '').toLowerCase();
+
+            if (!arg || arg === 'list' || arg === 'help') {
+                const customThemes = getCustomThemes();
+                const customNames = Object.values(customThemes).map(t => t.name).join(', ');
+                const customListStr = customNames ? ` Custom: [${customNames}]` : '';
+                addMessageToTab(activeTabId, {
+                    sender: 'THEMESERV',
+                    text: `Available themes: dark, light, halloween, console, christmas.${customListStr}. Usage: /theme <name> or /theme custom`,
+                    type: 'bot'
+                });
+                return;
+            }
+
+            if (arg === 'custom' || arg === 'create') {
+                openThemeModal();
+                addMessageToTab(activeTabId, {
+                    sender: 'THEMESERV',
+                    text: 'Opened Custom Theme Creator dialog.',
+                    type: 'bot'
+                });
+                return;
+            }
+
+            if (arg === 'reset') {
+                applyTheme('dark');
+                addMessageToTab(activeTabId, {
+                    sender: 'THEMESERV',
+                    text: 'Theme reset to default Dark theme.',
+                    type: 'bot'
+                });
+                return;
+            }
+
+            // Check built-in or custom theme names/ids
+            if (BUILTIN_THEMES.includes(arg)) {
+                applyTheme(arg);
+                addMessageToTab(activeTabId, {
+                    sender: 'THEMESERV',
+                    text: `Switched theme to "${arg}".`,
+                    type: 'bot'
+                });
+                return;
+            }
+
+            const customThemes = getCustomThemes();
+            const matchedCustomId = Object.keys(customThemes).find(id =>
+                id === arg || customThemes[id].name.toLowerCase() === arg
+            );
+
+            if (matchedCustomId) {
+                applyTheme(matchedCustomId);
+                addMessageToTab(activeTabId, {
+                    sender: 'THEMESERV',
+                    text: `Switched theme to custom theme "${customThemes[matchedCustomId].name}".`,
+                    type: 'bot'
+                });
+                return;
+            }
+
+            addMessageToTab(activeTabId, {
+                sender: 'THEMESERV',
+                text: `Unknown theme "${arg}". Available built-in themes: dark, light, halloween, console, christmas.`,
+                type: 'bot'
+            });
+            return;
+        }
+
+        // Check if message is an IRC Service command (starts with /)
         if (text.startsWith('/')) {
             addMessageToTab(activeTabId, {
                 sender: myNickname,
@@ -1108,6 +1558,10 @@
             track.enabled = !tab.isAudioMuted;
             btnToggleMic.classList.toggle('off', tab.isAudioMuted);
             btnToggleMic.querySelector('.icon').textContent = tab.isAudioMuted ? '🔇' : '🎙️';
+            btnToggleMic.setAttribute('aria-pressed', tab.isAudioMuted ? 'true' : 'false');
+            const labelText = tab.isAudioMuted ? 'Unmute Microphone' : 'Mute Microphone';
+            btnToggleMic.setAttribute('aria-label', labelText);
+            btnToggleMic.setAttribute('title', labelText);
         }
     }
 
@@ -1123,6 +1577,10 @@
             btnToggleCam.classList.toggle('off', tab.isVideoMuted);
             btnToggleCam.querySelector('.icon').textContent = tab.isVideoMuted ? '📷' : '📹';
             if (activeTabId) renderVideoGrid(activeTabId);
+            btnToggleCam.setAttribute('aria-pressed', tab.isVideoMuted ? 'true' : 'false');
+            const labelText = tab.isVideoMuted ? 'Turn On Camera' : 'Turn Off Camera';
+            btnToggleCam.setAttribute('aria-label', labelText);
+            btnToggleCam.setAttribute('title', labelText);
         }
     }
 
@@ -1143,6 +1601,9 @@
 
                 tab.isScreenSharing = true;
                 btnShareScreen.classList.add('off');
+                btnShareScreen.setAttribute('aria-pressed', 'true');
+                btnShareScreen.setAttribute('aria-label', 'Stop Sharing Screen');
+                btnShareScreen.setAttribute('title', 'Stop Sharing Screen');
 
                 screenTrack.onended = () => {
                     stopScreenSharing(tab);
@@ -1164,5 +1625,8 @@
         });
         tab.isScreenSharing = false;
         btnShareScreen.classList.remove('off');
+        btnShareScreen.setAttribute('aria-pressed', 'false');
+        btnShareScreen.setAttribute('aria-label', 'Share Screen');
+        btnShareScreen.setAttribute('title', 'Share Screen');
     }
 })();

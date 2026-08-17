@@ -7,7 +7,7 @@ namespace Fortress\IRC;
 /**
  * IRC Service Command Dispatcher & Parser
  * Handles interaction with NAMESERV, CHANSERV, MOTDSERV, MEMOSERV, HOSTSERV, SERVICESERV,
- * and Foreign Services operating under different hosts via IRC-style slash commands or direct messages.
+ * THEMESERV, and Foreign Services operating under different hosts via IRC-style slash commands or direct messages.
  */
 class IrcServices
 {
@@ -109,7 +109,28 @@ class IrcServices
             return self::handleServServCommand($senderNick, $channel, $cmd, $args);
         }
 
-        // 2. Convenience Slash Commands
+        // 2. Theme Command
+        if ($first === '/theme') {
+            $arg = strtolower($parts[1] ?? 'list');
+            if ($arg === 'list' || $arg === 'help') {
+                $resp = "Available themes: dark, light, halloween, console, christmas. Usage: /theme <name> or /theme custom";
+            } elseif (in_array($arg, ['dark', 'light', 'halloween', 'console', 'christmas'], true)) {
+                $resp = "THEMESERV: Theme set to '{$arg}'.";
+            } elseif ($arg === 'custom' || $arg === 'create') {
+                $resp = "THEMESERV: Custom Theme Creator mode activated.";
+            } else {
+                $resp = "THEMESERV: Theme set to '{$arg}'.";
+            }
+
+            return [
+                'is_service_command' => true,
+                'service' => 'THEMESERV',
+                'response' => $resp,
+                'channel' => $channel
+            ];
+        }
+
+        // 3. Convenience Slash Commands
         if ($first === '/memo') {
             $sub = strtoupper($parts[1] ?? 'LIST');
             if ($sub === 'SEND') {
@@ -313,6 +334,7 @@ class IrcServices
                        "• /vhost [REQUEST|ON|OFF|INFO] — HostServ shortcut\n" .
                        "• /motd [new_motd] — View/update Message of the Day\n" .
                        "• /topic <new_topic> — Change channel topic\n" .
+                       "• /theme [list|dark|light|halloween|console|christmas|custom] — Switch or manage themes\n" .
                        "• /supersilent <message> — Post a message to super room only without propagating to subrooms\n" .
                        "• /settings [SET <key> <value>] — View or update serverwide settings in MySQL";
 

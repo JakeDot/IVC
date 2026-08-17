@@ -335,6 +335,20 @@ assertTest($ssCmd !== null && $ssCmd['service'] === 'SUPERSILENT', 'Processed /s
 $ssSub1Msgs = RoomManager::pollMessages($subRoom1, $uSub1);
 assertTest(count($ssSub1Msgs) === 0, 'Subroom #tech/dev did NOT receive /supersilent message (override behavior)');
 
+// Test 14: Multi-Theme Support & /theme Service Command
+echo "\n14. Testing Multi-Theme Support & /theme Service Command...\n";
+$themeListCmd = IrcServices::processCommand('User1', '#lobby', '/theme list');
+assertTest($themeListCmd !== null && $themeListCmd['service'] === 'THEMESERV' && str_contains($themeListCmd['response'], 'halloween'), 'Processed /theme list command');
+
+$themeHalCmd = IrcServices::processCommand('User1', '#lobby', '/theme halloween');
+assertTest($themeHalCmd !== null && $themeHalCmd['service'] === 'THEMESERV' && str_contains($themeHalCmd['response'], 'halloween'), 'Processed /theme halloween command');
+
+$themeConsCmd = IrcServices::processCommand('User1', '#lobby', '/theme console');
+assertTest($themeConsCmd !== null && $themeConsCmd['service'] === 'THEMESERV' && str_contains($themeConsCmd['response'], 'console'), 'Processed /theme console command');
+
+$themeXmasCmd = IrcServices::processCommand('User1', '#lobby', '/theme christmas');
+assertTest($themeXmasCmd !== null && $themeXmasCmd['service'] === 'THEMESERV' && str_contains($themeXmasCmd['response'], 'christmas'), 'Processed /theme christmas command');
+
 echo "\n-----------------------------------------\n";
 echo "Test Results: $testsPassed Passed, $testsFailed Failed.\n";
 echo "-----------------------------------------\n\n";

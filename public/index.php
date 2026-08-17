@@ -126,17 +126,17 @@ if (!empty($uriPath) && !str_contains($uriPath, '.') && !str_starts_with($uriPat
 
                 <!-- Call Control Toolbar -->
                 <div class="call-controls">
-                    <button id="btn-toggle-mic" class="btn-control" title="Toggle Microphone">
-                        <span class="icon">🎙️</span>
+                    <button id="btn-toggle-mic" class="btn-control" title="Mute Microphone" aria-label="Mute Microphone" aria-pressed="false">
+                        <span class="icon" aria-hidden="true">🎙️</span>
                     </button>
-                    <button id="btn-toggle-cam" class="btn-control" title="Toggle Camera">
-                        <span class="icon">📹</span>
+                    <button id="btn-toggle-cam" class="btn-control" title="Turn Off Camera" aria-label="Turn Off Camera" aria-pressed="false">
+                        <span class="icon" aria-hidden="true">📹</span>
                     </button>
-                    <button id="btn-share-screen" class="btn-control" title="Share Screen">
-                        <span class="icon">🖥️</span>
+                    <button id="btn-share-screen" class="btn-control" title="Share Screen" aria-label="Share Screen" aria-pressed="false">
+                        <span class="icon" aria-hidden="true">🖥️</span>
                     </button>
-                    <button id="btn-leave-call" class="btn-control btn-danger" title="Leave Channel">
-                        <span class="icon">📞</span> Leave Channel
+                    <button id="btn-leave-call" class="btn-control btn-danger" title="Leave Channel" aria-label="Leave Channel">
+                        <span class="icon" aria-hidden="true">📞</span> Leave Channel
                     </button>
                 </div>
             </section>

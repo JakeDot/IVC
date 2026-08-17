@@ -14,7 +14,7 @@ require_once __DIR__ . '/../src/IRC/MotdServ.php';
 require_once __DIR__ . '/../src/IRC/MemoServ.php';
 require_once __DIR__ . '/../src/IRC/HostServ.php';
 require_once __DIR__ . '/../src/IRC/ServiceRegistry.php';
-require_once __DIR__ . '/../src/IRC/ServiceServ.php';
+require_once __DIR__ . '/../src/IRC/ServServ.php';
 require_once __DIR__ . '/../src/IRC/IrcServices.php';
 require_once __DIR__ . '/../src/Signaling/RoomManager.php';
 
@@ -29,7 +29,7 @@ use Fortress\IRC\MotdServ;
 use Fortress\IRC\MemoServ;
 use Fortress\IRC\HostServ;
 use Fortress\IRC\ServiceRegistry;
-use Fortress\IRC\ServiceServ;
+use Fortress\IRC\ServServ;
 use Fortress\IRC\IrcServices;
 use Fortress\Signaling\RoomManager;
 
@@ -173,16 +173,16 @@ assertTest($pingRes['success'] === true, 'ServiceRegistry ping update successful
 $svcList = ServiceRegistry::listServices();
 assertTest(count($svcList) >= 1, 'ServiceRegistry listed registered foreign services');
 
-// Test 11: ServiceServ Bot & Foreign Service Command Dispatching
-echo "\n11. Testing ServiceServ Bot & Foreign Service Routing...\n";
-$ssList = ServiceServ::listAllServices();
-assertTest($ssList['success'] === true && count($ssList['foreign_services']) >= 1, 'ServiceServ listed local and foreign services');
+// Test 11: ServServ Bot & Foreign Service Command Dispatching
+echo "\n11. Testing ServServ Bot & Foreign Service Routing...\n";
+$ssList = ServServ::listAllServices();
+assertTest($ssList['success'] === true && count($ssList['foreign_services']) >= 1, 'ServServ listed local and foreign services');
 
-$ssInfo = ServiceServ::getServiceInfo('HELPBOT');
-assertTest($ssInfo['success'] === true && str_contains($ssInfo['message'], 'help.external-domain.org'), 'ServiceServ returned foreign service info');
+$ssInfo = ServServ::getServiceInfo('HELPBOT');
+assertTest($ssInfo['success'] === true && str_contains($ssInfo['message'], 'help.external-domain.org'), 'ServServ returned foreign service info');
 
-$ssDispatch = ServiceServ::dispatchForeignCommand('Alice', 'HELPBOT', 'SEARCH WebRTC security');
-assertTest($ssDispatch['success'] === true && str_contains($ssDispatch['message'], 'HELPBOT@help.external-domain.org'), 'ServiceServ dispatched command to foreign service');
+$ssDispatch = ServServ::dispatchForeignCommand('Alice', 'HELPBOT', 'SEARCH WebRTC security');
+assertTest($ssDispatch['success'] === true && str_contains($ssDispatch['message'], 'HELPBOT@help.external-domain.org'), 'ServServ dispatched command to foreign service');
 
 // Test 12: IrcServices Command Parser with All Services
 echo "\n12. Testing IrcServices Command Parser with new Services...\n";
@@ -192,8 +192,8 @@ assertTest($cmdMemo !== null && $cmdMemo['service'] === 'MEMOSERV', 'Parsed /msg
 $cmdVhost = IrcServices::processCommand('Bob', '#lobby', '/vhost REQUEST dev.fortress.local');
 assertTest($cmdVhost !== null && $cmdVhost['service'] === 'HOSTSERV', 'Parsed /vhost REQUEST shortcut command');
 
-$cmdSvcList = IrcServices::processCommand('Bob', '#lobby', '/msg SERVICESERV LIST');
-assertTest($cmdSvcList !== null && $cmdSvcList['service'] === 'SERVICESERV', 'Parsed /msg SERVICESERV LIST command');
+$cmdSvcList = IrcServices::processCommand('Bob', '#lobby', '/msg SERVSERV LIST');
+assertTest($cmdSvcList !== null && $cmdSvcList['service'] === 'SERVSERV', 'Parsed /msg SERVSERV LIST command');
 
 $cmdForeign = IrcServices::processCommand('Bob', '#lobby', '/msg HELPBOT ASK How do I lock a channel?');
 assertTest($cmdForeign !== null && $cmdForeign['service'] === 'HELPBOT' && str_contains($cmdForeign['response'], 'HELPBOT@help.external-domain.org'), 'Parsed /msg <FOREIGN_SERVICE> command and routed to foreign host');

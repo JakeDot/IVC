@@ -55,15 +55,15 @@ class IrcServices
                 return self::handleHostServCommand($senderNick, $channel, $cmd, $args);
             }
 
-            if ($targetService === ServiceServ::SERVICE_NAME) {
-                return self::handleServiceServCommand($senderNick, $channel, $cmd, $args);
+            if ($targetService === ServServ::SERVICE_NAME || $targetService === 'SERVICESERV') {
+                return self::handleServServCommand($senderNick, $channel, $cmd, $args);
             }
 
             // Check if $targetService is a registered foreign service operating under a different host
             $foreignService = ServiceRegistry::getService($targetService);
             if ($foreignService) {
                 $fullCommand = implode(' ', array_slice($parts, 2));
-                $res = ServiceServ::dispatchForeignCommand($senderNick, $targetService, $fullCommand);
+                $res = ServServ::dispatchForeignCommand($senderNick, $targetService, $fullCommand);
                 return [
                     'is_service_command' => true,
                     'service' => $targetService,
@@ -103,10 +103,10 @@ class IrcServices
             return self::handleHostServCommand($senderNick, $channel, $cmd, $args);
         }
 
-        if ($first === '/serviceserv') {
+        if ($first === '/servserv' || $first === '/serviceserv') {
             $cmd = strtoupper($parts[1] ?? '');
             $args = array_slice($parts, 2);
-            return self::handleServiceServCommand($senderNick, $channel, $cmd, $args);
+            return self::handleServServCommand($senderNick, $channel, $cmd, $args);
         }
 
         // 2. Convenience Slash Commands
@@ -265,7 +265,7 @@ class IrcServices
 
             return [
                 'is_service_command' => true,
-                'service' => 'SERVICESERV',
+                'service' => 'SERVSERV',
                 'response' => $resp,
                 'channel' => $channel
             ];
@@ -280,8 +280,8 @@ class IrcServices
                        "• /msg MEMOSERV SEND <nick> <msg> — Send memo to offline/online user\n" .
                        "• /msg MEMOSERV READ [num] / LIST — Read or list your memos\n" .
                        "• /msg HOSTSERV REQUEST <vhost> — Request or set virtual host\n" .
-                       "• /msg SERVICESERV LIST — List core & registered foreign services\n" .
-                       "• /msg SERVICESERV REGISTER <name> <host> <endpoint> — Register foreign service\n" .
+                       "• /msg SERVSERV LIST — List core & registered foreign services\n" .
+                       "• /msg SERVSERV REGISTER <name> <host> <endpoint> — Register foreign service\n" .
                        "• /memo [SEND|READ|DEL|LIST] — MemoServ shortcut\n" .
                        "• /vhost [REQUEST|ON|OFF|INFO] — HostServ shortcut\n" .
                        "• /motd [new_motd] — View/update Message of the Day\n" .
@@ -290,7 +290,7 @@ class IrcServices
 
             return [
                 'is_service_command' => true,
-                'service' => 'SERVICESERV',
+                'service' => 'SERVSERV',
                 'response' => $helpMsg,
                 'channel' => $channel
             ];
@@ -466,7 +466,7 @@ class IrcServices
         ];
     }
 
-    private static function handleServiceServCommand(string $senderNick, string $channel, string $cmd, array $args): array
+    private static function handleServServCommand(string $senderNick, string $channel, string $cmd, array $args): array
     {
         switch ($cmd) {
             case 'REGISTER':
@@ -474,29 +474,29 @@ class IrcServices
                 $host = $args[1] ?? '';
                 $endpoint = $args[2] ?? '';
                 $meta = isset($args[3]) ? implode(' ', array_slice($args, 3)) : null;
-                $res = ServiceServ::registerForeignService($name, $host, $endpoint, $meta);
+                $res = ServServ::registerForeignService($name, $host, $endpoint, $meta);
                 break;
 
             case 'INFO':
                 $target = $args[0] ?? '';
-                $res = ServiceServ::getServiceInfo($target);
+                $res = ServServ::getServiceInfo($target);
                 break;
 
             case 'COMMAND':
                 $sName = $args[0] ?? '';
                 $cText = implode(' ', array_slice($args, 1));
-                $res = ServiceServ::dispatchForeignCommand($senderNick, $sName, $cText);
+                $res = ServServ::dispatchForeignCommand($senderNick, $sName, $cText);
                 break;
 
             case 'LIST':
             default:
-                $res = ServiceServ::listAllServices();
+                $res = ServServ::listAllServices();
                 break;
         }
 
         return [
             'is_service_command' => true,
-            'service' => ServiceServ::SERVICE_NAME,
+            'service' => ServServ::SERVICE_NAME,
             'response' => $res['message'],
             'channel' => $channel
         ];

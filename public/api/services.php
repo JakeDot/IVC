@@ -7,13 +7,13 @@ require_once __DIR__ . '/../../src/Security/Sanitizer.php';
 require_once __DIR__ . '/../../src/Security/RateLimiter.php';
 require_once __DIR__ . '/../../src/Database/Database.php';
 require_once __DIR__ . '/../../src/IRC/ServiceRegistry.php';
-require_once __DIR__ . '/../../src/IRC/ServiceServ.php';
+require_once __DIR__ . '/../../src/IRC/ServServ.php';
 
 use Fortress\Security\SecurityHeaders;
 use Fortress\Security\Sanitizer;
 use Fortress\Security\RateLimiter;
 use Fortress\IRC\ServiceRegistry;
-use Fortress\IRC\ServiceServ;
+use Fortress\IRC\ServServ;
 
 SecurityHeaders::apply();
 
@@ -39,12 +39,12 @@ if ($method === 'GET') {
 
     if ($action === 'info' && (!empty($_GET['service']) || !empty($_GET['host']))) {
         $query = $_GET['service'] ?? $_GET['host'];
-        $info = ServiceServ::getServiceInfo((string)$query);
+        $info = ServServ::getServiceInfo((string)$query);
         echo json_encode(['status' => 'ok', 'info' => $info], JSON_THROW_ON_ERROR);
         exit;
     }
 
-    $all = ServiceServ::listAllServices();
+    $all = ServServ::listAllServices();
     echo json_encode(['status' => 'ok', 'services' => $all], JSON_THROW_ON_ERROR);
     exit;
 }
@@ -132,7 +132,7 @@ if ($method === 'POST') {
             exit;
         }
 
-        $res = ServiceServ::dispatchForeignCommand($sender, $serviceName, $command);
+        $res = ServServ::dispatchForeignCommand($sender, $serviceName, $command);
         if ($res['success']) {
             echo json_encode(['status' => 'ok', 'response' => $res['message'], 'service' => $res['service_name'], 'host' => $res['host']], JSON_THROW_ON_ERROR);
         } else {

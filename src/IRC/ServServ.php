@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace Fortress\IRC;
 
 /**
- * SERVICESERV (Services Directory & Foreign Service Dispatcher Bot)
+ * SERVSERV (Services Directory & Foreign Service Dispatcher Bot)
  * Manages network services overview and routes commands to local or foreign services operating under different hosts.
  */
-class ServiceServ
+class ServServ
 {
-    public const SERVICE_NAME = 'SERVICESERV';
+    public const SERVICE_NAME = 'SERVSERV';
 
     /**
      * List all core local services and registered foreign services
@@ -23,12 +23,12 @@ class ServiceServ
             'MOTDSERV' => 'Message of the Day Management',
             'MEMOSERV' => 'Offline Messaging & Memo Storage',
             'HOSTSERV' => 'Virtual Host (VHost) Management',
-            'SERVICESERV' => 'Network & Foreign Services Directory',
+            'SERVSERV' => 'Network & Foreign Services Directory',
         ];
 
         $foreignServices = ServiceRegistry::listServices();
 
-        $lines = ["SERVICESERV Registered IRC Network Services:"];
+        $lines = ["SERVSERV Registered IRC Network Services:"];
         $lines[] = "--- CORE LOCAL SERVICES ---";
         foreach ($coreServices as $name => $desc) {
             $lines[] = "• {$name} (Local Host): {$desc}";
@@ -42,7 +42,7 @@ class ServiceServ
             }
         } else {
             $lines[] = "--- FOREIGN SERVICES ---";
-            $lines[] = "• No foreign services currently registered. Register using: /msg SERVICESERV REGISTER <name> <host> <endpoint>";
+            $lines[] = "• No foreign services currently registered. Register using: /msg SERVSERV REGISTER <name> <host> <endpoint>";
         }
 
         return [
@@ -66,13 +66,13 @@ class ServiceServ
             'MOTDSERV' => 'Message of the Day Management',
             'MEMOSERV' => 'Offline Messaging & Memo Storage',
             'HOSTSERV' => 'Virtual Host (VHost) Management',
-            'SERVICESERV' => 'Network & Foreign Services Directory',
+            'SERVSERV' => 'Network & Foreign Services Directory',
         ];
 
         if (isset($coreServices[$serviceName])) {
             return [
                 'success' => true,
-                'message' => "SERVICESERV Info for {$serviceName}:\n• Type: Core Local Service\n• Host: Localhost\n• Description: {$coreServices[$serviceName]}"
+                'message' => "SERVSERV Info for {$serviceName}:\n• Type: Core Local Service\n• Host: Localhost\n• Description: {$coreServices[$serviceName]}"
             ];
         }
 
@@ -80,7 +80,7 @@ class ServiceServ
         if ($fs) {
             $regDate = date('Y-m-d H:i:s', (int)$fs['registered_at']);
             $lastPing = date('Y-m-d H:i:s', (int)$fs['last_ping']);
-            $msg = "SERVICESERV Foreign Service Info for {$fs['service_name']}:\n" .
+            $msg = "SERVSERV Foreign Service Info for {$fs['service_name']}:\n" .
                    "• Host: {$fs['host']}\n" .
                    "• Endpoint: {$fs['api_endpoint']}\n" .
                    "• Status: {$fs['status']}\n" .
@@ -91,7 +91,7 @@ class ServiceServ
             return ['success' => true, 'message' => $msg, 'data' => $fs];
         }
 
-        return ['success' => false, 'message' => "SERVICESERV: Service '{$serviceName}' not found."];
+        return ['success' => false, 'message' => "SERVSERV: Service '{$serviceName}' not found."];
     }
 
     /**
@@ -102,7 +102,7 @@ class ServiceServ
         $res = ServiceRegistry::registerService($serviceName, $host, $apiEndpoint, $metadata);
         return [
             'success' => $res['success'],
-            'message' => "SERVICESERV: " . $res['message']
+            'message' => "SERVSERV: " . $res['message']
         ];
     }
 
@@ -118,14 +118,14 @@ class ServiceServ
         if (!$fs) {
             return [
                 'success' => false,
-                'message' => "SERVICESERV: Foreign service '{$serviceName}' is not registered."
+                'message' => "SERVSERV: Foreign service '{$serviceName}' is not registered."
             ];
         }
 
         if (strtoupper($fs['status']) !== 'ACTIVE') {
             return [
                 'success' => false,
-                'message' => "SERVICESERV: Foreign service '{$serviceName}' on host '{$fs['host']}' is currently INACTIVE."
+                'message' => "SERVSERV: Foreign service '{$serviceName}' on host '{$fs['host']}' is currently INACTIVE."
             ];
         }
 

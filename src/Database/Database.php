@@ -6,9 +6,11 @@ namespace Fortress\Database;
 
 use PDO;
 use PDOException;
+use PDOStatement;
+use Throwable;
 
 /**
- * Database connection & schema initializer for IVC IRC Infrastructure.
+ * Database connection, prepared statement helper & schema manager for IVC IRC Infrastructure.
  * Supports MySQL via PDO with an automatic SQLite fallback when MySQL is unreachable.
  */
 class Database
@@ -33,6 +35,7 @@ class Database
             $pdo = new PDO($dsn, $user, $pass, [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => false,
                 PDO::ATTR_TIMEOUT => 2,
             ]);
             self::$driver = 'mysql';
@@ -44,6 +47,7 @@ class Database
             $pdo = new PDO($dsn, null, null, [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => false,
             ]);
             self::$driver = 'sqlite';
             self::$pdo = $pdo;
@@ -64,6 +68,121 @@ class Database
         self::$driver = $driver;
         if ($pdo !== null) {
             self::initializeSchema();
+        }
+    }
+
+    /**
+     * Prepare and execute a SQL query with bound parameters.
+     *
+     * @param string $sql
+     * @param array<string|int, mixed> $params
+     * @return PDOStatement
+     * @throws PDOException
+     */
+    public static function execute(string $sql, array $params = []): PDOStatement
+    {
+        $pdo = self::getConnection();
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        return $stmt;
+    }
+
+    /**
+     * Fetch a single row as an associative array using a prepared statement.
+     *
+     * @param string $sql
+     * @param array<string|int, mixed> $params
+     * @return array<string, mixed>|null
+     */
+    public static function fetchOne(string $sql, array $params = []): ?array
+    {
+        $stmt = self::execute($sql, $params);
+        $result = $stmt->fetch();
+        return is_array($result) ? $result : null;
+    }
+
+    /**
+     * Fetch all rows as associative arrays using a prepared statement.
+     *
+     * @param string $sql
+     * @param array<string|int, mixed> $params
+     * @return array<int, array<string, mixed>>
+     */
+    public static function fetchAll(string $sql, array $params = []): array
+    {
+        $stmt = self::execute($sql, $params);
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * Fetch a single column scalar value using a prepared statement.
+     *
+     * @param string $sql
+     * @param array<string|int, mixed> $params
+     * @param int $column
+     * @return mixed
+     */
+    public static function fetchColumn(string $sql, array $params = [], int $column = 0): mixed
+    {
+        $stmt = self::execute($sql, $params);
+        $value = $stmt->fetchColumn($column);
+        return $value !== false ? $value : null;
+    }
+
+    /**
+     * Begin a PDO transaction.
+     */
+    public static function beginTransaction(): bool
+    {
+        $pdo = self::getConnection();
+        return $pdo->inTransaction() || $pdo->beginTransaction();
+    }
+
+    /**
+     * Commit active PDO transaction.
+     */
+    public static function commit(): bool
+    {
+        $pdo = self::getConnection();
+        return $pdo->inTransaction() ? $pdo->commit() : false;
+    }
+
+    /**
+     * Rollback active PDO transaction.
+     */
+    public static function rollBack(): bool
+    {
+        $pdo = self::getConnection();
+        return $pdo->inTransaction() ? $pdo->rollBack() : false;
+    }
+
+    /**
+     * Check if currently in transaction.
+     */
+    public static function inTransaction(): bool
+    {
+        $pdo = self::getConnection();
+        return $pdo->inTransaction();
+    }
+
+    /**
+     * Execute a callback within a PDO transaction with automatic rollback on exception.
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     * @throws Throwable
+     */
+    public static function transaction(callable $callback): mixed
+    {
+        self::beginTransaction();
+        try {
+            $result = $callback();
+            self::commit();
+            return $result;
+        } catch (Throwable $e) {
+            self::rollBack();
+            throw $e;
         }
     }
 
@@ -132,19 +251,19 @@ class Database
             'version' => ['2.0.0-IRC', 'Server Infrastructure Version']
         ];
 
-        $stmtCheck = self::$pdo->prepare("SELECT COUNT(*) FROM irc_settings WHERE setting_key = :key");
-        $stmtInsert = self::$pdo->prepare("INSERT INTO irc_settings (setting_key, setting_value, description, updated_at) VALUES (:key, :val, :desc, :time)");
-
         $now = time();
         foreach ($defaults as $key => [$val, $desc]) {
-            $stmtCheck->execute([':key' => $key]);
-            if ((int)$stmtCheck->fetchColumn() === 0) {
-                $stmtInsert->execute([
-                    ':key' => $key,
-                    ':val' => $val,
-                    ':desc' => $desc,
-                    ':time' => $now
-                ]);
+            $count = (int)self::fetchColumn("SELECT COUNT(*) FROM irc_settings WHERE setting_key = :key", [':key' => $key]);
+            if ($count === 0) {
+                self::execute(
+                    "INSERT INTO irc_settings (setting_key, setting_value, description, updated_at) VALUES (:key, :val, :desc, :time)",
+                    [
+                        ':key' => $key,
+                        ':val' => $val,
+                        ':desc' => $desc,
+                        ':time' => $now
+                    ]
+                );
             }
         }
     }

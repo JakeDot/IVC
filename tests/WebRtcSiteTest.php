@@ -6,7 +6,15 @@ require_once __DIR__ . '/../src/Security/SecurityHeaders.php';
 require_once __DIR__ . '/../src/Security/Sanitizer.php';
 require_once __DIR__ . '/../src/Security/RateLimiter.php';
 require_once __DIR__ . '/../src/Security/TokenManager.php';
+require_once __DIR__ . '/../src/Models/UserNick.php';
+require_once __DIR__ . '/../src/Models/Channel.php';
+require_once __DIR__ . '/../src/Models/ChannelUser.php';
+require_once __DIR__ . '/../src/Models/IrcSetting.php';
 require_once __DIR__ . '/../src/Database/Database.php';
+require_once __DIR__ . '/../src/Database/UserNickRepository.php';
+require_once __DIR__ . '/../src/Database/ChannelRepository.php';
+require_once __DIR__ . '/../src/Database/ChannelUserRepository.php';
+require_once __DIR__ . '/../src/Database/SettingRepository.php';
 require_once __DIR__ . '/../src/IRC/SettingsManager.php';
 require_once __DIR__ . '/../src/IRC/NameServ.php';
 require_once __DIR__ . '/../src/IRC/ChanServ.php';
@@ -17,7 +25,15 @@ require_once __DIR__ . '/../src/Signaling/RoomManager.php';
 use Fortress\Security\Sanitizer;
 use Fortress\Security\RateLimiter;
 use Fortress\Security\TokenManager;
+use Fortress\Models\UserNick;
+use Fortress\Models\Channel;
+use Fortress\Models\ChannelUser;
+use Fortress\Models\IrcSetting;
 use Fortress\Database\Database;
+use Fortress\Database\UserNickRepository;
+use Fortress\Database\ChannelRepository;
+use Fortress\Database\ChannelUserRepository;
+use Fortress\Database\SettingRepository;
 use Fortress\IRC\SettingsManager;
 use Fortress\IRC\NameServ;
 use Fortress\IRC\ChanServ;
@@ -156,6 +172,63 @@ assertTest(count($user2Messages) === 1 && $user2Messages[0]['type'] === 'offer',
 
 RoomManager::leaveRoom($room, $user1);
 assertTest(RoomManager::getPeerCount($room) === 1, 'User 1 left #test-channel');
+
+// Test 10: Model PHP Entity Classes
+echo "\n10. Testing Domain Model PHP Entity Classes...\n";
+$uNick = new UserNick('TestUser', UserNick::hashPassword('mypassword'), 'test@example.com', 1700000000, 1700000000, true);
+assertTest($uNick->getNickname() === 'TestUser', 'UserNick getter returns nickname');
+assertTest($uNick->verifyPassword('mypassword') === true, 'UserNick verifyPassword succeeds with correct password');
+assertTest($uNick->verifyPassword('wrongpass') === false, 'UserNick verifyPassword fails with incorrect password');
+
+$uArray = $uNick->toArray();
+$uRestored = UserNick::fromArray($uArray);
+assertTest($uRestored->getNickname() === 'TestUser' && $uRestored->getEmail() === 'test@example.com', 'UserNick array serialization and restoration');
+
+$chan = new Channel('#dev', 'Developer', 'Development Channel', 'devkey123', '+tn');
+assertTest($chan->getChannelName() === '#dev' && $chan->getPasskey() === 'devkey123', 'Channel model getters work');
+$cArray = $chan->toArray();
+$cRestored = Channel::fromArray($cArray);
+assertTest($cRestored->getTopic() === 'Development Channel', 'Channel array serialization and restoration');
+
+$cUser = new ChannelUser('#dev', 'Developer', 'OP');
+assertTest($cUser->isOp() === true, 'ChannelUser isOp returns true for OP');
+
+$setting = new IrcSetting('custom_key', 'custom_val', 'Custom Description');
+assertTest($setting->getSettingKey() === 'custom_key' && $setting->getSettingValue() === 'custom_val', 'IrcSetting model getters work');
+
+// Test 11: Database Prepared Statements & Transactions
+echo "\n11. Testing Database Prepared Statements & Transactions...\n";
+$fetchOneRes = Database::fetchOne("SELECT setting_value FROM irc_settings WHERE setting_key = :key", [':key' => 'network_name']);
+assertTest($fetchOneRes !== null && $fetchOneRes['setting_value'] === 'IVC-IRC Network', 'Database::fetchOne returns correct record');
+
+$fetchColRes = Database::fetchColumn("SELECT COUNT(*) FROM irc_settings");
+assertTest((int)$fetchColRes > 0, 'Database::fetchColumn returns aggregate count');
+
+// Test transaction rollback
+try {
+    Database::transaction(function() {
+        Database::execute("INSERT INTO irc_settings (setting_key, setting_value, description, updated_at) VALUES ('tx_test', 'tx_val', 'desc', 123456)");
+        throw new \Exception("Trigger rollback");
+    });
+} catch (\Throwable $e) {
+    // Expected exception
+}
+$txCheck = Database::fetchOne("SELECT setting_value FROM irc_settings WHERE setting_key = 'tx_test'");
+assertTest($txCheck === null, 'Database::transaction correctly rolled back changes on exception');
+
+// Test 12: Repositories
+echo "\n12. Testing Data Access Repositories...\n";
+$repoUser = UserNickRepository::findByNickname('CyberFox');
+assertTest($repoUser !== null && $repoUser->getNickname() === 'CyberFox', 'UserNickRepository::findByNickname retrieved record');
+
+$repoChan = ChannelRepository::findByChannelName('#fortress');
+assertTest($repoChan !== null && $repoChan->getOwnerNick() === 'CyberFox', 'ChannelRepository::findByChannelName retrieved record');
+
+$allChans = ChannelRepository::findAll();
+assertTest(count($allChans) > 0 && $allChans[0] instanceof Channel, 'ChannelRepository::findAll returned Channel objects');
+
+$settingRepo = SettingRepository::findByKey('network_name');
+assertTest($settingRepo !== null && $settingRepo->getSettingValue() === 'IVC-IRC Network', 'SettingRepository::findByKey retrieved IrcSetting object');
 
 echo "\n-----------------------------------------\n";
 echo "Test Results: $testsPassed Passed, $testsFailed Failed.\n";

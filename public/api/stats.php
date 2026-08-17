@@ -4,7 +4,15 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../src/Security/SecurityHeaders.php';
 require_once __DIR__ . '/../../src/Security/RateLimiter.php';
+require_once __DIR__ . '/../../src/Models/UserNick.php';
+require_once __DIR__ . '/../../src/Models/Channel.php';
+require_once __DIR__ . '/../../src/Models/ChannelUser.php';
+require_once __DIR__ . '/../../src/Models/IrcSetting.php';
 require_once __DIR__ . '/../../src/Database/Database.php';
+require_once __DIR__ . '/../../src/Database/UserNickRepository.php';
+require_once __DIR__ . '/../../src/Database/ChannelRepository.php';
+require_once __DIR__ . '/../../src/Database/ChannelUserRepository.php';
+require_once __DIR__ . '/../../src/Database/SettingRepository.php';
 require_once __DIR__ . '/../../src/IRC/SettingsManager.php';
 require_once __DIR__ . '/../../src/IRC/ChanServ.php';
 require_once __DIR__ . '/../../src/Signaling/RoomManager.php';
@@ -32,8 +40,8 @@ try {
     $dbDriver = Database::getDriver();
     $dbConnected = true;
 
-    $chanCount = (int)$pdo->query("SELECT COUNT(*) FROM chanserv_channels")->fetchColumn();
-    $nickCount = (int)$pdo->query("SELECT COUNT(*) FROM nameserv_nicks")->fetchColumn();
+    $chanCount = (int)Database::fetchColumn("SELECT COUNT(*) FROM chanserv_channels");
+    $nickCount = (int)Database::fetchColumn("SELECT COUNT(*) FROM nameserv_nicks");
 } catch (\Throwable $e) {
     $dbDriver = 'unknown';
     $dbConnected = false;

@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Fortress\IRC;
 
-use Fortress\Database\Database;
-use PDO;
+use Fortress\Database\UserNickRepository;
+use Fortress\Models\UserNick;
 
 /**
  * NAMESERV (Nickname Service) IRC System Bot
@@ -25,26 +25,14 @@ class NameServ
             return ['success' => false, 'message' => 'NAMESERV: Nickname and password are required.'];
         }
 
-        $pdo = Database::getConnection();
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM nameserv_nicks WHERE LOWER(nickname) = LOWER(:nick)");
-        $stmt->execute([':nick' => $nickname]);
-        if ((int)$stmt->fetchColumn() > 0) {
+        if (UserNickRepository::exists($nickname)) {
             return ['success' => false, 'message' => "NAMESERV: Nickname '{$nickname}' is already registered."];
         }
 
-        $passHash = password_hash($password, PASSWORD_DEFAULT);
-        $now = time();
+        $passHash = UserNick::hashPassword($password);
+        $userNick = new UserNick($nickname, $passHash, $email, null, null, true);
 
-        $insert = $pdo->prepare("INSERT INTO nameserv_nicks (nickname, password_hash, email, registered_at, last_seen, is_identified) VALUES (:nick, :hash, :email, :reg, :last, 1)");
-        $success = $insert->execute([
-            ':nick' => $nickname,
-            ':hash' => $passHash,
-            ':email' => $email,
-            ':reg' => $now,
-            ':last' => $now
-        ]);
-
-        if ($success) {
+        if (UserNickRepository::save($userNick)) {
             return ['success' => true, 'message' => "NAMESERV: Nickname '{$nickname}' successfully registered and identified."];
         }
 
@@ -57,19 +45,13 @@ class NameServ
     public static function identify(string $nickname, string $password): array
     {
         $nickname = trim($nickname);
-        $pdo = Database::getConnection();
+        $userNick = UserNickRepository::findByNickname($nickname);
 
-        $stmt = $pdo->prepare("SELECT password_hash FROM nameserv_nicks WHERE LOWER(nickname) = LOWER(:nick)");
-        $stmt->execute([':nick' => $nickname]);
-        $hash = $stmt->fetchColumn();
-
-        if (!$hash || !password_verify($password, (string)$hash)) {
+        if ($userNick === null || !$userNick->verifyPassword($password)) {
             return ['success' => false, 'message' => 'NAMESERV: Password verification failed. Access denied.'];
         }
 
-        $now = time();
-        $update = $pdo->prepare("UPDATE nameserv_nicks SET is_identified = 1, last_seen = :time WHERE LOWER(nickname) = LOWER(:nick)");
-        $update->execute([':time' => $now, ':nick' => $nickname]);
+        UserNickRepository::updateIdentification($userNick->getNickname(), true, time());
 
         return ['success' => true, 'message' => "NAMESERV: Password accepted. Nickname '{$nickname}' identified."];
     }
@@ -80,26 +62,22 @@ class NameServ
     public static function getInfo(string $nickname): array
     {
         $nickname = trim($nickname);
-        $pdo = Database::getConnection();
+        $userNick = UserNickRepository::findByNickname($nickname);
 
-        $stmt = $pdo->prepare("SELECT nickname, email, registered_at, last_seen, is_identified FROM nameserv_nicks WHERE LOWER(nickname) = LOWER(:nick)");
-        $stmt->execute([':nick' => $nickname]);
-        $row = $stmt->fetch();
-
-        if (!$row) {
+        if ($userNick === null) {
             return ['success' => false, 'message' => "NAMESERV: Nickname '{$nickname}' is not registered."];
         }
 
-        $regDate = date('Y-m-d H:i:s', (int)$row['registered_at']);
-        $lastSeenDate = date('Y-m-d H:i:s', (int)$row['last_seen']);
-        $identifiedStr = $row['is_identified'] ? 'Yes' : 'No';
+        $regDate = date('Y-m-d H:i:s', $userNick->getRegisteredAt());
+        $lastSeenDate = date('Y-m-d H:i:s', $userNick->getLastSeen());
+        $identifiedStr = $userNick->isIdentified() ? 'Yes' : 'No';
 
-        $msg = "NAMESERV Information for {$row['nickname']}:\n" .
+        $msg = "NAMESERV Information for {$userNick->getNickname()}:\n" .
                "• Registered: {$regDate}\n" .
                "• Last Seen: {$lastSeenDate}\n" .
                "• Currently Identified: {$identifiedStr}";
 
-        return ['success' => true, 'message' => $msg, 'data' => $row];
+        return ['success' => true, 'message' => $msg, 'data' => $userNick->toArray()];
     }
 
     /**
@@ -107,10 +85,7 @@ class NameServ
      */
     public static function isRegistered(string $nickname): bool
     {
-        $pdo = Database::getConnection();
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM nameserv_nicks WHERE LOWER(nickname) = LOWER(:nick)");
-        $stmt->execute([':nick' => trim($nickname)]);
-        return (int)$stmt->fetchColumn() > 0;
+        return UserNickRepository::exists($nickname);
     }
 
     /**
@@ -118,9 +93,7 @@ class NameServ
      */
     public static function isIdentified(string $nickname): bool
     {
-        $pdo = Database::getConnection();
-        $stmt = $pdo->prepare("SELECT is_identified FROM nameserv_nicks WHERE LOWER(nickname) = LOWER(:nick)");
-        $stmt->execute([':nick' => trim($nickname)]);
-        return (bool)$stmt->fetchColumn();
+        $userNick = UserNickRepository::findByNickname($nickname);
+        return $userNick !== null && $userNick->isIdentified();
     }
 }

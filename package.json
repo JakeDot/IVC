@@ -35,6 +35,9 @@
   ],
   "author": "JakeDot",
   "license": "MIT",
+  "overrides": {
+    "minimatch": "^9.0.7"
+  },
   "devDependencies": {
     "@types/jest": "^29.5.0",
     "@types/node": "^20.0.0",

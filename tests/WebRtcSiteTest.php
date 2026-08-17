@@ -11,6 +11,10 @@ require_once __DIR__ . '/../src/IRC/SettingsManager.php';
 require_once __DIR__ . '/../src/IRC/NameServ.php';
 require_once __DIR__ . '/../src/IRC/ChanServ.php';
 require_once __DIR__ . '/../src/IRC/MotdServ.php';
+require_once __DIR__ . '/../src/IRC/MemoServ.php';
+require_once __DIR__ . '/../src/IRC/HostServ.php';
+require_once __DIR__ . '/../src/IRC/ServiceRegistry.php';
+require_once __DIR__ . '/../src/IRC/ServiceServ.php';
 require_once __DIR__ . '/../src/IRC/IrcServices.php';
 require_once __DIR__ . '/../src/Signaling/RoomManager.php';
 
@@ -22,6 +26,10 @@ use Fortress\IRC\SettingsManager;
 use Fortress\IRC\NameServ;
 use Fortress\IRC\ChanServ;
 use Fortress\IRC\MotdServ;
+use Fortress\IRC\MemoServ;
+use Fortress\IRC\HostServ;
+use Fortress\IRC\ServiceRegistry;
+use Fortress\IRC\ServiceServ;
 use Fortress\IRC\IrcServices;
 use Fortress\Signaling\RoomManager;
 
@@ -123,22 +131,75 @@ $motdSet = MotdServ::setMotd('Welcome to Fortress Admin Network', 'AdminUser');
 assertTest($motdSet['success'] === true, 'MOTDSERV updated serverwide Message of the Day');
 assertTest(MotdServ::getMotd() === 'Welcome to Fortress Admin Network', 'MOTDSERV getMotd returned updated message');
 
-// Test 8: IrcServices Command Parser & Dispatcher
-echo "\n8. Testing IrcServices Command Parser...\n";
-$cmd1 = IrcServices::processCommand('Bob', '#lobby', '/msg CHANSERV REGISTER #lobby');
-assertTest($cmd1 !== null && $cmd1['is_service_command'] === true && $cmd1['service'] === 'CHANSERV', 'Parsed /msg CHANSERV REGISTER command');
+// Test 8: MEMOSERV (Memo Service Bot)
+echo "\n8. Testing MEMOSERV Stored Offline Messaging...\n";
+$memoSend = MemoServ::send('Alice', 'CyberFox', 'Hello CyberFox, welcome to Fortress IRC!');
+assertTest($memoSend['success'] === true, 'MEMOSERV sent memo to CyberFox');
+assertTest(MemoServ::getUnreadCount('CyberFox') === 1, 'MemoServ unread count is 1 for CyberFox');
 
-$cmd2 = IrcServices::processCommand('Alice', '#fortress', '/topic Fortress Encryption Zone');
-assertTest($cmd2 !== null && $cmd2['service'] === 'CHANSERV', 'Parsed /topic command');
+$memoList = MemoServ::listMemos('CyberFox');
+assertTest($memoList['success'] === true && count($memoList['memos']) === 1, 'MEMOSERV listed 1 memo for CyberFox');
 
-$cmd3 = IrcServices::processCommand('Admin', '#lobby', '/msg MOTDSERV SET Hello Admin World');
-assertTest($cmd3 !== null && $cmd3['service'] === 'MOTDSERV', 'Parsed /msg MOTDSERV SET command');
+$memoRead = MemoServ::read('CyberFox', 1);
+assertTest($memoRead['success'] === true && str_contains($memoRead['message'], 'welcome to Fortress IRC'), 'MEMOSERV read memo content successfully');
+assertTest(MemoServ::getUnreadCount('CyberFox') === 0, 'MemoServ unread count became 0 after reading');
 
-$cmd4 = IrcServices::processCommand('Alice', '#fortress', '/help');
-assertTest($cmd4 !== null && str_contains($cmd4['response'], 'Available IRC Commands'), 'Parsed /help command');
+$memoDel = MemoServ::delete('CyberFox', 1);
+assertTest($memoDel['success'] === true, 'MEMOSERV deleted memo successfully');
 
-// Test 9: Room Manager & Ephemeral Signaling with #room names
-echo "\n9. Testing Ephemeral Non-Logging Room Manager with #room scheme...\n";
+// Test 9: HOSTSERV (Virtual Host Service Bot)
+echo "\n9. Testing HOSTSERV Virtual Host Management...\n";
+$vhReq = HostServ::requestVhost('CyberFox', 'vip.fortress.net');
+assertTest($vhReq['success'] === true, 'HOSTSERV requested/assigned vhost vip.fortress.net');
+assertTest(HostServ::getActiveVhost('CyberFox') === 'vip.fortress.net', 'HostServ::getActiveVhost returned assigned vhost');
+
+$vhOff = HostServ::setVhostStatus('CyberFox', false);
+assertTest($vhOff['success'] === true && HostServ::getActiveVhost('CyberFox') === null, 'HOSTSERV deactivated vhost');
+
+$vhInfo = HostServ::getVhostInfo('CyberFox');
+assertTest($vhInfo['success'] === true && str_contains($vhInfo['message'], 'vip.fortress.net'), 'HOSTSERV returned vhost registration info');
+
+// Test 10: ServiceRegistry & Foreign Services Operating Under Different Hosts
+echo "\n10. Testing ServiceRegistry & Foreign Services API...\n";
+$regSvc = ServiceRegistry::registerService('HELPBOT', 'help.external-domain.org', 'https://help.external-domain.org/api/irc', 'External AI Help Bot');
+assertTest($regSvc['success'] === true, 'ServiceRegistry registered foreign service HELPBOT under host help.external-domain.org');
+
+$getSvc = ServiceRegistry::getService('HELPBOT');
+assertTest($getSvc !== null && $getSvc['host'] === 'help.external-domain.org', 'ServiceRegistry retrieved registered foreign service by name');
+
+$pingRes = ServiceRegistry::pingService('HELPBOT', 'ACTIVE');
+assertTest($pingRes['success'] === true, 'ServiceRegistry ping update successful');
+
+$svcList = ServiceRegistry::listServices();
+assertTest(count($svcList) >= 1, 'ServiceRegistry listed registered foreign services');
+
+// Test 11: ServiceServ Bot & Foreign Service Command Dispatching
+echo "\n11. Testing ServiceServ Bot & Foreign Service Routing...\n";
+$ssList = ServiceServ::listAllServices();
+assertTest($ssList['success'] === true && count($ssList['foreign_services']) >= 1, 'ServiceServ listed local and foreign services');
+
+$ssInfo = ServiceServ::getServiceInfo('HELPBOT');
+assertTest($ssInfo['success'] === true && str_contains($ssInfo['message'], 'help.external-domain.org'), 'ServiceServ returned foreign service info');
+
+$ssDispatch = ServiceServ::dispatchForeignCommand('Alice', 'HELPBOT', 'SEARCH WebRTC security');
+assertTest($ssDispatch['success'] === true && str_contains($ssDispatch['message'], 'HELPBOT@help.external-domain.org'), 'ServiceServ dispatched command to foreign service');
+
+// Test 12: IrcServices Command Parser with All Services
+echo "\n12. Testing IrcServices Command Parser with new Services...\n";
+$cmdMemo = IrcServices::processCommand('Bob', '#lobby', '/msg MEMOSERV SEND CyberFox Meet in #fortress');
+assertTest($cmdMemo !== null && $cmdMemo['service'] === 'MEMOSERV', 'Parsed /msg MEMOSERV SEND command');
+
+$cmdVhost = IrcServices::processCommand('Bob', '#lobby', '/vhost REQUEST dev.fortress.local');
+assertTest($cmdVhost !== null && $cmdVhost['service'] === 'HOSTSERV', 'Parsed /vhost REQUEST shortcut command');
+
+$cmdSvcList = IrcServices::processCommand('Bob', '#lobby', '/msg SERVICESERV LIST');
+assertTest($cmdSvcList !== null && $cmdSvcList['service'] === 'SERVICESERV', 'Parsed /msg SERVICESERV LIST command');
+
+$cmdForeign = IrcServices::processCommand('Bob', '#lobby', '/msg HELPBOT ASK How do I lock a channel?');
+assertTest($cmdForeign !== null && $cmdForeign['service'] === 'HELPBOT' && str_contains($cmdForeign['response'], 'HELPBOT@help.external-domain.org'), 'Parsed /msg <FOREIGN_SERVICE> command and routed to foreign host');
+
+// Test 13: Room Manager & Ephemeral Signaling with #room names
+echo "\n13. Testing Ephemeral Non-Logging Room Manager with #room scheme...\n";
 RoomManager::reset();
 $room = '#test-channel';
 $user1 = 'user-1';

@@ -6,12 +6,19 @@ require_once __DIR__ . '/../../src/Security/SecurityHeaders.php';
 require_once __DIR__ . '/../../src/Security/Sanitizer.php';
 require_once __DIR__ . '/../../src/Security/RateLimiter.php';
 require_once __DIR__ . '/../../src/Security/TokenManager.php';
+require_once __DIR__ . '/../../src/Database/Database.php';
+require_once __DIR__ . '/../../src/IRC/SettingsManager.php';
+require_once __DIR__ . '/../../src/IRC/NameServ.php';
+require_once __DIR__ . '/../../src/IRC/ChanServ.php';
+require_once __DIR__ . '/../../src/IRC/MotdServ.php';
+require_once __DIR__ . '/../../src/IRC/IrcServices.php';
 require_once __DIR__ . '/../../src/Signaling/RoomManager.php';
 
 use Fortress\Security\SecurityHeaders;
 use Fortress\Security\Sanitizer;
 use Fortress\Security\RateLimiter;
 use Fortress\Security\TokenManager;
+use Fortress\IRC\IrcServices;
 use Fortress\Signaling\RoomManager;
 
 // Enforce Fortress IT Security Headers
@@ -119,8 +126,29 @@ if ($method === 'POST') {
         exit;
     }
 
-    // Join & broadcast signal (offer, answer, ice-candidate, etc)
+    // Join & broadcast signal (offer, answer, ice-candidate, chat, etc)
     RoomManager::joinRoom($roomId, $clientId);
+
+    // Process IRC Commands if message/text provided
+    $chatMessage = $payload['message'] ?? $payload['text'] ?? null;
+    $senderNick = $payload['nickname'] ?? $clientId;
+
+    if (!empty($chatMessage) && is_string($chatMessage)) {
+        $svcResult = IrcServices::processCommand($senderNick, $roomId, $chatMessage);
+        if ($svcResult !== null) {
+            // Broadcast IRC Bot Response to room
+            RoomManager::broadcastSignal($roomId, 'SYSTEM_BOT', [
+                'type' => 'chat',
+                'sender' => $svcResult['service'],
+                'message' => $svcResult['response'],
+                'is_bot' => true
+            ], false);
+
+            echo json_encode(['status' => 'sent', 'is_service' => true, 'response' => $svcResult['response']], JSON_THROW_ON_ERROR);
+            exit;
+        }
+    }
+
     RoomManager::broadcastSignal($roomId, $clientId, $payload, true);
 
     echo json_encode(['status' => 'sent'], JSON_THROW_ON_ERROR);

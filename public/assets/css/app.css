@@ -446,7 +446,7 @@ input[type="text"]:focus-visible {
 
 .video-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 20px;
     min-height: 380px;
 }
@@ -456,11 +456,23 @@ input[type="text"]:focus-visible {
     background: var(--bg-dark);
     border-radius: var(--radius-md);
     overflow: hidden;
-    border: 1px solid var(--card-border);
+    border: 2px solid var(--card-border);
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 280px;
+    min-height: 260px;
+    transition: transform 0.3s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.video-wrapper.talking {
+    border-color: var(--success-color) !important;
+    box-shadow: 0 0 18px rgba(16, 185, 129, 0.75), 0 0 2px rgba(16, 185, 129, 0.9);
+    animation: talkingPulse 1.8s infinite alternate;
+}
+
+@keyframes talkingPulse {
+    0% { box-shadow: 0 0 12px rgba(16, 185, 129, 0.6); }
+    100% { box-shadow: 0 0 22px rgba(16, 185, 129, 0.95); }
 }
 
 video {
@@ -473,7 +485,7 @@ video {
     position: absolute;
     bottom: 12px;
     left: 12px;
-    background: rgba(0, 0, 0, 0.65);
+    background: rgba(0, 0, 0, 0.75);
     backdrop-filter: blur(8px);
     padding: 6px 12px;
     border-radius: 20px;
@@ -481,7 +493,40 @@ video {
     display: flex;
     align-items: center;
     gap: 8px;
+    z-index: 2;
+}
+
+.talking-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: var(--success-color);
     color: #fff;
+    font-size: 0.75rem;
+    font-weight: bold;
+    padding: 4px 10px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    z-index: 2;
+    animation: fadeIn 0.2s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.user-item .talking-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--success-color);
+    box-shadow: 0 0 8px var(--success-color);
+    display: inline-block;
+    animation: pulse 1s infinite;
 }
 
 .dot {

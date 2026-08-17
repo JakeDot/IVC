@@ -1,5 +1,6 @@
 /**
  * Fortress / IVC WebRTC Client & Multi-Tab IRC Infrastructure
+ * High-Availability Multi-Peer WebRTC Mesh with Audio Speaking Detection & Talking-User First Sorting.
  * Supports #channel hash navigation, multi-tab room sessions, #stats connection stats, NAMESERV/CHANSERV integration,
  * and comprehensive theme support (light, dark, halloween, console, christmas, + user-defined custom themes).
  */
@@ -23,7 +24,7 @@
         return `${adj}${anim}#${num}`;
     }
 
-    // Helper: Normalize channel name to start with # and support grouped subchats (#room/sub-room)
+    // Helper: Normalize channel name
     function normalizeChannel(name) {
         if (!name) return '#lobby';
         name = name.trim();
@@ -39,9 +40,26 @@
     let myNickname = generateAnonymousName();
 
     // Multi-Tab State
+    // openTabs[channelId] = { id, key, nick, peerConnections: {}, dataChannels: {}, remoteStreams: {}, peerNicks: {}, speakingStates: {}, audioAnalyzers: {}, localStream, sseSource, messages: [], peers: [], unreadCount: 0, topic: '' }
     const openTabs = {};
     let activeTabId = null;
     let statsInterval = null;
+
+    // Shared AudioContext for volume analysis
+    let audioContext = null;
+
+    function getAudioContext() {
+        if (!audioContext) {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (AudioContextClass) {
+                audioContext = new AudioContextClass();
+            }
+        }
+        if (audioContext && audioContext.state === 'suspended') {
+            audioContext.resume().catch(() => {});
+        }
+        return audioContext;
+    }
 
     // WebRTC STUN Server configuration
     const rtcConfig = {
@@ -68,12 +86,7 @@
     const btnCopyLink = document.getElementById('btn-copy-link');
 
     const videoStage = document.getElementById('video-stage');
-    const localVideo = document.getElementById('local-video');
-    const remoteVideo = document.getElementById('remote-video');
-    const localNameLabel = document.getElementById('local-name-label');
-    const remoteNameLabel = document.getElementById('remote-name-label');
-    const remotePlaceholder = document.getElementById('remote-placeholder');
-    const remoteStatusText = document.getElementById('remote-status-text');
+    const videoGrid = document.getElementById('video-grid');
 
     const btnToggleMic = document.getElementById('btn-toggle-mic');
     const btnToggleCam = document.getElementById('btn-toggle-cam');
@@ -484,7 +497,7 @@
     openTab('#stats', false); // Always include #stats room tab
     switchToTab(initialChan);
 
-    // Window Hashchange Listener for IRC #room hash navigation
+    // Window Hashchange Listener
     window.addEventListener('hashchange', () => {
         const chan = normalizeChannel(window.location.hash);
         if (chan && chan !== activeTabId) {
@@ -495,6 +508,11 @@
             }
         }
     });
+
+    // User interaction listener to un-suspend AudioContext
+    window.addEventListener('click', () => {
+        getAudioContext();
+    }, { once: true });
 
     // UI Event Listeners
     btnOpenNewTab.addEventListener('click', () => {
@@ -558,29 +576,32 @@
             key: key,
             isStats: isStats,
             nick: myNickname,
-            peerConnection: null,
+            peerConnections: {}, // peerClientId -> RTCPeerConnection
+            dataChannels: {},    // peerClientId -> RTCDataChannel
+            remoteStreams: {},   // peerClientId -> MediaStream
+            peerNicks: {},       // peerClientId -> nickname
+            speakingStates: {},  // 'local' or peerClientId -> boolean
+            audioAnalyzers: {},  // 'local' or peerClientId -> analyzer obj
             localStream: null,
-            dataChannel: null,
             sseSource: null,
+            sseReconnectTimer: null,
+            healthCheckInterval: null,
             messages: [],
             peers: [],
             unreadCount: 0,
             topic: isStats ? 'IRC Connection Stats & WebRTC Telemetry' : `Welcome to ${channelId}`,
             isAudioMuted: false,
             isVideoMuted: false,
-            isScreenSharing: false,
-            remoteNick: 'Remote Peer'
+            isScreenSharing: false
         };
 
         if (!isStats) {
-            // Add initial system welcome message
             openTabs[channelId].messages.push({
                 sender: 'SYSTEM',
                 text: `Joined channel ${channelId}. Direct P2P encrypted chat active. Type /help for IRC service commands or /theme <name> to change themes.`,
                 type: 'system'
             });
 
-            // Start media stream & WebRTC signaling for room
             initRoomSession(channelId, key);
         }
 
@@ -600,7 +621,6 @@
         activeTabId = channelId;
         openTabs[channelId].unreadCount = 0;
 
-        // Update URL hash
         if (window.location.hash !== channelId) {
             window.location.hash = channelId;
         }
@@ -638,16 +658,25 @@
     function closeTab(channelId) {
         if (!openTabs[channelId]) return;
 
-        const tabData = openTabs[channelId];
+        const tab = openTabs[channelId];
 
-        if (!tabData.isStats) {
-            // Send leave signal
-            sendSignal(channelId, { type: 'leave', room: channelId, client: myClientId, key: tabData.key });
+        if (!tab.isStats) {
+            sendSignal(channelId, { type: 'leave', room: channelId, client: myClientId, key: tab.key });
 
-            if (tabData.sseSource) tabData.sseSource.close();
-            if (tabData.peerConnection) tabData.peerConnection.close();
-            if (tabData.localStream) {
-                tabData.localStream.getTracks().forEach(track => track.stop());
+            if (tab.sseReconnectTimer) clearTimeout(tab.sseReconnectTimer);
+            if (tab.healthCheckInterval) clearInterval(tab.healthCheckInterval);
+            if (tab.sseSource) tab.sseSource.close();
+
+            // Clean audio analyzers
+            Object.values(tab.audioAnalyzers).forEach(a => {
+                if (a && a.intervalId) clearInterval(a.intervalId);
+            });
+
+            // Clean peer connections
+            Object.values(tab.peerConnections).forEach(pc => pc && pc.close());
+
+            if (tab.localStream) {
+                tab.localStream.getTracks().forEach(track => track.stop());
             }
         }
 
@@ -710,8 +739,6 @@
 
         chatChannelTitle.textContent = `💬 ${channelId} (P2P DataChannel Chat)`;
         channelTopicBar.textContent = `Topic: ${tab.topic || 'Welcome to IVC IRC WebRTC!'}`;
-        localNameLabel.textContent = `${tab.nick || myNickname} (You)`;
-        remoteNameLabel.textContent = tab.remoteNick || 'Remote Peer';
 
         // Update Share link
         let shareUrl = `${window.location.origin}/#${encodeURIComponent(channelId.replace(/^#/, ''))}`;
@@ -726,6 +753,9 @@
 
         // Render User List
         renderUserList(tab);
+
+        // Render Video Grid
+        renderVideoGrid(channelId);
     }
 
     function renderChatMessages(tab) {
@@ -761,17 +791,195 @@
         // Add local user
         const selfLi = document.createElement('li');
         selfLi.className = 'user-item';
-        selfLi.innerHTML = `<span class="op-tag">@</span> ${myNickname} (You)`;
+        const isSelfTalking = !!tab.speakingStates['local'];
+        selfLi.innerHTML = `<span class="op-tag">@</span> ${myNickname} (You) ${isSelfTalking ? '<span class="talking-dot" title="Speaking"></span>' : ''}`;
         userList.appendChild(selfLi);
 
         // Add remote peers
         tab.peers.forEach(peerId => {
             const li = document.createElement('li');
             li.className = 'user-item';
-            const name = (peerId === tab.remoteNick || peerId === tab.remoteClientId) ? tab.remoteNick : peerId;
-            li.innerHTML = `<span>👤</span> ${name}`;
+            const nick = tab.peerNicks[peerId] || peerId;
+            const isPeerTalking = !!tab.speakingStates[peerId];
+            li.innerHTML = `<span>👤</span> ${nick} ${isPeerTalking ? '<span class="talking-dot" title="Speaking"></span>' : ''}`;
             userList.appendChild(li);
         });
+    }
+
+    /**
+     * DEDICATED USER INTERFACE: Render & Sort Video Grid with Talking Users First
+     */
+    function renderVideoGrid(channelId) {
+        if (activeTabId !== channelId) return;
+
+        const tab = openTabs[channelId];
+        if (!tab) return;
+
+        // Build array of active participants
+        const participants = [];
+
+        // 1. Local user
+        participants.push({
+            id: 'local',
+            nick: `${myNickname} (You)`,
+            isLocal: true,
+            stream: tab.localStream,
+            isTalking: !!tab.speakingStates['local'],
+            hasVideo: !!(tab.localStream && tab.localStream.getVideoTracks().some(t => t.enabled))
+        });
+
+        // 2. Remote peers
+        tab.peers.forEach(peerId => {
+            const stream = tab.remoteStreams[peerId] || null;
+            const nick = tab.peerNicks[peerId] || peerId;
+            const isTalking = !!tab.speakingStates[peerId];
+            const hasVideo = !!(stream && stream.getVideoTracks().some(t => t.enabled));
+
+            participants.push({
+                id: peerId,
+                nick: nick,
+                isLocal: false,
+                stream: stream,
+                isTalking: isTalking,
+                hasVideo: hasVideo
+            });
+        });
+
+        // Sort participants: Show Talking Users First!
+        participants.sort((a, b) => {
+            if (a.isTalking !== b.isTalking) {
+                return b.isTalking ? 1 : -1; // Talking users first
+            }
+            if (a.hasVideo !== b.hasVideo) {
+                return b.hasVideo ? 1 : -1; // Active video streams next
+            }
+            if (a.isLocal !== b.isLocal) {
+                return a.isLocal ? -1 : 1;  // Local user
+            }
+            return a.nick.localeCompare(b.nick);
+        });
+
+        // Clear existing video grid
+        videoGrid.innerHTML = '';
+
+        participants.forEach(p => {
+            const wrapper = document.createElement('div');
+            wrapper.className = `video-wrapper ${p.isLocal ? 'local-wrapper' : 'remote-wrapper'} ${p.isTalking ? 'talking' : ''}`;
+            wrapper.setAttribute('data-peer-id', p.id);
+
+            // Talking Badge
+            if (p.isTalking) {
+                const badge = document.createElement('div');
+                badge.className = 'talking-badge';
+                badge.innerHTML = '🗣️ Speaking';
+                wrapper.appendChild(badge);
+            }
+
+            // Video Element
+            const videoEl = document.createElement('video');
+            videoEl.autoplay = true;
+            videoEl.playsInline = true;
+            if (p.isLocal) videoEl.muted = true;
+
+            if (p.stream) {
+                videoEl.srcObject = p.stream;
+                wrapper.appendChild(videoEl);
+            } else {
+                // Placeholder
+                const placeholder = document.createElement('div');
+                placeholder.className = 'video-placeholder';
+                placeholder.innerHTML = `
+                    <div class="pulse-ring"></div>
+                    <span class="placeholder-icon">👤</span>
+                    <p>Connecting audio & video stream...</p>
+                `;
+                wrapper.appendChild(placeholder);
+            }
+
+            // Label
+            const label = document.createElement('div');
+            label.className = 'video-label';
+            label.innerHTML = `<span class="dot ${p.hasVideo || p.stream ? 'live-dot' : ''}"></span> <span>${p.nick}</span>`;
+            wrapper.appendChild(label);
+
+            videoGrid.appendChild(wrapper);
+        });
+    }
+
+    /**
+     * Real-Time Web Audio API Volume Analysis for Active Speaker Detection
+     */
+    function setupAudioAnalyzer(stream, peerId, channelId) {
+        const tab = openTabs[channelId];
+        if (!tab || !stream) return;
+
+        const audioTracks = stream.getAudioTracks();
+        if (audioTracks.length === 0) return;
+
+        // Clean existing analyzer for this peer
+        if (tab.audioAnalyzers[peerId]) {
+            clearInterval(tab.audioAnalyzers[peerId].intervalId);
+            delete tab.audioAnalyzers[peerId];
+        }
+
+        const ctx = getAudioContext();
+        if (!ctx) return;
+
+        try {
+            const source = ctx.createMediaStreamSource(stream);
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 512;
+            analyser.smoothingTimeConstant = 0.4;
+            source.connect(analyser);
+
+            const buffer = new Float32Array(analyser.fftSize);
+            let silenceTimer = null;
+
+            const intervalId = setInterval(() => {
+                if (!openTabs[channelId]) {
+                    clearInterval(intervalId);
+                    return;
+                }
+
+                analyser.getFloatTimeDomainData(buffer);
+                let sum = 0;
+                for (let i = 0; i < buffer.length; i++) {
+                    sum += buffer[i] * buffer[i];
+                }
+                const rms = Math.sqrt(sum / buffer.length);
+
+                // Threshold RMS level ~ 0.025 for speech detection
+                const isSpeakingNow = rms > 0.025;
+
+                if (isSpeakingNow) {
+                    if (silenceTimer) {
+                        clearTimeout(silenceTimer);
+                        silenceTimer = null;
+                    }
+                    if (!tab.speakingStates[peerId]) {
+                        tab.speakingStates[peerId] = true;
+                        if (activeTabId === channelId) {
+                            renderVideoGrid(channelId);
+                            renderUserList(tab);
+                        }
+                    }
+                } else if (tab.speakingStates[peerId] && !silenceTimer) {
+                    // Debounce / hysteresis: wait 450ms before clearing talking state
+                    silenceTimer = setTimeout(() => {
+                        tab.speakingStates[peerId] = false;
+                        silenceTimer = null;
+                        if (activeTabId === channelId) {
+                            renderVideoGrid(channelId);
+                            renderUserList(tab);
+                        }
+                    }, 450);
+                }
+            }, 100);
+
+            tab.audioAnalyzers[peerId] = { context: ctx, analyser, intervalId };
+        } catch (err) {
+            console.warn('Could not initialize audio analyzer for peer:', peerId, err);
+        }
     }
 
     /**
@@ -786,22 +994,25 @@
                 video: { width: { ideal: 1280 }, height: { ideal: 720 } },
                 audio: true
             });
-            if (activeTabId === channelId) {
-                localVideo.srcObject = tab.localStream;
-            }
+            setupAudioAnalyzer(tab.localStream, 'local', channelId);
         } catch (err) {
             console.warn('Camera/Mic permission warning for channel', channelId, err);
         }
 
         initSignaling(channelId);
+        startHealthMonitoring(channelId);
     }
 
     /**
-     * Initialize SSE Signaling for Channel
+     * Initialize SSE Signaling with Automatic Reconnection & High Availability
      */
     function initSignaling(channelId) {
         const tab = openTabs[channelId];
         if (!tab) return;
+
+        if (tab.sseSource) {
+            tab.sseSource.close();
+        }
 
         const sseUrl = `/api/signal.php?room=${encodeURIComponent(channelId)}&client=${encodeURIComponent(myClientId)}&mode=sse`;
         tab.sseSource = new EventSource(sseUrl);
@@ -816,6 +1027,17 @@
             }
         };
 
+        tab.sseSource.onerror = () => {
+            console.warn(`SSE Connection lost for channel ${channelId}. Retrying in 3 seconds...`);
+            if (tab.sseSource) tab.sseSource.close();
+            if (tab.sseReconnectTimer) clearTimeout(tab.sseReconnectTimer);
+            tab.sseReconnectTimer = setTimeout(() => {
+                if (openTabs[channelId]) {
+                    initSignaling(channelId);
+                }
+            }, 3000);
+        };
+
         sendSignal(channelId, {
             type: 'join',
             room: channelId,
@@ -823,6 +1045,35 @@
             nickname: myNickname,
             key: tab.key
         });
+    }
+
+    /**
+     * Periodic WebRTC Connection Health Monitor
+     */
+    function startHealthMonitoring(channelId) {
+        const tab = openTabs[channelId];
+        if (!tab) return;
+
+        tab.healthCheckInterval = setInterval(() => {
+            if (!openTabs[channelId]) return;
+
+            // Ping active peers to maintain channel presence in RAM
+            sendSignal(channelId, {
+                type: 'ping',
+                room: channelId,
+                client: myClientId,
+                nickname: myNickname,
+                key: tab.key
+            });
+
+            // Inspect RTC connections for failed state recovery
+            for (const [peerId, pc] of Object.entries(tab.peerConnections)) {
+                if (pc && (pc.connectionState === 'failed' || pc.iceConnectionState === 'failed')) {
+                    console.warn(`Peer Connection with ${peerId} failed. Triggering ICE restart offer...`);
+                    createOffer(channelId, peerId, { iceRestart: true });
+                }
+            }
+        }, 10000);
     }
 
     /**
@@ -837,59 +1088,74 @@
             return;
         }
 
+        const peerId = signal.sender;
+
         switch (signal.type) {
             case 'peer-joined':
-                tab.remoteNick = signal.nickname || 'Remote Peer';
-                tab.remoteClientId = signal.sender;
-                if (!tab.peers.includes(signal.sender)) {
-                    tab.peers.push(signal.sender);
+            case 'ping':
+                if (peerId) {
+                    tab.peerNicks[peerId] = signal.nickname || peerId;
+                    if (!tab.peers.includes(peerId)) {
+                        tab.peers.push(peerId);
+                        addMessageToTab(channelId, {
+                            sender: 'SYSTEM',
+                            text: `Peer "${tab.peerNicks[peerId]}" joined ${channelId}.`,
+                            type: 'system'
+                        });
+                    }
+
+                    if (signal.type === 'peer-joined') {
+                        createPeerConnection(channelId, peerId);
+                        createOffer(channelId, peerId);
+                    }
+
+                    if (activeTabId === channelId) {
+                        renderVideoGrid(channelId);
+                        renderUserList(tab);
+                    }
                 }
-
-                addMessageToTab(channelId, {
-                    sender: 'SYSTEM',
-                    text: `Peer "${tab.remoteNick}" joined ${channelId}.`,
-                    type: 'system'
-                });
-
-                createPeerConnection(channelId);
-                createOffer(channelId);
-                if (activeTabId === channelId) updateTabUI(channelId);
                 break;
 
             case 'offer':
-                tab.remoteNick = signal.nickname || tab.remoteNick;
-                tab.remoteClientId = signal.sender;
-                if (!tab.peers.includes(signal.sender)) {
-                    tab.peers.push(signal.sender);
+                tab.peerNicks[peerId] = signal.nickname || peerId;
+                if (!tab.peers.includes(peerId)) {
+                    tab.peers.push(peerId);
                 }
 
-                createPeerConnection(channelId);
-                await tab.peerConnection.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-                const answer = await tab.peerConnection.createAnswer();
-                await tab.peerConnection.setLocalDescription(answer);
+                createPeerConnection(channelId, peerId);
+                const pc = tab.peerConnections[peerId];
+                if (pc) {
+                    await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
 
-                sendSignal(channelId, {
-                    type: 'answer',
-                    room: channelId,
-                    client: myClientId,
-                    nickname: myNickname,
-                    key: tab.key,
-                    sdp: answer
-                });
+                    sendSignal(channelId, {
+                        type: 'answer',
+                        room: channelId,
+                        client: myClientId,
+                        target: peerId,
+                        nickname: myNickname,
+                        key: tab.key,
+                        sdp: answer
+                    });
+                }
 
-                if (activeTabId === channelId) updateTabUI(channelId);
+                if (activeTabId === channelId) {
+                    renderVideoGrid(channelId);
+                    renderUserList(tab);
+                }
                 break;
 
             case 'answer':
-                if (tab.peerConnection) {
-                    await tab.peerConnection.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+                if (tab.peerConnections[peerId]) {
+                    await tab.peerConnections[peerId].setRemoteDescription(new RTCSessionDescription(signal.sdp));
                 }
                 break;
 
             case 'ice-candidate':
-                if (tab.peerConnection && signal.candidate) {
+                if (tab.peerConnections[peerId] && signal.candidate) {
                     try {
-                        await tab.peerConnection.addIceCandidate(new RTCIceCandidate(signal.candidate));
+                        await tab.peerConnections[peerId].addIceCandidate(new RTCIceCandidate(signal.candidate));
                     } catch (e) {
                         console.error('Error adding ICE candidate:', e);
                     }
@@ -912,17 +1178,41 @@
                 break;
 
             case 'peer-left':
-                tab.peers = tab.peers.filter(p => p !== signal.sender);
-                addMessageToTab(channelId, {
-                    sender: 'SYSTEM',
-                    text: `Peer "${tab.remoteNick}" disconnected.`,
-                    type: 'system'
-                });
-                if (activeTabId === channelId) {
-                    resetRemoteVideo();
-                    updateTabUI(channelId);
-                }
+                removePeerFromTab(channelId, peerId);
                 break;
+        }
+    }
+
+    function removePeerFromTab(channelId, peerId) {
+        const tab = openTabs[channelId];
+        if (!tab) return;
+
+        const nick = tab.peerNicks[peerId] || peerId;
+
+        if (tab.peerConnections[peerId]) {
+            tab.peerConnections[peerId].close();
+            delete tab.peerConnections[peerId];
+        }
+
+        if (tab.audioAnalyzers[peerId]) {
+            clearInterval(tab.audioAnalyzers[peerId].intervalId);
+            delete tab.audioAnalyzers[peerId];
+        }
+
+        delete tab.remoteStreams[peerId];
+        delete tab.peerNicks[peerId];
+        delete tab.speakingStates[peerId];
+        tab.peers = tab.peers.filter(p => p !== peerId);
+
+        addMessageToTab(channelId, {
+            sender: 'SYSTEM',
+            text: `Peer "${nick}" disconnected.`,
+            type: 'system'
+        });
+
+        if (activeTabId === channelId) {
+            renderVideoGrid(channelId);
+            renderUserList(tab);
         }
     }
 
@@ -958,75 +1248,87 @@
         }
     }
 
-    function createPeerConnection(channelId) {
+    /**
+     * Create Independent RTCPeerConnection for a Specific Peer in Channel Mesh
+     */
+    function createPeerConnection(channelId, peerId) {
         const tab = openTabs[channelId];
-        if (!tab || tab.peerConnection) return;
+        if (!tab || tab.peerConnections[peerId]) return;
 
-        tab.peerConnection = new RTCPeerConnection(rtcConfig);
+        const pc = new RTCPeerConnection(rtcConfig);
+        tab.peerConnections[peerId] = pc;
 
         if (tab.localStream) {
             tab.localStream.getTracks().forEach(track => {
-                tab.peerConnection.addTrack(track, tab.localStream);
+                pc.addTrack(track, tab.localStream);
             });
         }
 
-        tab.peerConnection.ontrack = (event) => {
+        pc.ontrack = (event) => {
             if (event.streams && event.streams[0]) {
+                tab.remoteStreams[peerId] = event.streams[0];
+                setupAudioAnalyzer(event.streams[0], peerId, channelId);
+
                 if (activeTabId === channelId) {
-                    remoteVideo.srcObject = event.streams[0];
-                    remotePlaceholder.classList.add('hidden');
-                    remoteStatusText.textContent = 'Connected';
+                    renderVideoGrid(channelId);
                 }
             }
         };
 
-        tab.peerConnection.onicecandidate = (event) => {
+        pc.onicecandidate = (event) => {
             if (event.candidate) {
                 sendSignal(channelId, {
                     type: 'ice-candidate',
                     room: channelId,
                     client: myClientId,
+                    target: peerId,
                     key: tab.key,
                     candidate: event.candidate
                 });
             }
         };
 
-        tab.dataChannel = tab.peerConnection.createDataChannel('fortress-chat');
-        setupDataChannel(channelId, tab.dataChannel);
+        const dc = pc.createDataChannel('fortress-chat');
+        tab.dataChannels[peerId] = dc;
+        setupDataChannel(channelId, peerId, dc);
 
-        tab.peerConnection.ondatachannel = (event) => {
-            setupDataChannel(channelId, event.channel);
+        pc.ondatachannel = (event) => {
+            tab.dataChannels[peerId] = event.channel;
+            setupDataChannel(channelId, peerId, event.channel);
         };
     }
 
-    async function createOffer(channelId) {
+    async function createOffer(channelId, peerId, options = {}) {
         const tab = openTabs[channelId];
-        if (!tab || !tab.peerConnection) return;
+        if (!tab || !tab.peerConnections[peerId]) return;
 
         try {
-            const offer = await tab.peerConnection.createOffer();
-            await tab.peerConnection.setLocalDescription(offer);
+            const pc = tab.peerConnections[peerId];
+            const offer = await pc.createOffer(options);
+            await pc.setLocalDescription(offer);
+
             sendSignal(channelId, {
                 type: 'offer',
                 room: channelId,
                 client: myClientId,
+                target: peerId,
                 nickname: myNickname,
                 key: tab.key,
                 sdp: offer
             });
         } catch (err) {
-            console.error('Error creating offer:', err);
+            console.error(`Error creating offer for peer ${peerId}:`, err);
         }
     }
 
-    function setupDataChannel(channelId, channel) {
+    function setupDataChannel(channelId, peerId, channel) {
         const tab = openTabs[channelId];
         if (!tab) return;
 
         channel.onmessage = (event) => {
+            const nick = tab.peerNicks[peerId] || peerId;
             addMessageToTab(channelId, {
-                sender: tab.remoteNick,
+                sender: nick,
                 text: event.data,
                 type: 'peer'
             });
@@ -1035,7 +1337,7 @@
         channel.onopen = () => {
             addMessageToTab(channelId, {
                 sender: 'SYSTEM',
-                text: 'Encrypted DataChannel connected.',
+                text: `Encrypted DataChannel active with ${tab.peerNicks[peerId] || peerId}.`,
                 type: 'system'
             });
         };
@@ -1157,7 +1459,6 @@
                         type: 'bot'
                     });
                     if (data.service === 'CHANSERV' && text.toLowerCase().includes('topic')) {
-                        // Refresh channel topic
                         tab.topic = data.response;
                         channelTopicBar.textContent = `Topic: ${data.response}`;
                     }
@@ -1168,11 +1469,14 @@
             }
         }
 
-        // Standard Chat Message via DataChannel & Signaling Fallback
-        if (tab.dataChannel && tab.dataChannel.readyState === 'open') {
-            tab.dataChannel.send(text);
-        }
-        // Always transmit via signaling so super-room messages propagate to subrooms in RAM
+        // Broadcast message to all peer DataChannels in room
+        Object.values(tab.dataChannels).forEach(dc => {
+            if (dc && dc.readyState === 'open') {
+                dc.send(text);
+            }
+        });
+
+        // Always transmit via signaling fallback so messages propagate in RAM
         sendSignal(activeTabId, {
             type: 'chat',
             room: activeTabId,
@@ -1218,21 +1522,16 @@
 
         // Gather WebRTC Client Telemetry Metrics
         const openTabsCount = Object.keys(openTabs).length;
+        let activePeerCount = 0;
         let rtcState = 'Disconnected';
-        let rtt = 'N/A';
 
         const currentActive = openTabs[activeTabId];
-        if (currentActive && currentActive.peerConnection) {
-            rtcState = currentActive.peerConnection.connectionState || currentActive.peerConnection.iceConnectionState || 'Connecting';
-
-            try {
-                const stats = await currentActive.peerConnection.getStats();
-                stats.forEach(report => {
-                    if (report.type === 'candidate-pair' && report.currentRoundTripTime !== undefined) {
-                        rtt = Math.round(report.currentRoundTripTime * 1000) + ' ms';
-                    }
-                });
-            } catch (e) {}
+        if (currentActive) {
+            activePeerCount = currentActive.peers.length;
+            const pcs = Object.values(currentActive.peerConnections);
+            if (pcs.length > 0) {
+                rtcState = pcs[0].connectionState || pcs[0].iceConnectionState || 'Connected';
+            }
         }
 
         clientStatsContent.innerHTML = `
@@ -1240,9 +1539,9 @@
             <div class="stats-row"><span class="stats-label">Your Nickname:</span><span class="stats-value">${myNickname}</span></div>
             <div class="stats-row"><span class="stats-label">Open Channel Tabs:</span><span class="stats-value">${openTabsCount}</span></div>
             <div class="stats-row"><span class="stats-label">Current Active Tab:</span><span class="stats-value">${activeTabId || 'None'}</span></div>
+            <div class="stats-row"><span class="stats-label">Active Channel Peers:</span><span class="stats-value">${activePeerCount}</span></div>
             <div class="stats-row"><span class="stats-label">WebRTC Peer Connection State:</span><span class="stats-value">${rtcState}</span></div>
-            <div class="stats-row"><span class="stats-label">WebRTC Round-Trip Time (RTT):</span><span class="stats-value">${rtt}</span></div>
-            <div class="stats-row"><span class="stats-label">DataChannel Encryption:</span><span class="stats-value" style="color: #10b981;">AES-GCM (P2P Direct)</span></div>
+            <div class="stats-row"><span class="stats-label">DataChannel Encryption:</span><span class="stats-value" style="color: #10b981;">AES-GCM (P2P Direct Mesh)</span></div>
             <div class="stats-row"><span class="stats-label">Signaling Mode:</span><span class="stats-value">Server-Sent Events (SSE)</span></div>
         `;
     }
@@ -1277,6 +1576,7 @@
             track.enabled = !tab.isVideoMuted;
             btnToggleCam.classList.toggle('off', tab.isVideoMuted);
             btnToggleCam.querySelector('.icon').textContent = tab.isVideoMuted ? '📷' : '📹';
+            if (activeTabId) renderVideoGrid(activeTabId);
             btnToggleCam.setAttribute('aria-pressed', tab.isVideoMuted ? 'true' : 'false');
             const labelText = tab.isVideoMuted ? 'Turn On Camera' : 'Turn Off Camera';
             btnToggleCam.setAttribute('aria-label', labelText);
@@ -1287,17 +1587,18 @@
     async function toggleScreenShare() {
         if (!activeTabId || activeTabId === '#stats') return;
         const tab = openTabs[activeTabId];
-        if (!tab || !tab.peerConnection) return;
+        if (!tab) return;
 
         if (!tab.isScreenSharing) {
             try {
                 const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
                 const screenTrack = screenStream.getVideoTracks()[0];
 
-                const sender = tab.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
-                if (sender) sender.replaceTrack(screenTrack);
+                Object.values(tab.peerConnections).forEach(pc => {
+                    const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+                    if (sender) sender.replaceTrack(screenTrack);
+                });
 
-                localVideo.srcObject = screenStream;
                 tab.isScreenSharing = true;
                 btnShareScreen.classList.add('off');
                 btnShareScreen.setAttribute('aria-pressed', 'true');
@@ -1318,19 +1619,14 @@
     function stopScreenSharing(tab) {
         if (!tab || !tab.isScreenSharing || !tab.localStream) return;
         const videoTrack = tab.localStream.getVideoTracks()[0];
-        const sender = tab.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
-        if (sender && videoTrack) sender.replaceTrack(videoTrack);
-        localVideo.srcObject = tab.localStream;
+        Object.values(tab.peerConnections).forEach(pc => {
+            const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+            if (sender && videoTrack) sender.replaceTrack(videoTrack);
+        });
         tab.isScreenSharing = false;
         btnShareScreen.classList.remove('off');
         btnShareScreen.setAttribute('aria-pressed', 'false');
         btnShareScreen.setAttribute('aria-label', 'Share Screen');
         btnShareScreen.setAttribute('title', 'Share Screen');
-    }
-
-    function resetRemoteVideo() {
-        remoteVideo.srcObject = null;
-        remotePlaceholder.classList.remove('hidden');
-        remoteStatusText.textContent = 'Peer disconnected. Waiting for peer...';
     }
 })();

@@ -35,17 +35,31 @@ if (!empty($uriPath) && !str_contains($uriPath, '.') && !str_starts_with($uriPat
 </head>
 <body>
     <div class="app-container">
-        <!-- Top Security Bar -->
+        <!-- Top Security Bar with Multi-Theme Selector -->
         <header class="top-bar">
             <div class="brand">
                 <span class="shield-icon">🏰</span>
                 <h1>IVC<span class="highlight">WebRTC</span> <span style="font-size: 0.8rem; font-weight: normal; opacity: 0.8;">IRC Infrastructure</span></h1>
             </div>
-            <div class="security-badges">
-                <span class="badge green">⚡ PHP 8.5 & MySQL</span>
-                <span class="badge shield">🔑 NAMESERV / CHANSERV</span>
-                <span class="badge purple">🕵️ #room Hash Channels</span>
-                <span class="badge blue">📊 #stats Room</span>
+            <div class="header-controls">
+                <div class="security-badges">
+                    <span class="badge green">⚡ PHP 8.5 & MySQL</span>
+                    <span class="badge shield">🔑 NAMESERV / CHANSERV</span>
+                    <span class="badge purple">🕵️ #room Hash Channels</span>
+                    <span class="badge blue">📊 #stats Room</span>
+                </div>
+                <div class="theme-selector-wrapper">
+                    <label for="theme-select">🎨 Theme:</label>
+                    <select id="theme-select" class="theme-select">
+                        <option value="dark">🌙 Dark (Default)</option>
+                        <option value="light">☀️ Light</option>
+                        <option value="halloween">🎃 Halloween</option>
+                        <option value="console">📟 Console</option>
+                        <option value="christmas">🎄 Christmas</option>
+                        <option value="manage-custom" style="font-weight: bold;">➕ Custom Themes...</option>
+                    </select>
+                </div>
+                <button id="btn-theme-modal" class="btn-custom-theme" title="Manage Custom Themes">🎨 Custom</button>
             </div>
         </header>
 
@@ -153,7 +167,7 @@ if (!empty($uriPath) && !str_contains($uriPath, '.') && !str_starts_with($uriPat
                 <div class="chat-body-container">
                     <div id="chat-messages" class="chat-messages">
                         <div class="system-message">
-                            Channel initialized. Type <code>/help</code> for IRC commands (NAMESERV, CHANSERV).
+                            Channel initialized. Type <code>/help</code> for IRC commands or <code>/theme &lt;name&gt;</code> for themes.
                         </div>
                     </div>
                     <div class="user-list-sidebar">
@@ -164,7 +178,7 @@ if (!empty($uriPath) && !str_contains($uriPath, '.') && !str_starts_with($uriPat
                     </div>
                 </div>
                 <div class="chat-input-area">
-                    <input type="text" id="chat-input" placeholder="Type a message or IRC command (/msg CHANSERV, /op, /topic, /help)..." autocomplete="off">
+                    <input type="text" id="chat-input" placeholder="Type a message or IRC command (/msg CHANSERV, /theme, /op, /topic, /help)..." autocomplete="off">
                     <button id="btn-send-chat" class="btn btn-primary">Send</button>
                 </div>
             </section>
@@ -195,6 +209,100 @@ if (!empty($uriPath) && !str_contains($uriPath, '.') && !str_starts_with($uriPat
                 </div>
             </section>
         </main>
+
+        <!-- Custom Theme Creator Modal -->
+        <div id="theme-modal" class="modal-overlay hidden">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <h3>🎨 User-Defined Custom Theme Creator</h3>
+                    <button id="btn-close-theme-modal" class="btn-close-modal" type="button">&times;</button>
+                </div>
+
+                <form id="custom-theme-form">
+                    <div class="input-group" style="margin-bottom: 12px;">
+                        <label for="theme-name-input">Theme Name</label>
+                        <input type="text" id="theme-name-input" placeholder="e.g. Cyberpunk Neon, Solarized Light, Deep Ocean" required autocomplete="off">
+                    </div>
+
+                    <div class="theme-form-grid">
+                        <div class="input-group">
+                            <label for="theme-bg-color">Background Color / Gradient</label>
+                            <div class="color-input-wrapper">
+                                <input type="color" id="theme-bg-color" value="#0f172a">
+                                <input type="text" id="theme-bg-text" placeholder="#0f172a or radial-gradient(...)" value="#0f172a">
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="theme-card-bg-color">Card Background (Glass)</label>
+                            <div class="color-input-wrapper">
+                                <input type="color" id="theme-card-bg-color" value="#1e293b">
+                                <input type="text" id="theme-card-bg-text" placeholder="rgba(30, 41, 59, 0.75)" value="rgba(30, 41, 59, 0.75)">
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="theme-card-border-color">Card Border Color</label>
+                            <div class="color-input-wrapper">
+                                <input type="color" id="theme-card-border-color" value="#334155">
+                                <input type="text" id="theme-card-border-text" placeholder="rgba(255, 255, 255, 0.1)" value="rgba(255, 255, 255, 0.1)">
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="theme-primary-color">Primary Accent Color</label>
+                            <div class="color-input-wrapper">
+                                <input type="color" id="theme-primary-color" value="#3b82f6">
+                                <input type="text" id="theme-primary-text" placeholder="#3b82f6" value="#3b82f6">
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="theme-text-bright-color">Bright Text Color</label>
+                            <div class="color-input-wrapper">
+                                <input type="color" id="theme-text-bright-color" value="#f8fafc">
+                                <input type="text" id="theme-text-bright-text" placeholder="#f8fafc" value="#f8fafc">
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="theme-text-muted-color">Muted Text Color</label>
+                            <div class="color-input-wrapper">
+                                <input type="color" id="theme-text-muted-color" value="#94a3b8">
+                                <input type="text" id="theme-text-muted-text" placeholder="#94a3b8" value="#94a3b8">
+                            </div>
+                        </div>
+
+                        <div class="input-group" style="grid-column: span 2;">
+                            <label for="theme-font-family">Font Family Style</label>
+                            <select id="theme-font-family" class="custom-select">
+                                <option value="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">Standard Sans-Serif</option>
+                                <option value="'Courier New', Courier, 'Fira Code', monospace">Retro Monospace / Code</option>
+                                <option value="Georgia, serif">Classic Serif</option>
+                                <option value="Impact, sans-serif">Display / Impact</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="button-group" style="justify-content: flex-end; margin-bottom: 16px;">
+                        <button type="button" id="btn-preview-theme" class="btn btn-secondary btn-sm">👁 Live Preview</button>
+                        <button type="submit" id="btn-save-custom-theme" class="btn btn-primary btn-sm">💾 Save Custom Theme</button>
+                    </div>
+                </form>
+
+                <div class="custom-theme-list">
+                    <h4>Saved Custom User Themes</h4>
+                    <div id="saved-themes-container" style="margin-top: 10px;">
+                        <p class="subtitle" style="font-size: 0.85rem;">No custom themes saved yet. Create one above!</p>
+                    </div>
+                    <div style="display: flex; gap: 8px; margin-top: 10px;">
+                        <button id="btn-export-themes" class="btn btn-secondary btn-sm" type="button">📤 Export JSON</button>
+                        <button id="btn-import-themes" class="btn btn-secondary btn-sm" type="button">📥 Import JSON</button>
+                        <input type="file" id="import-theme-file" accept=".json" class="hidden">
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Footer -->
         <footer class="footer">

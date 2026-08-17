@@ -812,6 +812,10 @@
             track.enabled = !tab.isAudioMuted;
             btnToggleMic.classList.toggle('off', tab.isAudioMuted);
             btnToggleMic.querySelector('.icon').textContent = tab.isAudioMuted ? '🔇' : '🎙️';
+            btnToggleMic.setAttribute('aria-pressed', tab.isAudioMuted ? 'true' : 'false');
+            const labelText = tab.isAudioMuted ? 'Unmute Microphone' : 'Mute Microphone';
+            btnToggleMic.setAttribute('aria-label', labelText);
+            btnToggleMic.setAttribute('title', labelText);
         }
     }
 
@@ -826,6 +830,10 @@
             track.enabled = !tab.isVideoMuted;
             btnToggleCam.classList.toggle('off', tab.isVideoMuted);
             btnToggleCam.querySelector('.icon').textContent = tab.isVideoMuted ? '📷' : '📹';
+            btnToggleCam.setAttribute('aria-pressed', tab.isVideoMuted ? 'true' : 'false');
+            const labelText = tab.isVideoMuted ? 'Turn On Camera' : 'Turn Off Camera';
+            btnToggleCam.setAttribute('aria-label', labelText);
+            btnToggleCam.setAttribute('title', labelText);
         }
     }
 
@@ -845,6 +853,9 @@
                 localVideo.srcObject = screenStream;
                 tab.isScreenSharing = true;
                 btnShareScreen.classList.add('off');
+                btnShareScreen.setAttribute('aria-pressed', 'true');
+                btnShareScreen.setAttribute('aria-label', 'Stop Sharing Screen');
+                btnShareScreen.setAttribute('title', 'Stop Sharing Screen');
 
                 screenTrack.onended = () => {
                     stopScreenSharing(tab);
@@ -865,6 +876,9 @@
         localVideo.srcObject = tab.localStream;
         tab.isScreenSharing = false;
         btnShareScreen.classList.remove('off');
+        btnShareScreen.setAttribute('aria-pressed', 'false');
+        btnShareScreen.setAttribute('aria-label', 'Share Screen');
+        btnShareScreen.setAttribute('title', 'Share Screen');
     }
 
     function resetRemoteVideo() {

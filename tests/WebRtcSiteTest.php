@@ -160,6 +160,10 @@ $motdSet = MotdServ::setMotd('Welcome to Fortress Admin Network', 'AdminUser');
 assertTest($motdSet['success'] === true, 'MOTDSERV updated serverwide Message of the Day');
 assertTest(MotdServ::getMotd() === 'Welcome to Fortress Admin Network', 'MOTDSERV getMotd returned updated message');
 
+$motdInfo = MotdServ::getInfo();
+assertTest($motdInfo['success'] === true, 'MOTDSERV getInfo returned success');
+assertTest(str_contains($motdInfo['message'], 'Welcome to Fortress Admin Network') && str_contains($motdInfo['message'], 'MOTDSERV Message of the Day'), 'MOTDSERV getInfo returned correctly formatted info');
+
 // Test 8: MEMOSERV (Memo Service Bot)
 echo "\n8. Testing MEMOSERV Stored Offline Messaging...\n";
 $memoSend = MemoServ::send('Alice', 'CyberFox', 'Hello CyberFox, welcome to Fortress IRC!');

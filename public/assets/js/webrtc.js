@@ -275,6 +275,12 @@
         btnThemeModal.addEventListener('click', openThemeModal);
         btnCloseThemeModal.addEventListener('click', closeThemeModal);
 
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !themeModal.classList.contains('hidden')) {
+                closeThemeModal();
+            }
+        });
+
         btnPreviewTheme.addEventListener('click', () => {
             const previewData = getFormDataAsThemeData();
             applyTheme('custom', previewData);
@@ -334,6 +340,9 @@
     function openThemeModal() {
         renderSavedThemesList();
         themeModal.classList.remove('hidden');
+        if (themeNameInput) {
+            themeNameInput.focus();
+        }
     }
 
     function closeThemeModal() {

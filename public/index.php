@@ -217,7 +217,7 @@ if (!empty($uriPath) && !str_contains($uriPath, '.') && !str_starts_with($uriPat
             <div class="modal-card">
                 <div class="modal-header">
                     <h3>🎨 User-Defined Custom Theme Creator</h3>
-                    <button id="btn-close-theme-modal" class="btn-close-modal" type="button">&times;</button>
+                    <button id="btn-close-theme-modal" class="btn-close-modal" type="button" aria-label="Close modal">&times;</button>
                 </div>
 
                 <form id="custom-theme-form">

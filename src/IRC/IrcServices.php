@@ -29,6 +29,36 @@ class IrcServices
         $parts = preg_split('/\s+/', $text);
         $first = strtolower($parts[0] ?? '');
 
+        // Check for BOTSERV integration (External bot routing based on username)
+        $msgWithoutPrefix = '';
+        $targetBotNick = null;
+
+        if ($first === '/msg' || $first === '/privmsg') {
+            $targetNick = $parts[1] ?? '';
+            if (!empty($targetNick) && ($service = BotServ::resolveBotService($channel, $targetNick))) {
+                $fullCommand = implode(' ', array_slice($parts, 2));
+                $res = ServServ::dispatchForeignCommand($senderNick, $service, $fullCommand);
+                return [
+                    'is_service_command' => true,
+                    'service' => $targetNick,
+                    'response' => $res['message'],
+                    'channel' => $channel
+                ];
+            }
+        } elseif (str_ends_with($first, ':')) {
+            $targetNick = rtrim($first, ':');
+            if (!empty($targetNick) && ($service = BotServ::resolveBotService($channel, $targetNick))) {
+                $fullCommand = implode(' ', array_slice($parts, 1));
+                $res = ServServ::dispatchForeignCommand($senderNick, $service, $fullCommand);
+                return [
+                    'is_service_command' => true,
+                    'service' => $targetNick,
+                    'response' => $res['message'],
+                    'channel' => $channel
+                ];
+            }
+        }
+
         // 1. Direct /msg or bot service command
         if ($first === '/msg' || $first === '/privmsg') {
             $targetService = strtoupper($parts[1] ?? '');
@@ -49,6 +79,10 @@ class IrcServices
 
             if ($targetService === MemoServ::SERVICE_NAME) {
                 return self::handleMemoServCommand($senderNick, $channel, $cmd, $args);
+            }
+
+            if ($targetService === BotServ::SERVICE_NAME) {
+                return self::handleBotServCommand($senderNick, $channel, $cmd, $args);
             }
 
             if ($targetService === HelpServ::SERVICE_NAME) {
@@ -117,6 +151,18 @@ class IrcServices
             $cmd = strtoupper($parts[1] ?? '');
             $args = array_slice($parts, 2);
             return self::handleHelpServCommand($senderNick, $channel, $cmd, $args);
+        }
+
+        if ($first === '/botserv') {
+            $cmd = strtoupper($parts[1] ?? '');
+            $args = array_slice($parts, 2);
+            return self::handleBotServCommand($senderNick, $channel, $cmd, $args);
+        }
+
+        if ($first === '/textserv') {
+            $cmd = strtoupper($parts[1] ?? '');
+            $args = array_slice($parts, 2);
+            return self::handleTextServCommand($senderNick, $channel, $cmd, $args);
         }
 
         // 2. Theme Command
@@ -534,6 +580,48 @@ class IrcServices
         return [
             'is_service_command' => true,
             'service' => HelpServ::SERVICE_NAME,
+            'response' => $res['message'],
+            'channel' => $channel
+        ];
+    }
+
+    private static function handleTextServCommand(string $senderNick, string $channel, string $cmd, array $args): array
+    {
+        $text = implode(' ', $args);
+        $res = TextServ::process($cmd, $text);
+
+        return [
+            'is_service_command' => true,
+            'service' => TextServ::SERVICE_NAME,
+            'response' => $res['message'],
+            'channel' => $channel
+        ];
+    }
+
+    private static function handleBotServCommand(string $senderNick, string $channel, string $cmd, array $args): array
+    {
+        switch ($cmd) {
+            case 'ASSIGN':
+                $target = $args[0] ?? '';
+                $botNick = $args[1] ?? '';
+                $serviceName = $args[2] ?? '';
+                $res = BotServ::assign($target, $botNick, $serviceName, $senderNick);
+                break;
+
+            case 'UNASSIGN':
+                $target = $args[0] ?? '';
+                $botNick = $args[1] ?? '';
+                $res = BotServ::unassign($target, $botNick, $senderNick);
+                break;
+
+            default:
+                $res = ['message' => "BOTSERV: Unknown command '{$cmd}'. Use ASSIGN or UNASSIGN."];
+                break;
+        }
+
+        return [
+            'is_service_command' => true,
+            'service' => BotServ::SERVICE_NAME,
             'response' => $res['message'],
             'channel' => $channel
         ];

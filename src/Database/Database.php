@@ -42,7 +42,11 @@ class Database
             self::$pdo = $pdo;
         } catch (PDOException $e) {
             // Fallback to SQLite if MySQL connection fails or server is unavailable
-            $sqlitePath = (is_writable('/dev/shm') ? '/dev/shm' : sys_get_temp_dir()) . '/ivc_irc_fallback.sqlite';
+            $dataDir = __DIR__ . '/../../data';
+            if (!is_dir($dataDir)) {
+                mkdir($dataDir, 0750, true);
+            }
+            $sqlitePath = $dataDir . '/ivc_irc_fallback.sqlite';
             $dsn = "sqlite:{$sqlitePath}";
             $pdo = new PDO($dsn, null, null, [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,

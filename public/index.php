@@ -90,11 +90,17 @@ if (!empty($uriPath) && !str_contains($uriPath, '.') && !str_starts_with($uriPat
                         </div>
                     </div>
 
-                    <div class="input-group">
-                        <label for="nickname-input">Your IRC Nickname (Generated or Custom)</label>
-                        <div class="nickname-box">
-                            <input type="text" id="nickname-input" placeholder="e.g. CyberFox" autocomplete="off">
-                            <button id="btn-random-name" class="btn btn-secondary btn-sm" type="button">🎲 Randomize Nick</button>
+                    <div class="input-row">
+                        <div class="input-group">
+                            <label for="nickname-input">Your IRC Nickname (Generated or Custom)</label>
+                            <div class="nickname-box">
+                                <input type="text" id="nickname-input" placeholder="e.g. CyberFox" autocomplete="off">
+                                <button id="btn-random-name" class="btn btn-secondary btn-sm" type="button">🎲 Randomize Nick</button>
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label for="nick-password-input">NickServ Password (Optional)</label>
+                            <input type="password" id="nick-password-input" placeholder="For Registered Nicks" autocomplete="off" spellcheck="false">
                         </div>
                     </div>
 

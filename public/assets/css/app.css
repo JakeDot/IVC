@@ -432,7 +432,7 @@ body {
     cursor: not-allowed;
 }
 
-input[type="text"], input[type="color"], select.custom-select {
+input[type="text"], input[type="password"], input[type="color"], select.custom-select {
     width: 100%;
     padding: 12px 16px;
     background: var(--input-bg);
@@ -445,7 +445,7 @@ input[type="text"], input[type="color"], select.custom-select {
     transition: border-color 0.2s;
 }
 
-input[type="text"]:focus, select.custom-select:focus {
+input[type="text"]:focus, input[type="password"]:focus, select.custom-select:focus {
     border-color: var(--primary-color);
 }
 
@@ -474,7 +474,7 @@ input[type="text"]:focus, select.custom-select:focus {
 .btn:focus-visible,
 .btn-control:focus-visible,
 .room-tab:focus-visible,
-input[type="text"]:focus-visible {
+input[type="text"]:focus-visible, input[type="password"]:focus-visible {
     outline: 2px solid var(--primary-color);
     outline-offset: 2px;
 }

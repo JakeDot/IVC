@@ -87,13 +87,4 @@ class NameServ
     {
         return UserNickRepository::exists($nickname);
     }
-
-    /**
-     * Check if nickname is identified
-     */
-    public static function isIdentified(string $nickname): bool
-    {
-        $userNick = UserNickRepository::findByNickname($nickname);
-        return $userNick !== null && $userNick->isIdentified();
-    }
 }

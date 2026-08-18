@@ -271,6 +271,44 @@ class IrcServices
             ];
         }
 
+        if ($first === '/dcc') {
+            $sub = strtoupper($parts[1] ?? 'HELP');
+            if ($sub === 'SEND') {
+                $filename = $parts[2] ?? 'file.dat';
+                $filesize = isset($parts[3]) ? (int)$parts[3] : 0;
+                $sizeStr = $filesize > 0 ? " (" . self::formatFileSize($filesize) . ")" : "";
+                $resp = "DCC SEND: Direct WebRTC transfer offer initiated for '{$filename}'{$sizeStr}.";
+            } elseif ($sub === 'CLOUD' || $sub === 'DRIVE' || $sub === 'MEGA') {
+                $service = $sub === 'CLOUD' ? ($parts[2] ?? 'Cloud') : $sub;
+                $urlIndex = $sub === 'CLOUD' ? 3 : 2;
+                $fileIndex = $sub === 'CLOUD' ? 4 : 3;
+                $sizeIndex = $sub === 'CLOUD' ? 5 : 4;
+
+                $url = $parts[$urlIndex] ?? ($sub !== 'CLOUD' ? ($parts[2] ?? '') : '');
+                $filename = $parts[$fileIndex] ?? ($sub !== 'CLOUD' ? ($parts[3] ?? 'cloud-file') : 'cloud-file');
+                $filesize = isset($parts[$sizeIndex]) ? (int)$parts[$sizeIndex] : 0;
+
+                if (empty($url)) {
+                    $resp = "DCC CLOUD: Usage: /dcc cloud <service> <url> <filename> [filesize]";
+                } else {
+                    $sizeStr = $filesize > 0 ? " (" . self::formatFileSize($filesize) . ")" : "";
+                    $resp = "DCC CLOUD SHARE [{$service}]: '{$filename}'{$sizeStr} -> {$url}";
+                }
+            } else {
+                $resp = "DCC File Sharing Service:\n" .
+                        "• /dcc send <filename> [filesize] — Offer direct WebRTC P2P file transfer\n" .
+                        "• /dcc cloud <GoogleDrive|Mega|Dropbox> <url> <filename> [filesize] — Share multi-gigabyte cloud storage link\n" .
+                        "• Click 📁 DCC Share button in chat for interactive file selection UI";
+            }
+
+            return [
+                'is_service_command' => true,
+                'service' => 'DCCSERV',
+                'response' => $resp,
+                'channel' => $channel
+            ];
+        }
+
         if ($first === '/supersilent') {
             $msgText = trim(substr($text, strlen($parts[0])));
             if ($msgText === '') {
@@ -314,6 +352,7 @@ class IrcServices
                        "• /motd [new_motd] — View/update Message of the Day\n" .
                        "• /topic <new_topic> — Change channel topic\n" .
                        "• /supersilent <message> — Post a message to super room only without propagating to subrooms\n" .
+                       "• /dcc [send|cloud|help] — Direct WebRTC or multi-gigabyte cloud file sharing\n" .
                        "• /settings [SET <key> <value>] — View or update serverwide settings in MySQL";
 
             return [
@@ -325,6 +364,20 @@ class IrcServices
         }
 
         return null;
+    }
+
+    public static function formatFileSize(int $bytes): string
+    {
+        if ($bytes >= 1073741824) {
+            return number_format($bytes / 1073741824, 2) . ' GB';
+        }
+        if ($bytes >= 1048576) {
+            return number_format($bytes / 1048576, 2) . ' MB';
+        }
+        if ($bytes >= 1024) {
+            return number_format($bytes / 1024, 2) . ' KB';
+        }
+        return $bytes . ' B';
     }
 
     private static function handleNameServCommand(string $senderNick, string $channel, string $cmd, array $args): array

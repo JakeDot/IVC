@@ -335,6 +335,25 @@ assertTest($ssCmd !== null && $ssCmd['service'] === 'SUPERSILENT', 'Processed /s
 $ssSub1Msgs = RoomManager::pollMessages($subRoom1, $uSub1);
 assertTest(count($ssSub1Msgs) === 0, 'Subroom #tech/dev did NOT receive /supersilent message (override behavior)');
 
+// Test 14: DCC File Transfer & Multi-GB Cloud Sharing Commands
+echo "\n14. Testing DCC File Transfer & Multi-GB Cloud Sharing Commands...\n";
+$dccHelp = IrcServices::processCommand('Alice', '#lobby', '/dcc');
+assertTest($dccHelp !== null && $dccHelp['service'] === 'DCCSERV' && str_contains($dccHelp['response'], 'DCC File Sharing Service'), 'Parsed /dcc help command');
+
+$dccSend = IrcServices::processCommand('Alice', '#lobby', '/dcc send archive.zip 10485760');
+assertTest($dccSend !== null && str_contains($dccSend['response'], '10.00 MB'), 'Parsed /dcc send command with formatted file size');
+
+$dccCloud = IrcServices::processCommand('Alice', '#lobby', '/dcc cloud GoogleDrive https://drive.google.com/file/d/123 LargeDataset.tar 5368709120');
+assertTest($dccCloud !== null && str_contains($dccCloud['response'], '5.00 GB') && str_contains($dccCloud['response'], 'drive.google.com'), 'Parsed /dcc cloud Google Drive command with formatted GB size');
+
+$dccMega = IrcServices::processCommand('Alice', '#lobby', '/dcc cloud Mega https://mega.nz/file/xyz Backup.iso 10737418240');
+assertTest($dccMega !== null && str_contains($dccMega['response'], '10.00 GB') && str_contains($dccMega['response'], 'mega.nz'), 'Parsed /dcc cloud Mega command');
+
+assertTest(IrcServices::formatFileSize(500) === '500 B', 'formatFileSize formats Bytes correctly');
+assertTest(IrcServices::formatFileSize(2048) === '2.00 KB', 'formatFileSize formats KB correctly');
+assertTest(IrcServices::formatFileSize(5242880) === '5.00 MB', 'formatFileSize formats MB correctly');
+assertTest(IrcServices::formatFileSize(2147483648) === '2.00 GB', 'formatFileSize formats GB correctly');
+
 echo "\n-----------------------------------------\n";
 echo "Test Results: $testsPassed Passed, $testsFailed Failed.\n";
 echo "-----------------------------------------\n\n";

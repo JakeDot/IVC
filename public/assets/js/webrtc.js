@@ -32,6 +32,57 @@
     const myClientId = 'peer-' + Math.random().toString(36).substring(2, 11);
     let myNickname = generateAnonymousName();
 
+    // DCC State & Transfers Tracker
+    const activeTransfers = {}; // transferId -> transfer metadata & state
+    let selectedDccFile = null;
+
+    function escapeHtml(str) {
+        if (!str || typeof str !== 'string') return '';
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function sanitizeUrl(url) {
+        if (!url || typeof url !== 'string') return '#';
+        const trimmed = url.trim();
+        if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('blob:')) {
+            return escapeHtml(trimmed);
+        }
+        return '#';
+    }
+
+    function formatBytes(bytes) {
+        if (!bytes || isNaN(bytes) || bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function arrayBufferToBase64(buffer) {
+        let binary = '';
+        const bytes = new Uint8Array(buffer);
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return window.btoa(binary);
+    }
+
+    function base64ToArrayBuffer(base64) {
+        const binaryString = window.atob(base64);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes.buffer;
+    }
+
     // Multi-Tab State
     // openTabs[channelId] = { id, key, nick, peerConnection, localStream, dataChannel, sseSource, messages: [], peers: [], unreadCount: 0, topic: '' }
     const openTabs = {};
@@ -87,6 +138,27 @@
     const btnRefreshStats = document.getElementById('btn-refresh-stats');
     const serverStatsContent = document.getElementById('server-stats-content');
     const clientStatsContent = document.getElementById('client-stats-content');
+
+    // DCC Modal Elements
+    const btnOpenDccModal = document.getElementById('btn-open-dcc-modal');
+    const btnCloseDccModal = document.getElementById('btn-close-dcc-modal');
+    const dccModal = document.getElementById('dcc-modal');
+    const tabDccDirect = document.getElementById('tab-dcc-direct');
+    const tabDccCloud = document.getElementById('tab-dcc-cloud');
+    const dccPanelDirect = document.getElementById('dcc-panel-direct');
+    const dccPanelCloud = document.getElementById('dcc-panel-cloud');
+    const dccFileInput = document.getElementById('dcc-file-input');
+    const dccFileInfo = document.getElementById('dcc-file-info');
+    const dccFileName = document.getElementById('dcc-file-name');
+    const dccFileSize = document.getElementById('dcc-file-size');
+    const dccLargeFileWarning = document.getElementById('dcc-large-file-warning');
+    const btnSwitchToCloud = document.getElementById('btn-switch-to-cloud');
+    const btnSendDccDirect = document.getElementById('btn-send-dcc-direct');
+    const dccCloudService = document.getElementById('dcc-cloud-service');
+    const dccCloudUrl = document.getElementById('dcc-cloud-url');
+    const dccCloudFilename = document.getElementById('dcc-cloud-filename');
+    const dccCloudFilesize = document.getElementById('dcc-cloud-filesize');
+    const btnSendDccCloud = document.getElementById('btn-send-dcc-cloud');
 
     // Initialize Nickname input
     nicknameInput.value = myNickname;
@@ -169,6 +241,503 @@
     });
 
     btnRefreshStats.addEventListener('click', loadConnectionStats);
+
+    // DCC Modal Event Listeners
+    if (btnOpenDccModal && dccModal) {
+        btnOpenDccModal.addEventListener('click', () => {
+            dccModal.classList.remove('hidden');
+        });
+    }
+
+    if (btnCloseDccModal && dccModal) {
+        btnCloseDccModal.addEventListener('click', () => {
+            dccModal.classList.add('hidden');
+        });
+    }
+
+    function switchDccTab(mode) {
+        if (mode === 'direct') {
+            tabDccDirect.classList.add('active');
+            tabDccCloud.classList.remove('active');
+            dccPanelDirect.classList.remove('hidden');
+            dccPanelCloud.classList.add('hidden');
+        } else {
+            tabDccCloud.classList.add('active');
+            tabDccDirect.classList.remove('active');
+            dccPanelCloud.classList.remove('hidden');
+            dccPanelDirect.classList.add('hidden');
+        }
+    }
+
+    if (tabDccDirect && tabDccCloud) {
+        tabDccDirect.addEventListener('click', () => switchDccTab('direct'));
+        tabDccCloud.addEventListener('click', () => switchDccTab('cloud'));
+    }
+
+    if (btnSwitchToCloud) {
+        btnSwitchToCloud.addEventListener('click', () => switchDccTab('cloud'));
+    }
+
+    if (dccFileInput) {
+        dccFileInput.addEventListener('change', (e) => {
+            const files = e.target.files;
+            if (files && files.length > 0) {
+                selectedDccFile = files[0];
+                dccFileName.textContent = selectedDccFile.name;
+                dccFileSize.textContent = formatBytes(selectedDccFile.size);
+                dccFileInfo.classList.remove('hidden');
+
+                // Multi-gigabyte / large file check (>100MB threshold)
+                const LARGE_FILE_THRESHOLD = 100 * 1024 * 1024;
+                if (selectedDccFile.size > LARGE_FILE_THRESHOLD) {
+                    dccLargeFileWarning.classList.remove('hidden');
+                } else {
+                    dccLargeFileWarning.classList.add('hidden');
+                }
+
+                btnSendDccDirect.disabled = false;
+            } else {
+                selectedDccFile = null;
+                dccFileInfo.classList.add('hidden');
+                dccLargeFileWarning.classList.add('hidden');
+                btnSendDccDirect.disabled = true;
+            }
+        });
+    }
+
+    if (btnSendDccDirect) {
+        btnSendDccDirect.addEventListener('click', () => {
+            if (selectedDccFile) {
+                sendDirectDccOffer(selectedDccFile);
+                dccModal.classList.add('hidden');
+            }
+        });
+    }
+
+    if (btnSendDccCloud) {
+        btnSendDccCloud.addEventListener('click', () => {
+            const service = dccCloudService ? dccCloudService.value : 'GoogleDrive';
+            const url = dccCloudUrl ? dccCloudUrl.value.trim() : '';
+            const filename = dccCloudFilename ? dccCloudFilename.value.trim() : '';
+            const filesizeStr = dccCloudFilesize ? dccCloudFilesize.value.trim() : '';
+
+            if (!url) {
+                alert('Please enter a shareable cloud link URL (e.g. Google Drive or Mega.nz link).');
+                return;
+            }
+
+            sendCloudDccLink(service, url, filename, filesizeStr);
+            dccModal.classList.add('hidden');
+
+            if (dccCloudUrl) dccCloudUrl.value = '';
+            if (dccCloudFilename) dccCloudFilename.value = '';
+            if (dccCloudFilesize) dccCloudFilesize.value = '';
+        });
+    }
+
+    /**
+     * Broadcast DCC payload over DataChannel if open, or fallback to WebRTC signal endpoint
+     */
+    function broadcastDccPayload(channelId, payload) {
+        const tab = openTabs[channelId];
+        if (!tab) return;
+
+        const jsonStr = JSON.stringify(payload);
+        if (tab.dataChannel && tab.dataChannel.readyState === 'open') {
+            try {
+                tab.dataChannel.send(jsonStr);
+            } catch (err) {
+                console.warn('DataChannel send failed, falling back to signaling:', err);
+            }
+        }
+
+        sendSignal(channelId, {
+            type: 'dcc_signal',
+            room: channelId,
+            client: myClientId,
+            nickname: myNickname,
+            key: tab.key,
+            dccPayload: payload
+        });
+    }
+
+    /**
+     * Initiate Direct DCC Offer
+     */
+    function sendDirectDccOffer(file) {
+        if (!file || !activeTabId || activeTabId === '#stats') return;
+
+        const transferId = 'dcc-' + Math.random().toString(36).substring(2, 11);
+        activeTransfers[transferId] = {
+            id: transferId,
+            role: 'sender',
+            file: file,
+            filename: file.name,
+            filesize: file.size,
+            filetype: file.type || 'application/octet-stream',
+            status: 'offered',
+            channelId: activeTabId
+        };
+
+        const payload = {
+            dcc: true,
+            action: 'offer',
+            transferId: transferId,
+            filename: file.name,
+            filesize: file.size,
+            filetype: file.type || 'application/octet-stream',
+            sender: myNickname,
+            room: activeTabId
+        };
+
+        broadcastDccPayload(activeTabId, payload);
+        renderDccSenderCard(activeTabId, transferId);
+    }
+
+    /**
+     * Share Multi-GB Cloud Share Link (Google Drive / Mega)
+     */
+    function sendCloudDccLink(service, url, filename, filesizeStr) {
+        if (!url || !activeTabId || activeTabId === '#stats') return;
+
+        filename = filename || 'Cloud-Shared-File';
+        filesizeStr = filesizeStr || 'Multi-GB File';
+
+        const payload = {
+            dcc: true,
+            action: 'cloud',
+            service: service,
+            url: url,
+            filename: filename,
+            filesizeStr: filesizeStr,
+            sender: myNickname,
+            room: activeTabId
+        };
+
+        broadcastDccPayload(activeTabId, payload);
+        renderDccCloudCard(activeTabId, payload, true);
+    }
+
+    /**
+     * Stream DCC File Chunks over WebRTC DataChannel / Signaling
+     */
+    async function startStreamingDccFile(transferId) {
+        const transfer = activeTransfers[transferId];
+        if (!transfer || transfer.role !== 'sender') return;
+
+        transfer.status = 'transferring';
+        updateDccCardStatus(transferId, 'Transferring file... 0%');
+
+        const file = transfer.file;
+        const CHUNK_SIZE = 32 * 1024; // 32KB
+        const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+
+        for (let i = 0; i < totalChunks; i++) {
+            if (transfer.status === 'canceled') break;
+
+            const start = i * CHUNK_SIZE;
+            const end = Math.min(file.size, start + CHUNK_SIZE);
+            const slice = file.slice(start, end);
+
+            const arrayBuffer = await slice.arrayBuffer();
+            const base64Data = arrayBufferToBase64(arrayBuffer);
+
+            const chunkPayload = {
+                dcc: true,
+                action: 'chunk',
+                transferId: transferId,
+                chunkIndex: i,
+                totalChunks: totalChunks,
+                data: base64Data,
+                room: transfer.channelId
+            };
+
+            broadcastDccPayload(transfer.channelId, chunkPayload);
+
+            const percent = Math.round(((i + 1) / totalChunks) * 100);
+            updateDccCardProgress(transferId, percent);
+
+            if (i % 5 === 0) {
+                await new Promise(r => setTimeout(r, 10));
+            }
+        }
+
+        if (transfer.status !== 'canceled') {
+            transfer.status = 'completed';
+            const completePayload = {
+                dcc: true,
+                action: 'complete',
+                transferId: transferId,
+                room: transfer.channelId
+            };
+            broadcastDccPayload(transfer.channelId, completePayload);
+            updateDccCardStatus(transferId, '✅ Direct Transfer Complete');
+        }
+    }
+
+    /**
+     * Incoming DCC Signal Handler
+     */
+    function handleIncomingDccSignal(channelId, signal) {
+        const payload = signal.dccPayload || signal;
+        if (!payload || !payload.dcc) return;
+
+        const senderClientId = signal.sender || signal.client;
+        if (senderClientId === myClientId) return;
+
+        const action = payload.action;
+
+        if (action === 'offer') {
+            const transferId = payload.transferId;
+
+            activeTransfers[transferId] = {
+                id: transferId,
+                role: 'receiver',
+                filename: payload.filename,
+                filesize: payload.filesize,
+                filetype: payload.filetype || 'application/octet-stream',
+                sender: payload.sender,
+                chunks: [],
+                totalChunks: 0,
+                receivedCount: 0,
+                channelId: channelId,
+                status: 'offered'
+            };
+
+            renderDccReceiverCard(channelId, transferId);
+            return;
+        }
+
+        if (action === 'accept') {
+            const transferId = payload.transferId;
+            const transfer = activeTransfers[transferId];
+            if (transfer && transfer.role === 'sender') {
+                startStreamingDccFile(transferId);
+            }
+            return;
+        }
+
+        if (action === 'decline') {
+            const transferId = payload.transferId;
+            const transfer = activeTransfers[transferId];
+            if (transfer) {
+                transfer.status = 'declined';
+                updateDccCardStatus(transferId, '❌ Offer declined by peer');
+            }
+            return;
+        }
+
+        if (action === 'chunk') {
+            const transferId = payload.transferId;
+            const transfer = activeTransfers[transferId];
+            if (transfer && transfer.role === 'receiver') {
+                const chunkIndex = payload.chunkIndex;
+                transfer.totalChunks = payload.totalChunks;
+                transfer.chunks[chunkIndex] = base64ToArrayBuffer(payload.data);
+                transfer.receivedCount = (transfer.receivedCount || 0) + 1;
+
+                const percent = Math.round((transfer.receivedCount / payload.totalChunks) * 100);
+                updateDccCardProgress(transferId, percent);
+            }
+            return;
+        }
+
+        if (action === 'complete') {
+            const transferId = payload.transferId;
+            const transfer = activeTransfers[transferId];
+            if (transfer && transfer.role === 'receiver') {
+                transfer.status = 'completed';
+                const blob = new Blob(transfer.chunks, { type: transfer.filetype });
+                const downloadUrl = URL.createObjectURL(blob);
+
+                updateDccCardWithDownload(transferId, downloadUrl, transfer.filename);
+            }
+            return;
+        }
+
+        if (action === 'cloud') {
+            renderDccCloudCard(channelId, payload, false);
+            return;
+        }
+    }
+
+    function renderDccSenderCard(channelId, transferId) {
+        const transfer = activeTransfers[transferId];
+        if (!transfer) return;
+
+        const safeId = escapeHtml(transferId);
+        const safeNick = escapeHtml(myNickname);
+        const safeFilename = escapeHtml(transfer.filename);
+
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'chat-msg self';
+        msgDiv.id = `card-${safeId}`;
+
+        msgDiv.innerHTML = `
+            <div class="sender-tag">${safeNick} (DCC Direct File Offer)</div>
+            <div class="dcc-card">
+                <div class="dcc-card-header">
+                    <span class="dcc-badge p2p">⚡ DCC Direct P2P</span>
+                    <span id="status-${safeId}" style="font-size: 0.8rem; opacity: 0.8;">Offered to peer...</span>
+                </div>
+                <div class="dcc-file-details">
+                    📁 ${safeFilename} <span class="dcc-file-size">(${formatBytes(transfer.filesize)})</span>
+                </div>
+                <div class="dcc-progress-bar">
+                    <div id="progress-${safeId}" class="dcc-progress-fill"></div>
+                </div>
+            </div>
+        `;
+
+        addCustomCardToMessages(channelId, msgDiv);
+    }
+
+    function renderDccReceiverCard(channelId, transferId) {
+        const transfer = activeTransfers[transferId];
+        if (!transfer) return;
+
+        const safeId = escapeHtml(transferId);
+        const safeSender = escapeHtml(transfer.sender);
+        const safeFilename = escapeHtml(transfer.filename);
+
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'chat-msg peer';
+        msgDiv.id = `card-${safeId}`;
+
+        msgDiv.innerHTML = `
+            <div class="sender-tag">${safeSender} (DCC File Transfer Offer)</div>
+            <div class="dcc-card">
+                <div class="dcc-card-header">
+                    <span class="dcc-badge p2p">⚡ DCC Direct P2P</span>
+                    <span id="status-${safeId}" style="font-size: 0.8rem; opacity: 0.8;">Incoming file offer</span>
+                </div>
+                <div class="dcc-file-details">
+                    📁 ${safeFilename} <span class="dcc-file-size">(${formatBytes(transfer.filesize)})</span>
+                </div>
+                <div class="dcc-progress-bar">
+                    <div id="progress-${safeId}" class="dcc-progress-fill"></div>
+                </div>
+                <div id="actions-${safeId}" class="dcc-actions">
+                    <button id="accept-${safeId}" class="btn btn-sm btn-primary">✅ Accept & Download</button>
+                    <button id="decline-${safeId}" class="btn btn-sm btn-danger">❌ Decline</button>
+                </div>
+            </div>
+        `;
+
+        addCustomCardToMessages(channelId, msgDiv);
+
+        setTimeout(() => {
+            const btnAccept = document.getElementById(`accept-${transferId}`);
+            const btnDecline = document.getElementById(`decline-${transferId}`);
+
+            if (btnAccept) {
+                btnAccept.addEventListener('click', () => {
+                    btnAccept.disabled = true;
+                    if (btnDecline) btnDecline.disabled = true;
+                    updateDccCardStatus(transferId, 'Accepted. Receiving chunks...');
+
+                    broadcastDccPayload(channelId, {
+                        dcc: true,
+                        action: 'accept',
+                        transferId: transferId,
+                        room: channelId
+                    });
+                });
+            }
+
+            if (btnDecline) {
+                btnDecline.addEventListener('click', () => {
+                    updateDccCardStatus(transferId, 'Declined');
+                    const actionsDiv = document.getElementById(`actions-${transferId}`);
+                    if (actionsDiv) actionsDiv.remove();
+
+                    broadcastDccPayload(channelId, {
+                        dcc: true,
+                        action: 'decline',
+                        transferId: transferId,
+                        room: channelId
+                    });
+                });
+            }
+        }, 50);
+    }
+
+    function renderDccCloudCard(channelId, payload, isSelf) {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `chat-msg ${isSelf ? 'self' : 'peer'}`;
+
+        const rawService = payload.service || 'Cloud';
+        const badgeClass = rawService.toLowerCase().replace(/[^a-z]/g, '');
+        const safeService = escapeHtml(rawService);
+        const safeSender = escapeHtml(payload.sender || 'Peer');
+        const safeFilename = escapeHtml(payload.filename || 'Shared File');
+        const safeFilesizeStr = escapeHtml(payload.filesizeStr || 'Cloud Link');
+        const safeUrl = sanitizeUrl(payload.url);
+
+        msgDiv.innerHTML = `
+            <div class="sender-tag">${safeSender} (DCC Cloud File Share)</div>
+            <div class="dcc-card">
+                <div class="dcc-card-header">
+                    <span class="dcc-badge ${badgeClass}">☁️ ${safeService}</span>
+                    <span style="font-size: 0.8rem; opacity: 0.8;">Multi-GB Storage Link</span>
+                </div>
+                <div class="dcc-file-details">
+                    📁 ${safeFilename} <span class="dcc-file-size">(${safeFilesizeStr})</span>
+                </div>
+                <div class="dcc-actions" style="margin-top: 8px;">
+                    <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-primary" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                        ⚡ Open / Download File
+                    </a>
+                </div>
+            </div>
+        `;
+
+        addCustomCardToMessages(channelId, msgDiv);
+    }
+
+    function addCustomCardToMessages(channelId, cardElement) {
+        const tab = openTabs[channelId];
+        if (!tab) return;
+
+        tab.messages.push({
+            type: 'custom_element',
+            element: cardElement
+        });
+
+        if (activeTabId === channelId) {
+            chatMessages.appendChild(cardElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+    }
+
+    function updateDccCardStatus(transferId, statusText) {
+        const el = document.getElementById(`status-${transferId}`);
+        if (el) el.textContent = statusText;
+    }
+
+    function updateDccCardProgress(transferId, percent) {
+        const fill = document.getElementById(`progress-${transferId}`);
+        if (fill) fill.style.width = `${percent}%`;
+
+        const status = document.getElementById(`status-${transferId}`);
+        if (status) status.textContent = `Transferring... ${percent}%`;
+    }
+
+    function updateDccCardWithDownload(transferId, downloadUrl, filename) {
+        updateDccCardStatus(transferId, '✅ Completed!');
+        updateDccCardProgress(transferId, 100);
+
+        const actions = document.getElementById(`actions-${transferId}`);
+        if (actions) {
+            const safeFilename = escapeHtml(filename);
+            const safeUrl = sanitizeUrl(downloadUrl);
+            actions.innerHTML = `
+                <a href="${safeUrl}" download="${safeFilename}" class="btn btn-sm btn-primary" style="text-decoration: none;">
+                    💾 Download ${safeFilename}
+                </a>
+            `;
+        }
+    }
 
     /**
      * Open or Join a Channel Tab
@@ -361,7 +930,9 @@
     function renderChatMessages(tab) {
         chatMessages.innerHTML = '';
         tab.messages.forEach(msg => {
-            if (msg.type === 'system') {
+            if (msg.type === 'custom_element' && msg.element) {
+                chatMessages.appendChild(msg.element);
+            } else if (msg.type === 'system') {
                 const div = document.createElement('div');
                 div.className = 'system-message';
                 div.textContent = msg.text;
@@ -553,6 +1124,10 @@
                     updateTabUI(channelId);
                 }
                 break;
+
+            case 'dcc_signal':
+                handleIncomingDccSignal(channelId, signal);
+                break;
         }
     }
 
@@ -655,6 +1230,15 @@
         if (!tab) return;
 
         channel.onmessage = (event) => {
+            if (typeof event.data === 'string' && event.data.startsWith('{')) {
+                try {
+                    const parsed = JSON.parse(event.data);
+                    if (parsed.dcc) {
+                        handleIncomingDccSignal(channelId, parsed);
+                        return;
+                    }
+                } catch (e) {}
+            }
             addMessageToTab(channelId, {
                 sender: tab.remoteNick,
                 text: event.data,

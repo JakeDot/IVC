@@ -164,7 +164,8 @@ if (!empty($uriPath) && !str_contains($uriPath, '.') && !str_starts_with($uriPat
                     </div>
                 </div>
                 <div class="chat-input-area">
-                    <input type="text" id="chat-input" placeholder="Type a message or IRC command (/msg CHANSERV, /op, /topic, /help)..." autocomplete="off">
+                    <button id="btn-open-dcc-modal" class="btn btn-secondary" title="DCC Direct & Multi-GB Cloud File Share">📁 DCC Share</button>
+                    <input type="text" id="chat-input" placeholder="Type a message or IRC command (/msg CHANSERV, /dcc, /op, /topic, /help)..." autocomplete="off">
                     <button id="btn-send-chat" class="btn btn-primary">Send</button>
                 </div>
             </section>
@@ -195,6 +196,72 @@ if (!empty($uriPath) && !str_contains($uriPath, '.') && !str_starts_with($uriPat
                 </div>
             </section>
         </main>
+
+        <!-- DCC File Sharing Modal -->
+        <div id="dcc-modal" class="modal-overlay hidden">
+            <div class="modal-content card">
+                <div class="modal-header">
+                    <h3>📁 DCC File Sharing</h3>
+                    <button id="btn-close-dcc-modal" class="btn-close">&times;</button>
+                </div>
+                <div class="dcc-tabs">
+                    <button id="tab-dcc-direct" class="dcc-tab-btn active" type="button">⚡ Direct WebRTC P2P Transfer</button>
+                    <button id="tab-dcc-cloud" class="dcc-tab-btn" type="button">☁️ Cloud Share (Google Drive / Mega)</button>
+                </div>
+
+                <!-- Direct WebRTC Panel -->
+                <div id="dcc-panel-direct" class="dcc-panel">
+                    <p class="subtitle">Stream files directly browser-to-browser over encrypted WebRTC DataChannel.</p>
+                    <div class="input-group">
+                        <label for="dcc-file-input">Select Local File:</label>
+                        <input type="file" id="dcc-file-input" class="file-input">
+                    </div>
+                    <div id="dcc-file-info" class="dcc-file-info hidden">
+                        <p><strong>Selected:</strong> <span id="dcc-file-name"></span> (<span id="dcc-file-size"></span>)</p>
+                    </div>
+                    <!-- Large File Warning Prompt -->
+                    <div id="dcc-large-file-warning" class="dcc-warning-banner hidden">
+                        ⚠️ <strong>Multi-Gigabyte File Detected!</strong><br>
+                        Direct browser-to-browser WebRTC memory transfers can be constrained by browser RAM limits. For files &gt; 100MB / multi-GB, we recommend sharing via <strong>Google Drive</strong>, <strong>Mega.nz</strong>, or <strong>Dropbox</strong>.
+                        <button id="btn-switch-to-cloud" class="btn btn-sm btn-primary" style="margin-top: 8px;" type="button">Switch to Cloud Sharing ☁️</button>
+                    </div>
+                    <div class="modal-actions">
+                        <button id="btn-send-dcc-direct" class="btn btn-primary" disabled type="button">🚀 Send Direct DCC Offer</button>
+                    </div>
+                </div>
+
+                <!-- Cloud Sharing Panel (Google Drive, Mega, Dropbox) -->
+                <div id="dcc-panel-cloud" class="dcc-panel hidden">
+                    <p class="subtitle">Ideal for multi-gigabyte files (5GB, 10GB, 50GB+). Share Google Drive or Mega.nz links in DCC format.</p>
+                    <div class="input-group">
+                        <label for="dcc-cloud-service">Cloud Service Provider:</label>
+                        <select id="dcc-cloud-service" class="select-input">
+                            <option value="GoogleDrive">Google Drive 🔵🟢🔴</option>
+                            <option value="Mega">Mega.nz 🔴</option>
+                            <option value="Dropbox">Dropbox 🔵</option>
+                            <option value="Other">Other Direct URL 🌐</option>
+                        </select>
+                    </div>
+                    <div class="input-group" style="margin-top: 12px;">
+                        <label for="dcc-cloud-url">Shareable Cloud Link URL:</label>
+                        <input type="text" id="dcc-cloud-url" placeholder="https://drive.google.com/file/d/... or https://mega.nz/file/..." autocomplete="off">
+                    </div>
+                    <div class="input-row" style="margin-top: 12px;">
+                        <div class="input-group">
+                            <label for="dcc-cloud-filename">File Name (Optional):</label>
+                            <input type="text" id="dcc-cloud-filename" placeholder="e.g. Large_Dataset_50GB.tar" autocomplete="off">
+                        </div>
+                        <div class="input-group">
+                            <label for="dcc-cloud-filesize">File Size (Optional):</label>
+                            <input type="text" id="dcc-cloud-filesize" placeholder="e.g. 5.4 GB" autocomplete="off">
+                        </div>
+                    </div>
+                    <div class="modal-actions" style="margin-top: 16px;">
+                        <button id="btn-send-dcc-cloud" class="btn btn-primary" type="button">☁️ Share Cloud DCC Link</button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Footer -->
         <footer class="footer">

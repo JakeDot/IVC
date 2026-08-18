@@ -592,6 +592,179 @@ video {
     display: none !important;
 }
 
+/* Modal Overlay & Dialogs */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    width: 90%;
+    max-width: 580px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--card-border);
+    padding-bottom: 12px;
+}
+
+.btn-close {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.6rem;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.btn-close:hover {
+    color: var(--danger-color);
+}
+
+.dcc-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.dcc-tab-btn {
+    flex: 1;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.dcc-tab-btn.active {
+    background: var(--primary-color);
+    color: #fff;
+    border-color: var(--primary-color);
+}
+
+.file-input, .select-input {
+    width: 100%;
+    padding: 10px 14px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-md);
+    color: var(--text-bright);
+    font-size: 0.95rem;
+    outline: none;
+}
+
+.dcc-file-info {
+    margin-top: 10px;
+    font-size: 0.9rem;
+    color: var(--text-bright);
+    background: rgba(255, 255, 255, 0.05);
+    padding: 10px;
+    border-radius: var(--radius-md);
+}
+
+.dcc-warning-banner {
+    margin-top: 12px;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid var(--danger-color);
+    color: #fca5a5;
+    padding: 12px;
+    border-radius: var(--radius-md);
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+.modal-actions {
+    margin-top: 20px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* DCC Chat Cards & Progress Bars */
+.dcc-card {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-md);
+    padding: 12px 16px;
+    margin: 6px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.dcc-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.dcc-badge {
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.dcc-badge.googledrive { background: #1e3a8a; color: #93c5fd; border: 1px solid #3b82f6; }
+.dcc-badge.mega { background: #881337; color: #fca5a5; border: 1px solid #f43f5e; }
+.dcc-badge.dropbox { background: #0c4a6e; color: #7dd3fc; border: 1px solid #0284c7; }
+.dcc-badge.p2p { background: #065f46; color: #6ee7b7; border: 1px solid #10b981; }
+.dcc-badge.cloud { background: #581c87; color: #d8b4fe; border: 1px solid #a855f7; }
+
+.dcc-file-details {
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.dcc-file-size {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: normal;
+}
+
+.dcc-progress-bar {
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.dcc-progress-fill {
+    height: 100%;
+    background: var(--primary-color);
+    width: 0%;
+    transition: width 0.2s ease;
+}
+
+.dcc-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+}
+
 .footer {
     text-align: center;
     margin-top: auto;

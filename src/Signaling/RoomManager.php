@@ -34,11 +34,17 @@ final class RoomManager
     }
 
     /**
+     * Memory cache of the last read/written state hashes to avoid redundant parsing
+     */
+    private static array $lastKnownHashes = [];
+
+    /**
      * Load active rooms from shared RAM storage
      *
-     * @return array<string, array<string, array{last_active: int, messages: array<int, array<string, mixed>>}>>
+     * @param string|null $expectedHash If provided, and the file hash matches, returns null to indicate no change
+     * @return array<string, array<string, array{last_active: int, messages: array<int, array<string, mixed>>}>>|null
      */
-    private static function loadRooms(): array
+    private static function loadRooms(?string $expectedHash = null): ?array
     {
         $filePath = self::getStateFilePath();
         if (!file_exists($filePath)) {
@@ -59,6 +65,13 @@ final class RoomManager
             return [];
         }
 
+        if ($expectedHash !== null) {
+            $currentHash = md5($content);
+            if ($currentHash === $expectedHash) {
+                return null; // Indicates no change
+            }
+        }
+
         try {
             $data = json_decode($content, true, 16, JSON_THROW_ON_ERROR);
             return is_array($data) ? $data : [];
@@ -71,22 +84,28 @@ final class RoomManager
      * Save active rooms to shared RAM storage atomically with flock
      *
      * @param array<string, array<string, array{last_active: int, messages: array<int, array<string, mixed>>}>> $rooms
+     * @return string The MD5 hash of the saved JSON content
      */
-    private static function saveRooms(array $rooms): void
+    private static function saveRooms(array $rooms): string
     {
         $filePath = self::getStateFilePath();
         $fp = @fopen($filePath, 'c+');
+        $json = json_encode($rooms, JSON_THROW_ON_ERROR);
+        $hash = md5($json);
+
         if (!$fp) {
-            return;
+            return $hash;
         }
 
         if (flock($fp, LOCK_EX)) {
             ftruncate($fp, 0);
-            fwrite($fp, json_encode($rooms, JSON_THROW_ON_ERROR));
+            fwrite($fp, $json);
             fflush($fp);
             flock($fp, LOCK_UN);
         }
         fclose($fp);
+
+        return $hash;
     }
 
     /**
@@ -94,7 +113,7 @@ final class RoomManager
      */
     public static function joinRoom(string $roomId, string $clientId): array
     {
-        $rooms = self::loadRooms();
+        $rooms = self::loadRooms() ?? [];
         $rooms = self::gcInternal($rooms);
 
         if (!isset($rooms[$roomId])) {
@@ -137,7 +156,7 @@ final class RoomManager
      */
     public static function broadcastSignal(string $roomId, string $senderId, array $payload, bool $excludeSender = true): void
     {
-        $rooms = self::loadRooms();
+        $rooms = self::loadRooms() ?? [];
         $rooms = self::broadcastSignalInternal($rooms, $roomId, $senderId, $payload, $excludeSender);
         self::saveRooms($rooms);
     }
@@ -214,21 +233,51 @@ final class RoomManager
      */
     public static function pollMessages(string $roomId, string $clientId): array
     {
-        $rooms = self::loadRooms();
+        // For SSE loops calling this constantly, we can track the last known hash of our state.
+        // If the file contents haven't changed since our last read/write, there are no new messages.
+        // However, we still need to occasionally force a load to update last_active.
+        $cacheKey = "$roomId:$clientId";
+        $canUseCache = isset(self::$lastKnownHashes[$cacheKey]);
+
+        $rooms = self::loadRooms($canUseCache ? self::$lastKnownHashes[$cacheKey] : null);
+
+        if ($rooms === null) {
+            // The file on disk exactly matches our last known hash.
+            // This means NO other process has modified the file since we last touched it.
+            // There cannot be any new messages for us.
+            return [];
+        }
+
+        $originalRooms = $rooms;
         $rooms = self::gcInternal($rooms);
 
         if (!isset($rooms[$roomId][$clientId])) {
-            self::saveRooms($rooms);
+            self::$lastKnownHashes[$cacheKey] = self::saveRooms($rooms);
             self::joinRoom($roomId, $clientId);
             return [];
         }
 
-        $rooms[$roomId][$clientId]['last_active'] = time();
         $messages = $rooms[$roomId][$clientId]['messages'];
+        $needsSave = ($rooms !== $originalRooms);
 
-        // Zero-retention: Clear delivered messages immediately from RAM
-        $rooms[$roomId][$clientId]['messages'] = [];
-        self::saveRooms($rooms);
+        // Only update last_active if it's older than 10 seconds to avoid constant disk I/O
+        if (time() - $rooms[$roomId][$clientId]['last_active'] >= 10) {
+            $rooms[$roomId][$clientId]['last_active'] = time();
+            $needsSave = true;
+        }
+
+        if (!empty($messages)) {
+            // Zero-retention: Clear delivered messages immediately from RAM
+            $rooms[$roomId][$clientId]['messages'] = [];
+            $needsSave = true;
+        }
+
+        if ($needsSave) {
+            self::$lastKnownHashes[$cacheKey] = self::saveRooms($rooms);
+        } else {
+            // State didn't change (no save), but we loaded it and want to track the current hash
+            self::$lastKnownHashes[$cacheKey] = md5(json_encode($rooms, JSON_THROW_ON_ERROR));
+        }
 
         return $messages;
     }
@@ -238,7 +287,7 @@ final class RoomManager
      */
     public static function leaveRoom(string $roomId, string $clientId): void
     {
-        $rooms = self::loadRooms();
+        $rooms = self::loadRooms() ?? [];
 
         if (isset($rooms[$roomId][$clientId])) {
             unset($rooms[$roomId][$clientId]);
@@ -261,7 +310,7 @@ final class RoomManager
      */
     public static function getPeerCount(string $roomId): int
     {
-        $rooms = self::loadRooms();
+        $rooms = self::loadRooms() ?? [];
         return isset($rooms[$roomId]) ? count($rooms[$roomId]) : 0;
     }
 
@@ -270,7 +319,7 @@ final class RoomManager
      */
     public static function gc(): void
     {
-        $rooms = self::loadRooms();
+        $rooms = self::loadRooms() ?? [];
         $rooms = self::gcInternal($rooms);
         self::saveRooms($rooms);
     }
@@ -304,6 +353,7 @@ final class RoomManager
      */
     public static function reset(): void
     {
+        self::$lastKnownHashes = [];
         $filePath = self::getStateFilePath();
         if (file_exists($filePath)) {
             @unlink($filePath);

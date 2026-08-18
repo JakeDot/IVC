@@ -176,11 +176,23 @@ if (!empty($uriPath) && !str_contains($uriPath, '.') && !str_starts_with($uriPat
                             Channel initialized. Type <code>/help</code> for IRC commands or <code>/theme &lt;name&gt;</code> for themes.
                         </div>
                     </div>
-                    <div class="user-list-sidebar">
-                        <h4>Nicks in Channel</h4>
-                        <ul id="user-list" class="user-list">
-                            <!-- Populated dynamically -->
-                        </ul>
+                    <div class="sidebar-container">
+                        <div class="sidebar-tabs">
+                            <button id="tab-nicks" class="sidebar-tab active">Nicks</button>
+                            <button id="tab-gallery" class="sidebar-tab">Gallery</button>
+                        </div>
+                        <div id="user-list-sidebar" class="user-list-sidebar">
+                            <h4>Nicks in Channel</h4>
+                            <ul id="user-list" class="user-list">
+                                <!-- Populated dynamically -->
+                            </ul>
+                        </div>
+                        <div id="gallery-sidebar" class="gallery-sidebar hidden">
+                            <h4>Media Gallery</h4>
+                            <div id="media-gallery" class="media-gallery">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="chat-input-area">

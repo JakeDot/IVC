@@ -125,4 +125,39 @@ class UserNick
             !empty($data['is_identified'])
         );
     }
+
+    public static function register(string $nickname, string $password, ?string $email = null): array
+    {
+        $nickname = trim($nickname);
+        if (empty($nickname) || empty($password)) {
+            return ['success' => false, 'message' => 'NAMESERV: Nickname and password are required.'];
+        }
+
+        if (\Fortress\Database\UserNickRepository::exists($nickname)) {
+            return ['success' => false, 'message' => "NAMESERV: Nickname '{$nickname}' is already registered."];
+        }
+
+        $passHash = self::hashPassword($password);
+        $userNick = new self($nickname, $passHash, $email, null, null, true);
+
+        if (\Fortress\Database\UserNickRepository::save($userNick)) {
+            return ['success' => true, 'message' => "NAMESERV: Nickname '{$nickname}' successfully registered and identified."];
+        }
+
+        return ['success' => false, 'message' => "NAMESERV: Registration failed due to database error."];
+    }
+
+    public static function identify(string $nickname, string $password): array
+    {
+        $nickname = trim($nickname);
+        $userNick = \Fortress\Database\UserNickRepository::findByNickname($nickname);
+
+        if ($userNick === null || !$userNick->verifyPassword($password)) {
+            return ['success' => false, 'message' => 'NAMESERV: Password verification failed. Access denied.'];
+        }
+
+        \Fortress\Database\UserNickRepository::updateIdentification($userNick->getNickname(), true, time());
+
+        return ['success' => true, 'message' => "NAMESERV: Password accepted. Nickname '{$nickname}' identified."];
+    }
 }

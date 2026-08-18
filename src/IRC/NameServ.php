@@ -20,23 +20,7 @@ class NameServ
      */
     public static function register(string $nickname, string $password, ?string $email = null): array
     {
-        $nickname = trim($nickname);
-        if (empty($nickname) || empty($password)) {
-            return ['success' => false, 'message' => 'NAMESERV: Nickname and password are required.'];
-        }
-
-        if (UserNickRepository::exists($nickname)) {
-            return ['success' => false, 'message' => "NAMESERV: Nickname '{$nickname}' is already registered."];
-        }
-
-        $passHash = UserNick::hashPassword($password);
-        $userNick = new UserNick($nickname, $passHash, $email, null, null, true);
-
-        if (UserNickRepository::save($userNick)) {
-            return ['success' => true, 'message' => "NAMESERV: Nickname '{$nickname}' successfully registered and identified."];
-        }
-
-        return ['success' => false, 'message' => "NAMESERV: Registration failed due to database error."];
+        return UserNick::register($nickname, $password, $email);
     }
 
     /**
@@ -44,16 +28,7 @@ class NameServ
      */
     public static function identify(string $nickname, string $password): array
     {
-        $nickname = trim($nickname);
-        $userNick = UserNickRepository::findByNickname($nickname);
-
-        if ($userNick === null || !$userNick->verifyPassword($password)) {
-            return ['success' => false, 'message' => 'NAMESERV: Password verification failed. Access denied.'];
-        }
-
-        UserNickRepository::updateIdentification($userNick->getNickname(), true, time());
-
-        return ['success' => true, 'message' => "NAMESERV: Password accepted. Nickname '{$nickname}' identified."];
+        return UserNick::identify($nickname, $password);
     }
 
     /**

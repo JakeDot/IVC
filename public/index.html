@@ -1,30 +1,4 @@
-<?php
 
-declare(strict_types=1);
-
-require_once __DIR__ . '/../src/Security/SecurityHeaders.php';
-require_once __DIR__ . '/../src/Security/TokenManager.php';
-require_once __DIR__ . '/../src/Security/Sanitizer.php';
-
-use Fortress\Security\SecurityHeaders;
-use Fortress\Security\TokenManager;
-use Fortress\Security\Sanitizer;
-
-SecurityHeaders::apply();
-
-$csrfToken = TokenManager::generateCsrfToken();
-
-// Parse room ID from request URI if provided as ivc.com/#room or ivc.com/<room>
-$requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
-$uriPath = trim($requestUri, '/');
-
-$urlRoom = '';
-if (!empty($uriPath) && !str_contains($uriPath, '.') && !str_starts_with($uriPath, 'api/')) {
-    $urlRoom = Sanitizer::sanitizeRoomId($uriPath);
-} elseif (isset($_GET['room'])) {
-    $urlRoom = Sanitizer::sanitizeRoomId((string)$_GET['room']);
-}
-?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -82,7 +56,7 @@ if (!empty($uriPath) && !str_contains($uriPath, '.') && !str_starts_with($uriPat
                     <div class="input-row">
                         <div class="input-group">
                             <label for="room-input">Channel Name (Scheme: domain.com/#&lt;channel&gt;)</label>
-                            <input type="text" id="room-input" value="<?php echo htmlspecialchars($urlRoom, ENT_QUOTES, 'UTF-8'); ?>" placeholder="e.g. #general, #fortress" autocomplete="off" spellcheck="false">
+                            <input type="text" id="room-input" value="" placeholder="e.g. #general, #fortress" autocomplete="off" spellcheck="false">
                         </div>
                         <div class="input-group">
                             <label for="key-input">Channel Passkey (Optional)</label>
@@ -313,9 +287,13 @@ if (!empty($uriPath) && !str_contains($uriPath, '.') && !str_starts_with($uriPat
     </div>
 
     <script>
-        window.FORTRESS_CSRF_TOKEN = "<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>";
-        window.FORTRESS_PRELOAD_ROOM = "<?php echo htmlspecialchars($urlRoom, ENT_QUOTES, 'UTF-8'); ?>";
+        window.FORTRESS_CSRF_TOKEN = "";
+        window.FORTRESS_PRELOAD_ROOM = "";
     </script>
-    <script src="assets/js/webrtc.js"></script>
+    <script src="assets/js/ivc.core.js"></script>
+    <script src="assets/js/ivc.theme.js"></script>
+    <script src="assets/js/ivc.ui.js"></script>
+    <script src="assets/js/ivc.webrtc.js"></script>
+    <script src="assets/js/ivc.app.js"></script>
 </body>
 </html>

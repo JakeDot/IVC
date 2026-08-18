@@ -1,6 +1,6 @@
-# Contributing to The Fortress
+# Contributing to IVC
 
-Security improvements welcome! All contributions must:
+Security and functional improvements welcome! All contributions must:
 
 - [ ] Pass security tests (100% coverage)
 - [ ] Pass penetration testing

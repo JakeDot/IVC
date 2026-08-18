@@ -29,31 +29,6 @@ final class TokenManager
     }
 
     /**
-     * Verify CSRF token
-     */
-    public static function verifyCsrfToken(?string $token): bool
-    {
-        if (empty($token)) {
-            return false;
-        }
-
-        if (session_status() !== PHP_SESSION_ACTIVE && !headers_sent()) {
-            session_start();
-        }
-
-        if (empty($_SESSION['csrf_token']) || empty($_SESSION['csrf_expires'])) {
-            return false;
-        }
-
-        if (time() > $_SESSION['csrf_expires']) {
-            unset($_SESSION['csrf_token'], $_SESSION['csrf_expires']);
-            return false;
-        }
-
-        return hash_equals($_SESSION['csrf_token'], $token);
-    }
-
-    /**
      * Generate secure ephemeral room key
      */
     public static function generateRoomKey(): string

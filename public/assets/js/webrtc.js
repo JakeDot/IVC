@@ -98,6 +98,14 @@
     const chatChannelTitle = document.getElementById('chat-channel-title');
     const channelTopicBar = document.getElementById('channel-topic-bar');
     const chatMessages = document.getElementById('chat-messages');
+
+    // Sidebar Tabs & Panels
+    const tabNicks = document.getElementById('tab-nicks');
+    const tabGallery = document.getElementById('tab-gallery');
+    const userListSidebar = document.getElementById('user-list-sidebar');
+    const gallerySidebar = document.getElementById('gallery-sidebar');
+    const mediaGallery = document.getElementById('media-gallery');
+
     const userList = document.getElementById('user-list');
     const chatInput = document.getElementById('chat-input');
     const btnSendChat = document.getElementById('btn-send-chat');
@@ -495,19 +503,43 @@
         if (hash.startsWith('#')) {
             return normalizeChannel(hash);
         }
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('room')) {
+            return normalizeChannel(params.get('room'));
+        }
+        const pathSegments = window.location.pathname.split('/').filter(p => p.length > 0 && !p.includes('.'));
+        if (pathSegments.length > 0 && pathSegments[0] !== 'api') {
+            return normalizeChannel(pathSegments[0]);
+        }
         if (window.FORTRESS_PRELOAD_ROOM) {
             return normalizeChannel(window.FORTRESS_PRELOAD_ROOM);
         }
         return '#lobby';
     }
 
+    async function loadConfig() {
+        try {
+            if (!window.FORTRESS_CSRF_TOKEN) {
+                const response = await fetch('/api/config.php');
+                if (response.ok) {
+                    const data = await response.json();
+                    window.FORTRESS_CSRF_TOKEN = data.csrfToken;
+                }
+            }
+        } catch (e) {
+            console.warn("Could not load backend config. Running in static mode.");
+        }
+    }
+
     // Initialize Theme System & Tabs on startup
     initThemeSystem();
 
-    const initialChan = parseChannelFromUrl();
-    openTab(initialChan, false);
-    openTab('#stats', false); // Always include #stats room tab
-    switchToTab(initialChan);
+    loadConfig().then(() => {
+        const initialChan = parseChannelFromUrl();
+        openTab(initialChan, false);
+        openTab('#stats', false); // Always include #stats room tab
+        switchToTab(initialChan);
+    });
 
     // Window Hashchange Listener
     window.addEventListener('hashchange', () => {
@@ -520,6 +552,27 @@
             }
         }
     });
+
+    // Sidebar Tabs Toggle
+    if (tabNicks && tabGallery) {
+        tabNicks.addEventListener('click', () => {
+            tabNicks.classList.add('active');
+            tabGallery.classList.remove('active');
+            userListSidebar.classList.remove('hidden');
+            gallerySidebar.classList.add('hidden');
+        });
+        tabGallery.addEventListener('click', () => {
+            tabGallery.classList.add('active');
+            tabNicks.classList.remove('active');
+            gallerySidebar.classList.remove('hidden');
+            userListSidebar.classList.add('hidden');
+
+            // Re-render gallery when tab is switched to ensure it's up to date
+            if (activeTabId && openTabs[activeTabId]) {
+                renderGallery(openTabs[activeTabId]);
+            }
+        });
+    }
 
     // User interaction listener to un-suspend AudioContext
     window.addEventListener('click', () => {
@@ -824,6 +877,9 @@
         // Render User List
         renderUserList(tab);
 
+        // Render Gallery
+        renderGallery(tab);
+
         // Render Video Grid
         renderVideoGrid(channelId);
     }
@@ -890,6 +946,30 @@
 
                 msgDiv.appendChild(senderTag);
                 msgDiv.appendChild(fileCard);
+
+                // Add inline media preview if local blob exists and is media
+                if (isReady && localSharedFilesMap[msg.fileId].blob) {
+                    const localFile = localSharedFilesMap[msg.fileId];
+                    const fileType = localFile.metadata.type || msg.fileType || '';
+                    if (fileType.startsWith('image/') || fileType.startsWith('video/')) {
+                        const previewDiv = document.createElement('div');
+                        previewDiv.className = 'file-preview';
+
+                        const mediaUrl = URL.createObjectURL(localFile.blob);
+                        if (fileType.startsWith('image/')) {
+                            const img = document.createElement('img');
+                            img.src = mediaUrl;
+                            previewDiv.appendChild(img);
+                        } else if (fileType.startsWith('video/')) {
+                            const video = document.createElement('video');
+                            video.src = mediaUrl;
+                            video.controls = true;
+                            previewDiv.appendChild(video);
+                        }
+                        msgDiv.appendChild(previewDiv);
+                    }
+                }
+
                 chatMessages.appendChild(msgDiv);
             } else {
                 const msgDiv = document.createElement('div');
@@ -928,6 +1008,86 @@
             const isPeerTalking = !!tab.speakingStates[peerId];
             li.innerHTML = `<span>👤</span> ${nick} ${isPeerTalking ? '<span class="talking-dot" title="Speaking"></span>' : ''}`;
             userList.appendChild(li);
+        });
+    }
+
+    // Store active object URLs to prevent memory leaks
+    const activeMediaUrls = new Set();
+
+    function renderGallery(tab) {
+        if (!mediaGallery) return;
+
+        // Revoke previously created object URLs
+        activeMediaUrls.forEach(url => URL.revokeObjectURL(url));
+        activeMediaUrls.clear();
+
+        mediaGallery.innerHTML = '';
+
+        const mediaMessages = tab.messages.filter(msg => {
+            const fileType = msg.fileType || '';
+            return msg.type === 'file' && (fileType.startsWith('image/') || fileType.startsWith('video/'));
+        });
+
+        if (mediaMessages.length === 0) {
+            mediaGallery.innerHTML = '<div style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 10px;">No media shared yet.</div>';
+            return;
+        }
+
+        mediaMessages.forEach(msg => {
+            const fileType = msg.fileType || '';
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'gallery-item';
+
+            const isReady = !!localSharedFilesMap[msg.fileId];
+
+            if (isReady && localSharedFilesMap[msg.fileId].blob) {
+                const localFile = localSharedFilesMap[msg.fileId];
+                const mediaUrl = URL.createObjectURL(localFile.blob);
+                activeMediaUrls.add(mediaUrl);
+
+                if (fileType.startsWith('image/')) {
+                    const img = document.createElement('img');
+                    img.src = mediaUrl;
+                    itemDiv.appendChild(img);
+                } else if (fileType.startsWith('video/')) {
+                    const video = document.createElement('video');
+                    video.src = mediaUrl;
+                    itemDiv.appendChild(video);
+
+                    const playIcon = document.createElement('div');
+                    playIcon.className = 'play-icon';
+                    playIcon.innerHTML = '▶';
+                    itemDiv.appendChild(playIcon);
+                }
+
+                itemDiv.addEventListener('click', () => {
+                    const a = document.createElement('a');
+                    a.href = mediaUrl;
+                    a.download = msg.fileName || 'media';
+                    a.click();
+                });
+            } else {
+                const placeholderIcon = document.createElement('div');
+                placeholderIcon.style.fontSize = '2rem';
+                placeholderIcon.innerHTML = fileType.startsWith('image/') ? '🖼️' : '🎥';
+                itemDiv.appendChild(placeholderIcon);
+
+                const statusText = document.createElement('div');
+                statusText.style.position = 'absolute';
+                statusText.style.bottom = '4px';
+                statusText.style.fontSize = '0.65rem';
+                statusText.style.background = 'rgba(0,0,0,0.6)';
+                statusText.style.padding = '2px 4px';
+                statusText.style.borderRadius = '4px';
+                statusText.innerHTML = msg.cloudLink ? '☁️ Cloud' : '📥 Click to DL';
+                itemDiv.appendChild(statusText);
+
+                itemDiv.addEventListener('click', () => {
+                    handleFileDownloadOrRequest(tab.id, msg.fileId, msg.sharerClientId, msg.fileName, msg.fileType, msg.cloudLink, null);
+                });
+            }
+
+            mediaGallery.appendChild(itemDiv);
         });
     }
 
@@ -1370,6 +1530,7 @@
 
                         if (activeTabId === channelId) {
                             renderChatMessages(tab);
+                            renderGallery(tab);
                         }
                     } catch (e) {
                         console.error('Failed to process file response signal:', e);
@@ -1427,6 +1588,9 @@
 
         if (activeTabId === channelId) {
             renderChatMessages(tab);
+            if (msg.type === 'file') {
+                renderGallery(tab);
+            }
         } else {
             tab.unreadCount = (tab.unreadCount || 0) + 1;
             renderTabsNav();
@@ -1572,6 +1736,7 @@
 
                             if (activeTabId === channelId) {
                                 renderChatMessages(tab);
+                                renderGallery(tab);
                             }
                         } catch (e) {
                             console.error('Error handling DataChannel file response:', e);
@@ -1722,6 +1887,7 @@
                     tab.messages.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
                     if (activeTabId === channelId) {
                         renderChatMessages(tab);
+                        renderGallery(tab);
                     }
                 }
             }

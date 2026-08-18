@@ -17,6 +17,8 @@ require_once __DIR__ . '/../src/Database/UserNickRepository.php';
 require_once __DIR__ . '/../src/Database/ChannelRepository.php';
 require_once __DIR__ . '/../src/Database/ChannelUserRepository.php';
 require_once __DIR__ . '/../src/Database/SettingRepository.php';
+require_once __DIR__ . '/../src/Database/BotServRepository.php';
+require_once __DIR__ . '/../src/Database/TextServRepository.php';
 require_once __DIR__ . '/../src/IRC/SettingsManager.php';
 require_once __DIR__ . '/../src/IRC/NameServ.php';
 require_once __DIR__ . '/../src/IRC/ChanServ.php';
@@ -25,6 +27,9 @@ require_once __DIR__ . '/../src/IRC/MemoServ.php';
 require_once __DIR__ . '/../src/IRC/HostServ.php';
 require_once __DIR__ . '/../src/IRC/ServiceRegistry.php';
 require_once __DIR__ . '/../src/IRC/ServServ.php';
+require_once __DIR__ . '/../src/IRC/HelpServ.php';
+require_once __DIR__ . '/../src/IRC/BotServ.php';
+require_once __DIR__ . '/../src/IRC/TextServ.php';
 require_once __DIR__ . '/../src/IRC/IrcServices.php';
 require_once __DIR__ . '/../src/Signaling/RoomManager.php';
 
@@ -42,6 +47,8 @@ use Fortress\Database\UserNickRepository;
 use Fortress\Database\ChannelRepository;
 use Fortress\Database\ChannelUserRepository;
 use Fortress\Database\SettingRepository;
+use Fortress\Database\BotServRepository;
+use Fortress\Database\TextServRepository;
 use Fortress\IRC\SettingsManager;
 use Fortress\IRC\NameServ;
 use Fortress\IRC\ChanServ;
@@ -50,6 +57,8 @@ use Fortress\IRC\MemoServ;
 use Fortress\IRC\HostServ;
 use Fortress\IRC\ServiceRegistry;
 use Fortress\IRC\ServServ;
+use Fortress\IRC\BotServ;
+use Fortress\IRC\TextServ;
 use Fortress\IRC\IrcServices;
 use Fortress\Signaling\RoomManager;
 
@@ -93,6 +102,26 @@ for ($i = 0; $i < 5; $i++) {
 assertTest($limitOk === true, 'Allows requests up to limit');
 assertTest(RateLimiter::check($clientKey, 5, 60) === false, 'Blocks requests exceeding limit');
 
+RateLimiter::reset();
+for ($i = 0; $i < 501; $i++) {
+    RateLimiter::check("client-$i", 5, -1);
+}
+
+
+$reflection = new ReflectionClass(RateLimiter::class);
+$method = $reflection->getMethod('getStateFilePath');
+$method->setAccessible(true);
+$filePath = $method->invoke(null);
+
+$buckets = json_decode(file_get_contents($filePath), true);
+assertTest(count($buckets) === 501, 'Created 501 expired rate limit buckets');
+
+RateLimiter::check('client-trigger-gc', 5, 60);
+
+$buckets = json_decode(file_get_contents($filePath), true);
+assertTest(count($buckets) === 1, 'Expired buckets purged by gc() when threshold > 500 is reached');
+
+
 // Test 3: Token Manager
 echo "\n3. Testing Token Manager & Room Session Keys...\n";
 $key1 = TokenManager::generateRoomKey();
@@ -111,6 +140,13 @@ assertTest($networkName === 'IVC-IRC Network', 'Default serverwide setting loade
 SettingsManager::setSetting('motd', 'New Fortress IRC MOTD');
 assertTest(SettingsManager::getSetting('motd') === 'New Fortress IRC MOTD', 'Updated serverwide MOTD setting in DB');
 
+$allSettings = SettingsManager::getAllSettings();
+assertTest(is_array($allSettings), 'SettingsManager::getAllSettings returns an array');
+assertTest(isset($allSettings['network_name']) && $allSettings['network_name']['value'] === 'IVC-IRC Network', 'getAllSettings contains default network_name setting');
+assertTest(isset($allSettings['motd']) && $allSettings['motd']['value'] === 'New Fortress IRC MOTD', 'getAllSettings contains updated motd setting');
+assertTest(isset($allSettings['motd']['updated_at']) && is_int($allSettings['motd']['updated_at']), 'getAllSettings returns updated_at as integer');
+assertTest(array_key_exists('description', $allSettings['motd']), 'getAllSettings returns description key');
+
 // Test 5: NAMESERV (Nickname Service)
 echo "\n5. Testing NAMESERV Nickname Registration & Identification...\n";
 $regRes = NameServ::register('CyberFox', 'SecretPass123', 'fox@fortress.local');
@@ -123,8 +159,18 @@ assertTest($idRes['success'] === true, 'NAMESERV successfully identified CyberFo
 $idFail = NameServ::identify('CyberFox', 'WrongPassword');
 assertTest($idFail['success'] === false, 'NAMESERV rejected incorrect password');
 
+assertTest(NameServ::isIdentified('CyberFox') === true, 'NameServ::isIdentified returns true for identified user CyberFox');
+assertTest(NameServ::isIdentified('NonExistentUser') === false, 'NameServ::isIdentified returns false for non-existent user');
+
 $infoRes = NameServ::getInfo('CyberFox');
 assertTest($infoRes['success'] === true && str_contains($infoRes['message'], 'Registered:'), 'NAMESERV returned nick registration info');
+
+NameServ::register('ExpiredUser', 'pass', 'test@example.com');
+// Manually set last_seen to 2 hours ago
+\Fortress\Database\UserNickRepository::updateIdentification('ExpiredUser', false, time() - 7200);
+$purged = NameServ::purgeExpired(3600);
+assertTest($purged === 1, 'NameServ::purgeExpired successfully purged 1 expired nickname');
+assertTest(NameServ::isRegistered('ExpiredUser') === false, 'ExpiredUser was correctly deleted by purgeExpired');
 
 // Test 6: CHANSERV (Channel Service)
 echo "\n6. Testing CHANSERV Channel Management & OP Assignment...\n";
@@ -138,6 +184,14 @@ ChanServ::setRole('#fortress', 'Alice', 'MEMBER');
 $opRes = ChanServ::op('#fortress', 'Alice', 'CyberFox');
 assertTest($opRes['success'] === true && ChanServ::isOp('#fortress', 'Alice') === true, 'ChanServ granted OP to Alice');
 
+// Remove OP from second user
+$deopRes = ChanServ::deop('#fortress', 'Alice', 'CyberFox');
+assertTest($deopRes['success'] === true && ChanServ::isOp('#fortress', 'Alice') === false, 'ChanServ removed OP from Alice');
+
+// Check permission denied for deop
+$deopFailRes = ChanServ::deop('#fortress', 'CyberFox', 'Alice');
+assertTest($deopFailRes['success'] === false && ChanServ::isOp('#fortress', 'CyberFox') === true, 'ChanServ denied deop when requester is not OP');
+
 // Update channel topic
 $topicRes = ChanServ::setTopic('#fortress', 'Encryption and Security Fortress', 'CyberFox');
 assertTest($topicRes['success'] === true, 'ChanServ updated channel topic');
@@ -145,11 +199,25 @@ assertTest($topicRes['success'] === true, 'ChanServ updated channel topic');
 $chanInfo = ChanServ::getInfo('#fortress');
 assertTest($chanInfo['success'] === true && str_contains($chanInfo['message'], 'Encryption and Security Fortress'), 'ChanServ returned channel info with topic');
 
+$channelsList = ChanServ::listChannels();
+$foundFortress = false;
+foreach ($channelsList as $chanListItem) {
+    if ($chanListItem['channel_name'] === '#fortress') {
+        $foundFortress = true;
+        break;
+    }
+}
+assertTest($foundFortress === true, 'ChanServ::listChannels returns array containing registered channel #fortress');
+
 // Test 7: MOTDSERV (Message of the Day Service)
 echo "\n7. Testing MOTDSERV Message of the Day Bot...\n";
 $motdSet = MotdServ::setMotd('Welcome to Fortress Admin Network', 'AdminUser');
 assertTest($motdSet['success'] === true, 'MOTDSERV updated serverwide Message of the Day');
 assertTest(MotdServ::getMotd() === 'Welcome to Fortress Admin Network', 'MOTDSERV getMotd returned updated message');
+
+$motdInfo = MotdServ::getInfo();
+assertTest($motdInfo['success'] === true, 'MOTDSERV getInfo returned success');
+assertTest(str_contains($motdInfo['message'], 'Welcome to Fortress Admin Network') && str_contains($motdInfo['message'], 'MOTDSERV Message of the Day'), 'MOTDSERV getInfo returned correctly formatted info');
 
 // Test 8: MEMOSERV (Memo Service Bot)
 echo "\n8. Testing MEMOSERV Stored Offline Messaging...\n";

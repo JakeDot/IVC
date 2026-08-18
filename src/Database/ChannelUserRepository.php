@@ -101,4 +101,18 @@ class ChannelUserRepository
         $user = self::findByChannelAndNick($channelName, $nickname);
         return $user !== null && $user->isOp();
     }
+
+    /**
+     * Check if user is VOICE or OP in a channel.
+     */
+    public static function hasVoice(string $channelName, string $nickname): bool
+    {
+        $channel = ChannelRepository::findByChannelName($channelName);
+        if ($channel !== null && strcasecmp($channel->getOwnerNick(), trim($nickname)) === 0) {
+            return true;
+        }
+
+        $user = self::findByChannelAndNick($channelName, $nickname);
+        return $user !== null && ($user->isOp() || $user->isVoice());
+    }
 }

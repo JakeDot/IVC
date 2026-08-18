@@ -460,6 +460,7 @@ async function handleIncomingSignal(channelId, signal) {
 
                     if (activeTabId === channelId) {
                         renderChatMessages(tab);
+                        renderGallery(tab);
                     }
                 } catch (e) {
                     console.error('Failed to process file response signal:', e);
@@ -514,6 +515,9 @@ function addMessageToTab(channelId, msg) {
 
     if (activeTabId === channelId) {
         renderChatMessages(tab);
+        if (msg.type === 'file') {
+            renderGallery(tab);
+        }
     } else {
         tab.unreadCount = (tab.unreadCount || 0) + 1;
         renderTabsNav();
@@ -703,6 +707,7 @@ async function loadChannelSharedFiles(channelId, key = '') {
                 tab.messages.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
                 if (activeTabId === channelId) {
                     renderChatMessages(tab);
+                        renderGallery(tab);
                 }
             }
         }
@@ -998,4 +1003,132 @@ async function handleChatSubmit() {
         text: text,
         type: 'self'
     });
+}
+function setupDataChannel(channelId, peerId, channel) {
+    const tab = openTabs[channelId];
+    if (!tab) return;
+
+    channel.onmessage = async (event) => {
+        if (typeof event.data === 'string' && event.data.trim().startsWith('{')) {
+            try {
+                const parsed = JSON.parse(event.data);
+                if (parsed.type === 'file-request' && parsed.fileId) {
+                    const localFile = localSharedFilesMap[parsed.fileId];
+                    if (localFile && localFile.blob) {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            if (channel.readyState === 'open') {
+                                channel.send(JSON.stringify({
+                                    type: 'file-response',
+                                    fileId: parsed.fileId,
+                                    fileName: localFile.metadata.name || localFile.file.name,
+                                    fileType: localFile.metadata.type || localFile.file.type,
+                                    dataUrl: reader.result
+                                }));
+                            }
+                        };
+                        reader.readAsDataURL(localFile.blob);
+                    }
+                    return;
+                }
+
+                if (parsed.type === 'file-response' && parsed.fileId && parsed.dataUrl) {
+                    try {
+                        const blobRes = await fetch(parsed.dataUrl);
+                        const blob = await blobRes.blob();
+                        localSharedFilesMap[parsed.fileId] = {
+                            blob: blob,
+                            file: blob,
+                            metadata: {
+                                id: parsed.fileId,
+                                name: parsed.fileName || 'download',
+                                type: parsed.fileType || blob.type
+                            }
+                        };
+
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = parsed.fileName || 'download';
+                        a.click();
+                        setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+                        if (activeTabId === channelId) {
+                            renderChatMessages(tab);
+                            renderGallery(tab);
+                        }
+                    } catch (e) {
+                        console.error('Error handling DataChannel file response:', e);
+                    }
+                    return;
+                }
+            } catch (e) {
+                // Normal text message
+            }
+        }
+
+        const nick = tab.peerNicks[peerId] || peerId;
+        addMessageToTab(channelId, {
+            sender: nick,
+            text: event.data,
+            type: 'peer'
+        });
+    };
+
+    channel.onopen = () => {
+        addMessageToTab(channelId, {
+            sender: 'SYSTEM',
+            text: `Encrypted DataChannel active with ${tab.peerNicks[peerId] || peerId}.`,
+            type: 'system'
+        });
+    };
+}
+
+
+async function sendIrcCommand(channel, text) {
+    try {
+        const res = await fetch('/api/irc.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': window.FORTRESS_CSRF_TOKEN || ''
+            },
+            body: JSON.stringify({
+                sender: myNickname,
+                channel: channel,
+                text: text,
+                broadcast: false
+            })
+        });
+        return await res.json();
+    } catch (err) {
+        console.error('Error sending IRC command:', err);
+        return null;
+    }
+}
+
+async function performIrcServiceCommands(channelId, nickPassword, chanKey, isCreate) {
+    if (nickPassword) {
+        let res = await sendIrcCommand('NICKSERV', `IDENTIFY ${nickPassword}`);
+        if (res && res.response) {
+            if (res.response.includes('is not registered')) {
+                res = await sendIrcCommand('NICKSERV', `REGISTER ${nickPassword}`);
+            }
+            addMessageToTab(channelId, {
+                sender: 'NICKSERV',
+                text: res.response,
+                type: 'bot'
+            });
+        }
+    }
+    if (isCreate && chanKey) {
+        let res = await sendIrcCommand('CHANSERV', `REGISTER ${channelId} ${chanKey}`);
+        if (res && res.response) {
+            addMessageToTab(channelId, {
+                sender: 'CHANSERV',
+                text: res.response,
+                type: 'bot'
+            });
+        }
+    }
 }

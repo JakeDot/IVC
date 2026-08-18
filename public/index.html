@@ -64,11 +64,17 @@
                         </div>
                     </div>
 
-                    <div class="input-group">
-                        <label for="nickname-input">Your IRC Nickname (Generated or Custom)</label>
-                        <div class="nickname-box">
-                            <input type="text" id="nickname-input" placeholder="e.g. CyberFox" autocomplete="off">
-                            <button id="btn-random-name" class="btn btn-secondary btn-sm" type="button">🎲 Randomize Nick</button>
+                    <div class="input-row">
+                        <div class="input-group">
+                            <label for="nickname-input">Your IRC Nickname (Generated or Custom)</label>
+                            <div class="nickname-box">
+                                <input type="text" id="nickname-input" placeholder="e.g. CyberFox" autocomplete="off">
+                                <button id="btn-random-name" class="btn btn-secondary btn-sm" type="button">🎲 Randomize Nick</button>
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label for="nick-password-input">NickServ Password (Optional)</label>
+                            <input type="password" id="nick-password-input" placeholder="For Registered Nicks" autocomplete="off" spellcheck="false">
                         </div>
                     </div>
 
@@ -144,11 +150,23 @@
                             Channel initialized. Type <code>/help</code> for IRC commands or <code>/theme &lt;name&gt;</code> for themes.
                         </div>
                     </div>
-                    <div class="user-list-sidebar">
-                        <h4>Nicks in Channel</h4>
-                        <ul id="user-list" class="user-list">
-                            <!-- Populated dynamically -->
-                        </ul>
+                    <div class="sidebar-container">
+                        <div class="sidebar-tabs">
+                            <button id="tab-nicks" class="sidebar-tab active">Nicks</button>
+                            <button id="tab-gallery" class="sidebar-tab">Gallery</button>
+                        </div>
+                        <div id="user-list-sidebar" class="user-list-sidebar">
+                            <h4>Nicks in Channel</h4>
+                            <ul id="user-list" class="user-list">
+                                <!-- Populated dynamically -->
+                            </ul>
+                        </div>
+                        <div id="gallery-sidebar" class="gallery-sidebar hidden">
+                            <h4>Media Gallery</h4>
+                            <div id="media-gallery" class="media-gallery">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="chat-input-area">

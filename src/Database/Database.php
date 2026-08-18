@@ -222,6 +222,16 @@ class Database
                 registered_at INT NOT NULL
             );",
 
+            // Table for BOTSERV channel/global bot assignments
+            "CREATE TABLE IF NOT EXISTS botserv_bots (
+                target VARCHAR(64) NOT NULL,
+                bot_nick VARCHAR(64) NOT NULL,
+                service_name VARCHAR(64) NOT NULL,
+                assigned_by VARCHAR(64) NOT NULL,
+                assigned_at INT NOT NULL,
+                PRIMARY KEY (target, bot_nick)
+            );",
+
             // Table for channel access / roles (OP, VOICE, MEMBER)
             "CREATE TABLE IF NOT EXISTS channel_users (
                 id {$autoInc},
@@ -277,6 +287,7 @@ class Database
 
         // Initialize default serverwide settings if not present
         self::seedDefaultSettings();
+        self::registerDefaultForeignServices();
     }
 
     private static function seedDefaultSettings(): void
@@ -307,12 +318,30 @@ class Database
         }
     }
 
+    private static function registerDefaultForeignServices(): void
+    {
+        $db = self::getConnection();
+        $time = time();
+        $query = self::$driver === 'sqlite' ?
+            "INSERT OR IGNORE INTO foreign_services (service_name, host, api_endpoint, status, registered_at, last_ping, metadata) VALUES
+            ('GEMINI', 'ai.external-domain.org', 'https://api.external-domain.org/gemini', 'ACTIVE', $time, $time, 'Google Gemini Chat Bot'),
+            ('CLAUDE', 'ai.external-domain.org', 'https://api.external-domain.org/claude', 'ACTIVE', $time, $time, 'Anthropic Claude Chat Bot'),
+            ('CHATGPT', 'ai.external-domain.org', 'https://api.external-domain.org/chatgpt', 'ACTIVE', $time, $time, 'OpenAI ChatGPT Bot'),
+            ('COPILOT', 'ai.external-domain.org', 'https://api.external-domain.org/copilot', 'ACTIVE', $time, $time, 'Microsoft Copilot Chat Bot')" :
+            "INSERT IGNORE INTO foreign_services (service_name, host, api_endpoint, status, registered_at, last_ping, metadata) VALUES
+            ('GEMINI', 'ai.external-domain.org', 'https://api.external-domain.org/gemini', 'ACTIVE', $time, $time, 'Google Gemini Chat Bot'),
+            ('CLAUDE', 'ai.external-domain.org', 'https://api.external-domain.org/claude', 'ACTIVE', $time, $time, 'Anthropic Claude Chat Bot'),
+            ('CHATGPT', 'ai.external-domain.org', 'https://api.external-domain.org/chatgpt', 'ACTIVE', $time, $time, 'OpenAI ChatGPT Bot'),
+            ('COPILOT', 'ai.external-domain.org', 'https://api.external-domain.org/copilot', 'ACTIVE', $time, $time, 'Microsoft Copilot Chat Bot')";
+        $db->exec($query);
+    }
+
     public static function resetDatabase(): void
     {
         if (self::$pdo === null) {
             self::getConnection();
         }
-        self::$pdo->exec("DELETE FROM irc_settings;");
+
         self::$pdo->exec("DELETE FROM nameserv_nicks;");
         self::$pdo->exec("DELETE FROM chanserv_channels;");
         self::$pdo->exec("DELETE FROM channel_users;");
@@ -321,5 +350,6 @@ class Database
         self::$pdo->exec("DELETE FROM foreign_services;");
         self::$pdo->exec("DELETE FROM shared_files;");
         self::seedDefaultSettings();
+        self::registerDefaultForeignServices();
     }
 }

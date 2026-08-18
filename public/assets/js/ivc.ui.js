@@ -28,6 +28,14 @@ const chatPanel = document.getElementById('chat-panel');
 const chatChannelTitle = document.getElementById('chat-channel-title');
 const channelTopicBar = document.getElementById('channel-topic-bar');
 const chatMessages = document.getElementById('chat-messages');
+
+// Sidebar Tabs & Panels
+const tabNicks = document.getElementById('tab-nicks');
+const tabGallery = document.getElementById('tab-gallery');
+const userListSidebar = document.getElementById('user-list-sidebar');
+const gallerySidebar = document.getElementById('gallery-sidebar');
+const mediaGallery = document.getElementById('media-gallery');
+
 const userList = document.getElementById('user-list');
 const chatInput = document.getElementById('chat-input');
 const btnSendChat = document.getElementById('btn-send-chat');
@@ -68,6 +76,9 @@ const btnImportThemes = document.getElementById('btn-import-themes');
 const importThemeFile = document.getElementById('import-theme-file');
 
 let editingCustomThemeId = null;
+
+// Store active object URLs to prevent memory leaks
+const activeMediaUrls = new Set();
 
 
 
@@ -127,6 +138,9 @@ function updateTabUI(channelId) {
 
     // Render User List
     renderUserList(tab);
+
+        // Render Gallery
+        renderGallery(tab);
 
     // Render Video Grid
     renderVideoGrid(channelId);
@@ -194,6 +208,30 @@ function renderChatMessages(tab) {
 
             msgDiv.appendChild(senderTag);
             msgDiv.appendChild(fileCard);
+
+                // Add inline media preview if local blob exists and is media
+                if (isReady && localSharedFilesMap[msg.fileId].blob) {
+                    const localFile = localSharedFilesMap[msg.fileId];
+                    const fileType = localFile.metadata.type || msg.fileType || '';
+                    if (fileType.startsWith('image/') || fileType.startsWith('video/')) {
+                        const previewDiv = document.createElement('div');
+                        previewDiv.className = 'file-preview';
+
+                        const mediaUrl = URL.createObjectURL(localFile.blob);
+                        if (fileType.startsWith('image/')) {
+                            const img = document.createElement('img');
+                            img.src = mediaUrl;
+                            previewDiv.appendChild(img);
+                        } else if (fileType.startsWith('video/')) {
+                            const video = document.createElement('video');
+                            video.src = mediaUrl;
+                            video.controls = true;
+                            previewDiv.appendChild(video);
+                        }
+                        msgDiv.appendChild(previewDiv);
+                    }
+                }
+
             chatMessages.appendChild(msgDiv);
         } else {
             const msgDiv = document.createElement('div');
@@ -482,4 +520,80 @@ function stopScreenSharing(tab) {
     btnShareScreen.setAttribute('aria-pressed', 'false');
     btnShareScreen.setAttribute('aria-label', 'Share Screen');
     btnShareScreen.setAttribute('title', 'Share Screen');
+}
+function renderGallery(tab) {
+    if (!mediaGallery) return;
+
+    // Revoke previously created object URLs
+    activeMediaUrls.forEach(url => URL.revokeObjectURL(url));
+    activeMediaUrls.clear();
+
+    mediaGallery.innerHTML = '';
+
+    const mediaMessages = tab.messages.filter(msg => {
+        const fileType = msg.fileType || '';
+        return msg.type === 'file' && (fileType.startsWith('image/') || fileType.startsWith('video/'));
+    });
+
+    if (mediaMessages.length === 0) {
+        mediaGallery.innerHTML = '<div style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 10px;">No media shared yet.</div>';
+        return;
+    }
+
+    mediaMessages.forEach(msg => {
+        const fileType = msg.fileType || '';
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'gallery-item';
+
+        const isReady = !!localSharedFilesMap[msg.fileId];
+
+        if (isReady && localSharedFilesMap[msg.fileId].blob) {
+            const localFile = localSharedFilesMap[msg.fileId];
+            const mediaUrl = URL.createObjectURL(localFile.blob);
+            activeMediaUrls.add(mediaUrl);
+
+            if (fileType.startsWith('image/')) {
+                const img = document.createElement('img');
+                img.src = mediaUrl;
+                itemDiv.appendChild(img);
+            } else if (fileType.startsWith('video/')) {
+                const video = document.createElement('video');
+                video.src = mediaUrl;
+                itemDiv.appendChild(video);
+
+                const playIcon = document.createElement('div');
+                playIcon.className = 'play-icon';
+                playIcon.innerHTML = '▶';
+                itemDiv.appendChild(playIcon);
+            }
+
+            itemDiv.addEventListener('click', () => {
+                const a = document.createElement('a');
+                a.href = mediaUrl;
+                a.download = msg.fileName || 'media';
+                a.click();
+            });
+        } else {
+            const placeholderIcon = document.createElement('div');
+            placeholderIcon.style.fontSize = '2rem';
+            placeholderIcon.innerHTML = fileType.startsWith('image/') ? '🖼️' : '🎥';
+            itemDiv.appendChild(placeholderIcon);
+
+            const statusText = document.createElement('div');
+            statusText.style.position = 'absolute';
+            statusText.style.bottom = '4px';
+            statusText.style.fontSize = '0.65rem';
+            statusText.style.background = 'rgba(0,0,0,0.6)';
+            statusText.style.padding = '2px 4px';
+            statusText.style.borderRadius = '4px';
+            statusText.innerHTML = msg.cloudLink ? '☁️ Cloud' : '📥 Click to DL';
+            itemDiv.appendChild(statusText);
+
+            itemDiv.addEventListener('click', () => {
+                handleFileDownloadOrRequest(tab.id, msg.fileId, msg.sharerClientId, msg.fileName, msg.fileType, msg.cloudLink, null);
+            });
+        }
+
+        mediaGallery.appendChild(itemDiv);
+    });
 }

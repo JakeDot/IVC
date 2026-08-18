@@ -21,6 +21,27 @@ async function initApp() {
         console.error("Failed to load initial config", e);
     }
 
+    // Sidebar Tabs Toggle
+    if (tabNicks && tabGallery) {
+        tabNicks.addEventListener('click', () => {
+            tabNicks.classList.add('active');
+            tabGallery.classList.remove('active');
+            userListSidebar.classList.remove('hidden');
+            gallerySidebar.classList.add('hidden');
+        });
+        tabGallery.addEventListener('click', () => {
+            tabGallery.classList.add('active');
+            tabNicks.classList.remove('active');
+            gallerySidebar.classList.remove('hidden');
+            userListSidebar.classList.add('hidden');
+
+            // Re-render gallery when tab is switched to ensure it's up to date
+            if (activeTabId && openTabs[activeTabId]) {
+                renderGallery(openTabs[activeTabId]);
+            }
+        });
+    }
+
     const initialChan = parseChannelFromUrl();
     openTab(initialChan, false);
     openTab('#stats', false); // Always include #stats room tab

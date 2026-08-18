@@ -503,19 +503,43 @@
         if (hash.startsWith('#')) {
             return normalizeChannel(hash);
         }
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('room')) {
+            return normalizeChannel(params.get('room'));
+        }
+        const pathSegments = window.location.pathname.split('/').filter(p => p.length > 0 && !p.includes('.'));
+        if (pathSegments.length > 0 && pathSegments[0] !== 'api') {
+            return normalizeChannel(pathSegments[0]);
+        }
         if (window.FORTRESS_PRELOAD_ROOM) {
             return normalizeChannel(window.FORTRESS_PRELOAD_ROOM);
         }
         return '#lobby';
     }
 
+    async function loadConfig() {
+        try {
+            if (!window.FORTRESS_CSRF_TOKEN) {
+                const response = await fetch('/api/config.php');
+                if (response.ok) {
+                    const data = await response.json();
+                    window.FORTRESS_CSRF_TOKEN = data.csrfToken;
+                }
+            }
+        } catch (e) {
+            console.warn("Could not load backend config. Running in static mode.");
+        }
+    }
+
     // Initialize Theme System & Tabs on startup
     initThemeSystem();
 
-    const initialChan = parseChannelFromUrl();
-    openTab(initialChan, false);
-    openTab('#stats', false); // Always include #stats room tab
-    switchToTab(initialChan);
+    loadConfig().then(() => {
+        const initialChan = parseChannelFromUrl();
+        openTab(initialChan, false);
+        openTab('#stats', false); // Always include #stats room tab
+        switchToTab(initialChan);
+    });
 
     // Window Hashchange Listener
     window.addEventListener('hashchange', () => {

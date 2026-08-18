@@ -78,18 +78,30 @@ btnOpenNewTab.addEventListener('click', () => {
     window.scrollTo({ top: roomLobby.offsetTop, behavior: 'smooth' });
 });
 
-btnCreateRoom.addEventListener('click', () => {
+btnCreateRoom.addEventListener('click', async () => {
     const randChan = '#room-' + Math.random().toString(36).substring(2, 8);
     roomInput.value = randChan;
+
+    const nickPass = document.getElementById('nick-password-input')?.value.trim();
+    if (nickPass) {
+        await performIrcServiceCommands(randChan, nickPass, keyInput.value.trim(), true);
+    }
+
     openTab(randChan, true, keyInput.value.trim());
 });
 
-btnJoinRoom.addEventListener('click', () => {
+btnJoinRoom.addEventListener('click', async () => {
     const chan = normalizeChannel(roomInput.value.trim());
     if (!chan) {
         alert('Please enter a channel name (e.g. #general).');
         return;
     }
+
+    const nickPass = document.getElementById('nick-password-input')?.value.trim();
+    if (nickPass) {
+        await performIrcServiceCommands(chan, nickPass, keyInput.value.trim(), false);
+    }
+
     openTab(chan, true, keyInput.value.trim());
 });
 

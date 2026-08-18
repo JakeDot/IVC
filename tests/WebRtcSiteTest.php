@@ -157,6 +157,14 @@ ChanServ::setRole('#fortress', 'Alice', 'MEMBER');
 $opRes = ChanServ::op('#fortress', 'Alice', 'CyberFox');
 assertTest($opRes['success'] === true && ChanServ::isOp('#fortress', 'Alice') === true, 'ChanServ granted OP to Alice');
 
+// Remove OP from second user
+$deopRes = ChanServ::deop('#fortress', 'Alice', 'CyberFox');
+assertTest($deopRes['success'] === true && ChanServ::isOp('#fortress', 'Alice') === false, 'ChanServ removed OP from Alice');
+
+// Check permission denied for deop
+$deopFailRes = ChanServ::deop('#fortress', 'CyberFox', 'Alice');
+assertTest($deopFailRes['success'] === false && ChanServ::isOp('#fortress', 'CyberFox') === true, 'ChanServ denied deop when requester is not OP');
+
 // Update channel topic
 $topicRes = ChanServ::setTopic('#fortress', 'Encryption and Security Fortress', 'CyberFox');
 assertTest($topicRes['success'] === true, 'ChanServ updated channel topic');

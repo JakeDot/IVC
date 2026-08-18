@@ -458,6 +458,30 @@ class IrcServices
                 $res = ChanServ::deop($chan, $target, $senderNick);
                 break;
 
+            case 'VOICE':
+                $chan = !empty($args[0]) && str_starts_with($args[0], '#') ? $args[0] : $channel;
+                $target = !empty($args[0]) && !str_starts_with($args[0], '#') ? $args[0] : ($args[1] ?? '');
+                $res = ChanServ::voice($chan, $target, $senderNick);
+                break;
+
+            case 'DEVOICE':
+                $chan = !empty($args[0]) && str_starts_with($args[0], '#') ? $args[0] : $channel;
+                $target = !empty($args[0]) && !str_starts_with($args[0], '#') ? $args[0] : ($args[1] ?? '');
+                $res = ChanServ::devoice($chan, $target, $senderNick);
+                break;
+
+            case 'MODE':
+            case 'MODES':
+                $chan = !empty($args[0]) && str_starts_with($args[0], '#') ? $args[0] : $channel;
+                $modes = !empty($args[0]) && !str_starts_with($args[0], '#') ? $args[0] : ($args[1] ?? '');
+                if (empty($modes)) {
+                    $info = ChanServ::getInfo($chan);
+                    $res = ['message' => $info['message']]; // Info includes modes
+                } else {
+                    $res = ChanServ::setModes($chan, $modes, $senderNick);
+                }
+                break;
+
             case 'TOPIC':
                 $chan = !empty($args[0]) && str_starts_with($args[0], '#') ? $args[0] : $channel;
                 $topic = trim(implode(' ', !empty($args[0]) && str_starts_with($args[0], '#') ? array_slice($args, 1) : $args));
@@ -470,7 +494,7 @@ class IrcServices
                 break;
 
             default:
-                $res = ['message' => "CHANSERV: Unknown command '{$cmd}'. Use REGISTER, OP, DEOP, TOPIC, or INFO."];
+                $res = ['message' => "CHANSERV: Unknown command '{$cmd}'. Use REGISTER, OP, DEOP, VOICE, DEVOICE, MODE, TOPIC, or INFO."];
                 break;
         }
 

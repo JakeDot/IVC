@@ -107,16 +107,20 @@ for ($i = 0; $i < 501; $i++) {
     RateLimiter::check("client-$i", 5, -1);
 }
 
+
 $reflection = new ReflectionClass(RateLimiter::class);
-$property = $reflection->getProperty('buckets');
-$property->setAccessible(true);
-$buckets = $property->getValue();
+$method = $reflection->getMethod('getStateFilePath');
+$method->setAccessible(true);
+$filePath = $method->invoke(null);
+
+$buckets = json_decode(file_get_contents($filePath), true);
 assertTest(count($buckets) === 501, 'Created 501 expired rate limit buckets');
 
 RateLimiter::check('client-trigger-gc', 5, 60);
 
-$buckets = $property->getValue();
+$buckets = json_decode(file_get_contents($filePath), true);
 assertTest(count($buckets) === 1, 'Expired buckets purged by gc() when threshold > 500 is reached');
+
 
 // Test 3: Token Manager
 echo "\n3. Testing Token Manager & Room Session Keys...\n";

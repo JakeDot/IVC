@@ -74,6 +74,11 @@ class ChannelUser
         return $this->role === 'OP';
     }
 
+    public function isVoice(): bool
+    {
+        return $this->role === 'VOICE' || $this->role === 'OP';
+    }
+
     public function getAddedAt(): int
     {
         return $this->addedAt;

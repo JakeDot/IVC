@@ -273,6 +273,15 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
             $text = trim($msgParts[1], ':');
 
             if (str_starts_with($target, '#')) {
+                // Check if channel is moderated (+m)
+                $chanModel = \Fortress\Database\ChannelRepository::findByChannelName($target);
+                if ($chanModel !== null && str_contains($chanModel->getModes(), 'm')) {
+                    if (!\Fortress\Database\ChannelUserRepository::hasVoice($target, $nick)) {
+                        fwrite($client, ":server 404 $nick $target :Cannot send to channel (+m)\r\n");
+                        return;
+                    }
+                }
+
                 // Channel message
                 RoomManager::broadcastSignal($target, $nick, [
                     'type' => 'chat',
@@ -481,7 +490,24 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
             }
 
             if (str_starts_with($target, '#')) {
-                fwrite($client, ":server 324 $nick $target +nt\r\n");
+                $modes = isset($modeParts[1]) ? trim($modeParts[1]) : '';
+                if (empty($modes)) {
+                    // Fetch current modes
+                    $info = \Fortress\IRC\ChanServ::getInfo($target);
+                    if ($info['success'] && isset($info['data']['modes'])) {
+                        fwrite($client, ":server 324 $nick $target {$info['data']['modes']}\r\n");
+                    } else {
+                        fwrite($client, ":server 324 $nick $target +nt\r\n"); // fallback
+                    }
+                } else {
+                    // Try to set modes using ChanServ logic
+                    $res = \Fortress\IRC\ChanServ::setModes($target, $modes, $nick);
+                    if ($res['success']) {
+                        broadcastToChannel($channels, $target, ":$nick MODE $target $modes\r\n");
+                    } else {
+                        fwrite($client, ":server 482 $nick $target :You're not channel operator\r\n");
+                    }
+                }
             } else {
                 if (strtolower($target) === strtolower($nick)) {
                     fwrite($client, ":server 221 $nick +i\r\n");

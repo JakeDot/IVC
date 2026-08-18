@@ -337,6 +337,160 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
             }
             break;
 
+        case 'CAP':
+            $capParts = explode(' ', $args, 2);
+            $subCmd = strtoupper($capParts[0]);
+
+            if ($subCmd === 'LS') {
+                fwrite($client, ":server CAP * LS :\r\n");
+            } elseif ($subCmd === 'REQ') {
+                $requested = isset($capParts[1]) ? trim($capParts[1], ':') : '';
+                fwrite($client, ":server CAP * NAK :$requested\r\n");
+            } elseif ($subCmd === 'END') {
+                // Capabilities negotiation ended.
+            }
+            break;
+
+        case 'TOPIC':
+            $nick = $clientData[$clientId]['nick'];
+            if (!$nick) return;
+
+            $topicParts = explode(' ', $args, 2);
+            $targetChan = trim($topicParts[0]);
+
+            if (empty($targetChan)) {
+                fwrite($client, ":server 461 $nick TOPIC :Not enough parameters\r\n");
+                return;
+            }
+
+            if (count($topicParts) === 1) {
+                // Get topic
+                $info = \Fortress\IRC\ChanServ::getInfo($targetChan);
+                if (isset($info['data']) && isset($info['data']['topic']) && $info['data']['topic']) {
+                    fwrite($client, ":server 332 $nick $targetChan :{$info['data']['topic']}\r\n");
+                } else {
+                    fwrite($client, ":server 331 $nick $targetChan :No topic is set\r\n");
+                }
+            } else {
+                // Set topic
+                $newTopic = trim($topicParts[1], ':');
+                $result = \Fortress\IRC\ChanServ::setTopic($targetChan, $newTopic, $nick);
+                // We'll broadcast the change if ChanServ accepted it (or even if it's just ephemeral for now)
+                // For simplicity, we just broadcast it to everyone in the channel right away.
+                broadcastToChannel($channels, $targetChan, ":$nick TOPIC $targetChan :$newTopic\r\n");
+            }
+            break;
+
+        case 'WHO':
+            $nick = $clientData[$clientId]['nick'];
+            if (!$nick) return;
+
+            $target = trim($args);
+            if (empty($target)) {
+                fwrite($client, ":server 315 $nick $target :End of /WHO list\r\n");
+                return;
+            }
+
+            if (str_starts_with($target, '#') && isset($channels[$target])) {
+                foreach ($channels[$target] as $cid => $c) {
+                    $cNick = $clientData[$cid]['nick'];
+                    $cUser = $clientData[$cid]['user'] ?: 'user';
+                    fwrite($client, ":server 352 $nick $target $cUser 127.0.0.1 server $cNick H :0 Real Name\r\n");
+                }
+            }
+            fwrite($client, ":server 315 $nick $target :End of /WHO list\r\n");
+            break;
+
+        case 'WHOIS':
+            $nick = $clientData[$clientId]['nick'];
+            if (!$nick) return;
+
+            $target = trim($args);
+            if (empty($target)) {
+                fwrite($client, ":server 431 $nick :No nickname given\r\n");
+                return;
+            }
+
+            $info = \Fortress\IRC\NameServ::getInfo($target);
+            if ($info['success']) {
+                $user = 'user';
+                foreach ($clientData as $cdata) {
+                    if (strtolower($cdata['nick']) === strtolower($target)) {
+                        $user = $cdata['user'] ?: 'user';
+                        break;
+                    }
+                }
+                fwrite($client, ":server 311 $nick $target $user 127.0.0.1 * :Real Name\r\n");
+                fwrite($client, ":server 312 $nick $target server :Fortress IRC Server\r\n");
+                fwrite($client, ":server 318 $nick $target :End of /WHOIS list\r\n");
+            } else {
+                fwrite($client, ":server 401 $nick $target :No such nick/channel\r\n");
+            }
+            break;
+
+        case 'LIST':
+            $nick = $clientData[$clientId]['nick'];
+            if (!$nick) return;
+
+            fwrite($client, ":server 321 $nick Channel :Users  Name\r\n");
+            $chans = \Fortress\IRC\ChanServ::listChannels();
+            foreach ($chans as $c) {
+                // Since this is ephemeral, we can also check $channels
+                $count = isset($channels[$c['channel_name']]) ? count($channels[$c['channel_name']]) : 0;
+                $topic = $c['topic'] ?: '';
+                fwrite($client, ":server 322 $nick {$c['channel_name']} $count :$topic\r\n");
+            }
+            fwrite($client, ":server 323 $nick :End of /LIST\r\n");
+            break;
+
+        case 'NAMES':
+            $nick = $clientData[$clientId]['nick'];
+            if (!$nick) return;
+
+            $targetChan = trim($args);
+            if (empty($targetChan)) {
+                fwrite($client, ":server 366 $nick * :End of /NAMES list\r\n");
+                return;
+            }
+
+            $chans = explode(',', $targetChan);
+            foreach ($chans as $c) {
+                $c = trim($c);
+                if (isset($channels[$c])) {
+                    $users = [];
+                    foreach ($channels[$c] as $cid => $cl) {
+                        $users[] = $clientData[$cid]['nick'];
+                    }
+                    $userList = implode(' ', $users);
+                    fwrite($client, ":server 353 $nick = $c :$userList\r\n");
+                }
+                fwrite($client, ":server 366 $nick $c :End of /NAMES list\r\n");
+            }
+            break;
+
+        case 'MODE':
+            $nick = $clientData[$clientId]['nick'];
+            if (!$nick) return;
+
+            $modeParts = explode(' ', $args, 2);
+            $target = trim($modeParts[0]);
+
+            if (empty($target)) {
+                fwrite($client, ":server 461 $nick MODE :Not enough parameters\r\n");
+                return;
+            }
+
+            if (str_starts_with($target, '#')) {
+                fwrite($client, ":server 324 $nick $target +nt\r\n");
+            } else {
+                if (strtolower($target) === strtolower($nick)) {
+                    fwrite($client, ":server 221 $nick +i\r\n");
+                } else {
+                    fwrite($client, ":server 502 $nick :Cant change mode for other users\r\n");
+                }
+            }
+            break;
+
         case 'QUIT':
             $nick = $clientData[$clientId]['nick'];
             $reason = trim($args, ':');

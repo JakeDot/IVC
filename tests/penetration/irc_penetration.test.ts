@@ -2,6 +2,9 @@ import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { spawn, ChildProcess } from 'child_process';
 import * as net from 'net';
 
+/**
+ * @Service("irc-daemon")
+ */
 describe('IRC Penetration Tests', () => {
   let serverProcess: ChildProcess;
 

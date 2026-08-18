@@ -2,6 +2,9 @@ import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { spawn, ChildProcess } from 'child_process';
 import * as http from 'http';
 
+/**
+ * @Service("webrtc-signaling-server")
+ */
 describe('WebRTC Penetration Tests', () => {
   let serverProcess: ChildProcess;
 

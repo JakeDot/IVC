@@ -132,8 +132,18 @@ assertTest($idRes['success'] === true, 'NAMESERV successfully identified CyberFo
 $idFail = NameServ::identify('CyberFox', 'WrongPassword');
 assertTest($idFail['success'] === false, 'NAMESERV rejected incorrect password');
 
+assertTest(NameServ::isIdentified('CyberFox') === true, 'NameServ::isIdentified returns true for identified user CyberFox');
+assertTest(NameServ::isIdentified('NonExistentUser') === false, 'NameServ::isIdentified returns false for non-existent user');
+
 $infoRes = NameServ::getInfo('CyberFox');
 assertTest($infoRes['success'] === true && str_contains($infoRes['message'], 'Registered:'), 'NAMESERV returned nick registration info');
+
+NameServ::register('ExpiredUser', 'pass', 'test@example.com');
+// Manually set last_seen to 2 hours ago
+\Fortress\Database\UserNickRepository::updateIdentification('ExpiredUser', false, time() - 7200);
+$purged = NameServ::purgeExpired(3600);
+assertTest($purged === 1, 'NameServ::purgeExpired successfully purged 1 expired nickname');
+assertTest(NameServ::isRegistered('ExpiredUser') === false, 'ExpiredUser was correctly deleted by purgeExpired');
 
 // Test 6: CHANSERV (Channel Service)
 echo "\n6. Testing CHANSERV Channel Management & OP Assignment...\n";

@@ -258,6 +258,16 @@ class Database
                 registered_at INT NOT NULL,
                 last_ping INT NOT NULL,
                 metadata TEXT NULL
+            );",
+
+            // Table for channel shared files with E2EE metadata
+            "CREATE TABLE IF NOT EXISTS shared_files (
+                id VARCHAR(64) PRIMARY KEY,
+                channel_name VARCHAR(64) NOT NULL,
+                sharer_client_id VARCHAR(64) NOT NULL,
+                encrypted_metadata TEXT NOT NULL,
+                cloud_link TEXT NULL,
+                created_at INT NOT NULL
             );"
         ];
 
@@ -309,6 +319,7 @@ class Database
         self::$pdo->exec("DELETE FROM memoserv_memos;");
         self::$pdo->exec("DELETE FROM hostserv_vhosts;");
         self::$pdo->exec("DELETE FROM foreign_services;");
+        self::$pdo->exec("DELETE FROM shared_files;");
         self::seedDefaultSettings();
     }
 }

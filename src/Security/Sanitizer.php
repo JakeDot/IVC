@@ -72,7 +72,7 @@ final class Sanitizer
         }
 
         $type = filter_var($data['type'], FILTER_SANITIZE_SPECIAL_CHARS);
-        $allowedTypes = ['join', 'leave', 'offer', 'answer', 'ice-candidate', 'ping', 'chat', 'command'];
+        $allowedTypes = ['join', 'leave', 'offer', 'answer', 'ice-candidate', 'ping', 'chat', 'command', 'file-shared', 'file-request', 'file-response'];
 
         if (!in_array($type, $allowedTypes, true)) {
             return null;

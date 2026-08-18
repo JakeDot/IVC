@@ -51,6 +51,10 @@ class IrcServices
                 return self::handleMemoServCommand($senderNick, $channel, $cmd, $args);
             }
 
+            if ($targetService === HelpServ::SERVICE_NAME) {
+                return self::handleHelpServCommand($senderNick, $channel, $cmd, $args);
+            }
+
             if ($targetService === HostServ::SERVICE_NAME) {
                 return self::handleHostServCommand($senderNick, $channel, $cmd, $args);
             }
@@ -107,6 +111,12 @@ class IrcServices
             $cmd = strtoupper($parts[1] ?? '');
             $args = array_slice($parts, 2);
             return self::handleServServCommand($senderNick, $channel, $cmd, $args);
+        }
+
+        if ($first === '/helpserv') {
+            $cmd = strtoupper($parts[1] ?? '');
+            $args = array_slice($parts, 2);
+            return self::handleHelpServCommand($senderNick, $channel, $cmd, $args);
         }
 
         // 2. Theme Command
@@ -511,6 +521,19 @@ class IrcServices
         return [
             'is_service_command' => true,
             'service' => HostServ::SERVICE_NAME,
+            'response' => $res['message'],
+            'channel' => $channel
+        ];
+    }
+
+    private static function handleHelpServCommand(string $senderNick, string $channel, string $cmd, array $args): array
+    {
+        $topic = $cmd ?: ($args[0] ?? '');
+        $res = HelpServ::getHelp($topic);
+
+        return [
+            'is_service_command' => true,
+            'service' => HelpServ::SERVICE_NAME,
             'response' => $res['message'],
             'channel' => $channel
         ];

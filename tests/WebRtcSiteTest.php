@@ -25,6 +25,7 @@ require_once __DIR__ . '/../src/IRC/MemoServ.php';
 require_once __DIR__ . '/../src/IRC/HostServ.php';
 require_once __DIR__ . '/../src/IRC/ServiceRegistry.php';
 require_once __DIR__ . '/../src/IRC/ServServ.php';
+require_once __DIR__ . '/../src/IRC/HelpServ.php';
 require_once __DIR__ . '/../src/IRC/IrcServices.php';
 require_once __DIR__ . '/../src/Signaling/RoomManager.php';
 

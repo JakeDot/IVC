@@ -55,7 +55,7 @@ Direct P2P WebRTC media streaming and end-to-end encrypted chat with real-time r
        RewriteEngine On
        RewriteCond %{REQUEST_FILENAME} !-f
        RewriteCond %{REQUEST_FILENAME} !-d
-       RewriteRule ^ index.php [L]
+       RewriteRule ^ index.html [L]
    </IfModule>
    ```
 
@@ -73,14 +73,14 @@ server {
     server_name chat.yourdomain.com;
 
     root /var/www/ivc/public;
-    index index.php;
+    index index.html;
 
     # Security Headers provided by PHP Fortress layer, but can also be enforced here
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "DENY" always;
 
     location / {
-        try_files $uri $uri/ /index.php?$query_string;
+        try_files $uri $uri/ /index.html?$query_string;
     }
 
     location ~ \.php$ {
@@ -106,6 +106,17 @@ php -S 127.0.0.1:8080 -t public
 ```
 
 Open `http://127.0.0.1:8080` in your web browser.
+
+---
+
+### Option D: GitHub Pages Static Deployment
+
+IVC WebRTC can also be deployed to GitHub Pages! The frontend is fully static and separates state using `api/config.php`.
+
+1. A GitHub Actions workflow (`.github/workflows/deploy-pages.yml`) is already configured for this repository.
+2. The workflow automatically uploads the contents of the **`public/`** directory.
+3. GitHub Pages will serve `public/index.html` as the root of the application seamlessly.
+4. *Note:* When hosted as a static site, PHP APIs (`/api/signal.php`) will not function locally on GitHub Pages. To have full WebRTC and IRC capability, point the JavaScript frontend towards a live external IVC API server, or deploy the full application via Option A, B, or C.
 
 ---
 

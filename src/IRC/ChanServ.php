@@ -48,7 +48,8 @@ class ChanServ
             return ['success' => false, 'message' => "CHANSERV: Channel '{$channel}' is already registered."];
         }
 
-        $chanModel = new Channel($channel, $ownerNick, null, $passkey, '+t', time());
+        $hashedPasskey = ($passkey !== null && $passkey !== '') ? password_hash($passkey, PASSWORD_DEFAULT) : null;
+        $chanModel = new Channel($channel, $ownerNick, null, $hashedPasskey, '+t', time());
         $success = ChannelRepository::save($chanModel);
 
         if ($success) {

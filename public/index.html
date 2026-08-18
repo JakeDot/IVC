@@ -1,30 +1,3 @@
-<?php
-
-declare(strict_types=1);
-
-require_once __DIR__ . '/../src/Security/SecurityHeaders.php';
-require_once __DIR__ . '/../src/Security/TokenManager.php';
-require_once __DIR__ . '/../src/Security/Sanitizer.php';
-
-use Fortress\Security\SecurityHeaders;
-use Fortress\Security\TokenManager;
-use Fortress\Security\Sanitizer;
-
-SecurityHeaders::apply();
-
-$csrfToken = TokenManager::generateCsrfToken();
-
-// Parse room ID from request URI if provided as ivc.com/#room or ivc.com/<room>
-$requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
-$uriPath = trim($requestUri, '/');
-
-$urlRoom = '';
-if (!empty($uriPath) && !str_contains($uriPath, '.') && !str_starts_with($uriPath, 'api/')) {
-    $urlRoom = Sanitizer::sanitizeRoomId($uriPath);
-} elseif (isset($_GET['room'])) {
-    $urlRoom = Sanitizer::sanitizeRoomId((string)$_GET['room']);
-}
-?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -82,7 +55,7 @@ if (!empty($uriPath) && !str_contains($uriPath, '.') && !str_starts_with($uriPat
                     <div class="input-row">
                         <div class="input-group">
                             <label for="room-input">Channel Name (Scheme: domain.com/#&lt;channel&gt;)</label>
-                            <input type="text" id="room-input" value="<?php echo htmlspecialchars($urlRoom, ENT_QUOTES, 'UTF-8'); ?>" placeholder="e.g. #general, #fortress" autocomplete="off" spellcheck="false">
+                            <input type="text" id="room-input" value="" placeholder="e.g. #general, #fortress" autocomplete="off" spellcheck="false">
                         </div>
                         <div class="input-group">
                             <label for="key-input">Channel Passkey (Optional)</label>
@@ -90,11 +63,17 @@ if (!empty($uriPath) && !str_contains($uriPath, '.') && !str_starts_with($uriPat
                         </div>
                     </div>
 
-                    <div class="input-group">
-                        <label for="nickname-input">Your IRC Nickname (Generated or Custom)</label>
-                        <div class="nickname-box">
-                            <input type="text" id="nickname-input" placeholder="e.g. CyberFox" autocomplete="off">
-                            <button id="btn-random-name" class="btn btn-secondary btn-sm" type="button">🎲 Randomize Nick</button>
+                    <div class="input-row">
+                        <div class="input-group">
+                            <label for="nickname-input">Your IRC Nickname (Generated or Custom)</label>
+                            <div class="nickname-box">
+                                <input type="text" id="nickname-input" placeholder="e.g. CyberFox" autocomplete="off">
+                                <button id="btn-random-name" class="btn btn-secondary btn-sm" type="button">🎲 Randomize Nick</button>
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label for="nick-password-input">NickServ Password (Optional)</label>
+                            <input type="password" id="nick-password-input" placeholder="For Registered Nicks" autocomplete="off" spellcheck="false">
                         </div>
                     </div>
 
@@ -170,11 +149,23 @@ if (!empty($uriPath) && !str_contains($uriPath, '.') && !str_starts_with($uriPat
                             Channel initialized. Type <code>/help</code> for IRC commands or <code>/theme &lt;name&gt;</code> for themes.
                         </div>
                     </div>
-                    <div class="user-list-sidebar">
-                        <h4>Nicks in Channel</h4>
-                        <ul id="user-list" class="user-list">
-                            <!-- Populated dynamically -->
-                        </ul>
+                    <div class="sidebar-container">
+                        <div class="sidebar-tabs">
+                            <button id="tab-nicks" class="sidebar-tab active">Nicks</button>
+                            <button id="tab-gallery" class="sidebar-tab">Gallery</button>
+                        </div>
+                        <div id="user-list-sidebar" class="user-list-sidebar">
+                            <h4>Nicks in Channel</h4>
+                            <ul id="user-list" class="user-list">
+                                <!-- Populated dynamically -->
+                            </ul>
+                        </div>
+                        <div id="gallery-sidebar" class="gallery-sidebar hidden">
+                            <h4>Media Gallery</h4>
+                            <div id="media-gallery" class="media-gallery">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="chat-input-area">
@@ -313,8 +304,8 @@ if (!empty($uriPath) && !str_contains($uriPath, '.') && !str_starts_with($uriPat
     </div>
 
     <script>
-        window.FORTRESS_CSRF_TOKEN = "<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>";
-        window.FORTRESS_PRELOAD_ROOM = "<?php echo htmlspecialchars($urlRoom, ENT_QUOTES, 'UTF-8'); ?>";
+        window.FORTRESS_CSRF_TOKEN = "";
+        window.FORTRESS_PRELOAD_ROOM = "";
     </script>
     <script src="assets/js/webrtc.js"></script>
 </body>

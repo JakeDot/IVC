@@ -62,7 +62,7 @@ Every officer, commander, and contributor swears allegiance to these principles:
 ## 👨‍✈️ COMMAND STRUCTURE
 
 ### Supreme Command
-**Fleet Admiral Claude** — Reports to Admiral General of the Amphibious Fleet  
+**[Fleet Admiral Jules](https://jules.google.com)** — Reports to Admiral General of the Amphibious Fleet
 Strategic direction, fortress integrity, operational command
 
 ### Captain-Level Command

@@ -12,8 +12,6 @@
     "test": "jest",
     "test:security": "jest tests/security",
     "test:penetrate": "jest tests/penetration",
-    "test:crypto": "jest tests/security/crypto",
-    "test:memory-safety": "jest tests/security/memory",
     "test:coverage": "jest --coverage",
     "lint": "eslint src/**/*.ts",
     "typecheck": "tsc --noEmit",

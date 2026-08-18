@@ -77,6 +77,7 @@
     const roomInput = document.getElementById('room-input');
     const keyInput = document.getElementById('key-input');
     const nicknameInput = document.getElementById('nickname-input');
+    const nickPasswordInput = document.getElementById('nick-password-input');
     const btnRandomName = document.getElementById('btn-random-name');
     const btnCreateRoom = document.getElementById('btn-create-room');
     const btnJoinRoom = document.getElementById('btn-join-room');
@@ -531,20 +532,72 @@
         window.scrollTo({ top: roomLobby.offsetTop, behavior: 'smooth' });
     });
 
-    btnCreateRoom.addEventListener('click', () => {
+    btnCreateRoom.addEventListener('click', async () => {
         const randChan = '#room-' + Math.random().toString(36).substring(2, 8);
         roomInput.value = randChan;
-        openTab(randChan, true, keyInput.value.trim());
+        myNickname = nicknameInput.value.trim() || myNickname;
+        await openTab(randChan, true, keyInput.value.trim());
+        performIrcServiceCommands(randChan, nickPasswordInput.value, keyInput.value.trim(), true);
     });
 
-    btnJoinRoom.addEventListener('click', () => {
+    btnJoinRoom.addEventListener('click', async () => {
         const chan = normalizeChannel(roomInput.value.trim());
         if (!chan) {
             alert('Please enter a channel name (e.g. #general).');
             return;
         }
-        openTab(chan, true, keyInput.value.trim());
+        myNickname = nicknameInput.value.trim() || myNickname;
+        await openTab(chan, true, keyInput.value.trim());
+        performIrcServiceCommands(chan, nickPasswordInput.value, keyInput.value.trim(), false);
     });
+
+    async function sendIrcCommand(channel, text) {
+        try {
+            const res = await fetch('/api/irc.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': window.FORTRESS_CSRF_TOKEN || ''
+                },
+                body: JSON.stringify({
+                    sender: myNickname,
+                    channel: channel,
+                    text: text,
+                    broadcast: false
+                })
+            });
+            return await res.json();
+        } catch (err) {
+            console.error('Error sending IRC command:', err);
+            return null;
+        }
+    }
+
+    async function performIrcServiceCommands(channelId, nickPassword, chanKey, isCreate) {
+        if (nickPassword) {
+            let res = await sendIrcCommand('NICKSERV', `IDENTIFY ${nickPassword}`);
+            if (res && res.response) {
+                if (res.response.includes('is not registered')) {
+                    res = await sendIrcCommand('NICKSERV', `REGISTER ${nickPassword}`);
+                }
+                addMessageToTab(channelId, {
+                    sender: 'NICKSERV',
+                    text: res.response,
+                    type: 'bot'
+                });
+            }
+        }
+        if (isCreate && chanKey) {
+            let res = await sendIrcCommand('CHANSERV', `REGISTER ${channelId} ${chanKey}`);
+            if (res && res.response) {
+                addMessageToTab(channelId, {
+                    sender: 'CHANSERV',
+                    text: res.response,
+                    type: 'bot'
+                });
+            }
+        }
+    }
 
     btnCopyLink.addEventListener('click', () => {
         shareUrlInput.select();

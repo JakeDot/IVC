@@ -154,6 +154,16 @@ assertTest($topicRes['success'] === true, 'ChanServ updated channel topic');
 $chanInfo = ChanServ::getInfo('#fortress');
 assertTest($chanInfo['success'] === true && str_contains($chanInfo['message'], 'Encryption and Security Fortress'), 'ChanServ returned channel info with topic');
 
+$channelsList = ChanServ::listChannels();
+$foundFortress = false;
+foreach ($channelsList as $chanListItem) {
+    if ($chanListItem['channel_name'] === '#fortress') {
+        $foundFortress = true;
+        break;
+    }
+}
+assertTest($foundFortress === true, 'ChanServ::listChannels returns array containing registered channel #fortress');
+
 // Test 7: MOTDSERV (Message of the Day Service)
 echo "\n7. Testing MOTDSERV Message of the Day Bot...\n";
 $motdSet = MotdServ::setMotd('Welcome to Fortress Admin Network', 'AdminUser');

@@ -24,6 +24,7 @@ class ServServ
             'MEMOSERV' => 'Offline Messaging & Memo Storage',
             'HOSTSERV' => 'Virtual Host (VHost) Management',
             'SERVSERV' => 'Network & Foreign Services Directory',
+            'HELPSERV' => 'Detailed Help & Documentation Service',
         ];
 
         $foreignServices = ServiceRegistry::listServices();
@@ -67,6 +68,7 @@ class ServServ
             'MEMOSERV' => 'Offline Messaging & Memo Storage',
             'HOSTSERV' => 'Virtual Host (VHost) Management',
             'SERVSERV' => 'Network & Foreign Services Directory',
+            'HELPSERV' => 'Detailed Help & Documentation Service',
         ];
 
         if (isset($coreServices[$serviceName])) {

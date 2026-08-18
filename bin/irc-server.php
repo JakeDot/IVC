@@ -120,7 +120,7 @@ while (true) {
             if ($nick) {
                 foreach ($clientData[$clientId]['channels'] as $chan) {
                     RoomManager::leaveRoom($chan, $nick);
-                    broadcastToChannel($channels, $chan, ":$nick QUIT :Client exited\r\n");
+                    broadcastToChannel($channels, $chan, ":$nick QUIT :Client exited\r\n", $clientData);
                     // Remove from our channels tracking
                     if (isset($channels[$chan][$clientId])) {
                         unset($channels[$chan][$clientId]);
@@ -361,7 +361,7 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
                 }
 
                 sendToClient($client, $clientId, ":$nick PART $c" . ($reason ? " :$reason" : "") . "\r\n", $clientData);
-                broadcastToChannel($channels, $c, ":$nick PART $c" . ($reason ? " :$reason" : "") . "\r\n");
+                broadcastToChannel($channels, $c, ":$nick PART $c" . ($reason ? " :$reason" : "") . "\r\n", $clientData);
             }
             break;
 
@@ -480,7 +480,7 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
                 $result = \Fortress\IRC\ChanServ::setTopic($targetChan, $newTopic, $nick);
                 // We'll broadcast the change if ChanServ accepted it (or even if it's just ephemeral for now)
                 // For simplicity, we just broadcast it to everyone in the channel right away.
-                broadcastToChannel($channels, $targetChan, ":$nick TOPIC $targetChan :$newTopic\r\n");
+                broadcastToChannel($channels, $targetChan, ":$nick TOPIC $targetChan :$newTopic\r\n", $clientData);
             }
             break;
 

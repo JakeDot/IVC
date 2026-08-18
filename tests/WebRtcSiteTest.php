@@ -120,6 +120,13 @@ assertTest($networkName === 'IVC-IRC Network', 'Default serverwide setting loade
 SettingsManager::setSetting('motd', 'New Fortress IRC MOTD');
 assertTest(SettingsManager::getSetting('motd') === 'New Fortress IRC MOTD', 'Updated serverwide MOTD setting in DB');
 
+$allSettings = SettingsManager::getAllSettings();
+assertTest(is_array($allSettings), 'SettingsManager::getAllSettings returns an array');
+assertTest(isset($allSettings['network_name']) && $allSettings['network_name']['value'] === 'IVC-IRC Network', 'getAllSettings contains default network_name setting');
+assertTest(isset($allSettings['motd']) && $allSettings['motd']['value'] === 'New Fortress IRC MOTD', 'getAllSettings contains updated motd setting');
+assertTest(isset($allSettings['motd']['updated_at']) && is_int($allSettings['motd']['updated_at']), 'getAllSettings returns updated_at as integer');
+assertTest(array_key_exists('description', $allSettings['motd']), 'getAllSettings returns description key');
+
 // Test 5: NAMESERV (Nickname Service)
 echo "\n5. Testing NAMESERV Nickname Registration & Identification...\n";
 $regRes = NameServ::register('CyberFox', 'SecretPass123', 'fox@fortress.local');

@@ -25,7 +25,11 @@ final class RoomManager
      */
     private static function getStateFilePath(): string
     {
-        $dir = is_writable('/dev/shm') ? '/dev/shm' : sys_get_temp_dir();
+        $baseDir = is_writable('/dev/shm') ? '/dev/shm' : sys_get_temp_dir();
+        $dir = $baseDir . '/fortress_' . md5(__DIR__);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0700, true);
+        }
         return $dir . '/fortress_webrtc_rooms_state.json';
     }
 

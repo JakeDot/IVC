@@ -5,12 +5,24 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../src/Security/SecurityHeaders.php';
 require_once __DIR__ . '/../../src/Security/Sanitizer.php';
 require_once __DIR__ . '/../../src/Security/RateLimiter.php';
+require_once __DIR__ . '/../../src/Models/UserNick.php';
+require_once __DIR__ . '/../../src/Models/Channel.php';
+require_once __DIR__ . '/../../src/Models/ChannelUser.php';
+require_once __DIR__ . '/../../src/Models/IrcSetting.php';
 require_once __DIR__ . '/../../src/Database/Database.php';
+require_once __DIR__ . '/../../src/Database/UserNickRepository.php';
+require_once __DIR__ . '/../../src/Database/ChannelRepository.php';
+require_once __DIR__ . '/../../src/Database/ChannelUserRepository.php';
+require_once __DIR__ . '/../../src/Database/SettingRepository.php';
 require_once __DIR__ . '/../../src/IRC/SettingsManager.php';
 require_once __DIR__ . '/../../src/IRC/NameServ.php';
 require_once __DIR__ . '/../../src/IRC/ChanServ.php';
 require_once __DIR__ . '/../../src/IRC/MotdServ.php';
 require_once __DIR__ . '/../../src/IRC/QuoteServ.php';
+require_once __DIR__ . '/../../src/IRC/MemoServ.php';
+require_once __DIR__ . '/../../src/IRC/HostServ.php';
+require_once __DIR__ . '/../../src/IRC/ServiceRegistry.php';
+require_once __DIR__ . '/../../src/IRC/ServServ.php';
 require_once __DIR__ . '/../../src/IRC/IrcServices.php';
 require_once __DIR__ . '/../../src/Signaling/RoomManager.php';
 
@@ -22,6 +34,10 @@ use Fortress\IRC\NameServ;
 use Fortress\IRC\ChanServ;
 use Fortress\IRC\MotdServ;
 use Fortress\IRC\QuoteServ;
+use Fortress\IRC\MemoServ;
+use Fortress\IRC\HostServ;
+use Fortress\IRC\ServiceRegistry;
+use Fortress\IRC\ServServ;
 use Fortress\IRC\IrcServices;
 use Fortress\Signaling\RoomManager;
 
@@ -106,7 +122,7 @@ if ($method === 'POST') {
 
     if ($result !== null) {
         $broadcast = $data['broadcast'] ?? true;
-        if ($broadcast) {
+        if ($broadcast && empty($result['skip_bot_broadcast'])) {
             RoomManager::broadcastSignal($channel, 'SYSTEM_BOT', [
                 'type' => 'chat',
                 'sender' => $result['service'],

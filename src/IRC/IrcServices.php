@@ -6,7 +6,8 @@ namespace Fortress\IRC;
 
 /**
  * IRC Service Command Dispatcher & Parser
- * Handles interaction with NAMESERV, CHANSERV, MOTDSERV, and Serverwide Settings via IRC-style slash commands or direct messages.
+ * Handles interaction with NAMESERV, CHANSERV, MOTDSERV, QUOTESERV, MEMOSERV, HOSTSERV, SERVICESERV,
+ * THEMESERV, and Foreign Services operating under different hosts via IRC-style slash commands or direct messages.
  */
 class IrcServices
 {
@@ -49,6 +50,31 @@ class IrcServices
             if ($targetService === QuoteServ::SERVICE_NAME) {
                 return self::handleQuoteServCommand($senderNick, $channel, $cmd, $args);
             }
+
+            if ($targetService === MemoServ::SERVICE_NAME) {
+                return self::handleMemoServCommand($senderNick, $channel, $cmd, $args);
+            }
+
+            if ($targetService === HostServ::SERVICE_NAME) {
+                return self::handleHostServCommand($senderNick, $channel, $cmd, $args);
+            }
+
+            if ($targetService === ServServ::SERVICE_NAME || $targetService === 'SERVICESERV') {
+                return self::handleServServCommand($senderNick, $channel, $cmd, $args);
+            }
+
+            // Check if $targetService is a registered foreign service operating under a different host
+            $foreignService = ServiceRegistry::getService($targetService);
+            if ($foreignService) {
+                $fullCommand = implode(' ', array_slice($parts, 2));
+                $res = ServServ::dispatchForeignCommand($senderNick, $targetService, $fullCommand);
+                return [
+                    'is_service_command' => true,
+                    'service' => $targetService,
+                    'response' => $res['message'],
+                    'channel' => $channel
+                ];
+            }
         }
 
         if ($first === '/nameserv' || $first === '/nickserv') {
@@ -75,7 +101,46 @@ class IrcServices
             return self::handleQuoteServCommand($senderNick, $channel, $cmd, $args);
         }
 
-        // 2. Convenience Slash Commands
+        if ($first === '/memoserv') {
+            $cmd = strtoupper($parts[1] ?? '');
+            $args = array_slice($parts, 2);
+            return self::handleMemoServCommand($senderNick, $channel, $cmd, $args);
+        }
+
+        if ($first === '/hostserv') {
+            $cmd = strtoupper($parts[1] ?? '');
+            $args = array_slice($parts, 2);
+            return self::handleHostServCommand($senderNick, $channel, $cmd, $args);
+        }
+
+        if ($first === '/servserv' || $first === '/serviceserv') {
+            $cmd = strtoupper($parts[1] ?? '');
+            $args = array_slice($parts, 2);
+            return self::handleServServCommand($senderNick, $channel, $cmd, $args);
+        }
+
+        // 2. Theme Command
+        if ($first === '/theme') {
+            $arg = strtolower($parts[1] ?? 'list');
+            if ($arg === 'list' || $arg === 'help') {
+                $resp = "Available themes: dark, light, halloween, console, christmas. Usage: /theme <name> or /theme custom";
+            } elseif (in_array($arg, ['dark', 'light', 'halloween', 'console', 'christmas'], true)) {
+                $resp = "THEMESERV: Theme set to '{$arg}'.";
+            } elseif ($arg === 'custom' || $arg === 'create') {
+                $resp = "THEMESERV: Custom Theme Creator mode activated.";
+            } else {
+                $resp = "THEMESERV: Theme set to '{$arg}'.";
+            }
+
+            return [
+                'is_service_command' => true,
+                'service' => 'THEMESERV',
+                'response' => $resp,
+                'channel' => $channel
+            ];
+        }
+
+        // 3. Convenience Slash Commands
         if ($first === '/quote') {
             $quoteText = trim(substr($text, strlen($parts[0])));
             if ($quoteText === '') {
@@ -93,6 +158,52 @@ class IrcServices
                 'is_service_command' => true,
                 'service' => QuoteServ::SERVICE_NAME,
                 'response' => $resp,
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/memo') {
+            $sub = strtoupper($parts[1] ?? 'LIST');
+            if ($sub === 'SEND') {
+                $target = $parts[2] ?? '';
+                $msg = implode(' ', array_slice($parts, 3));
+                $res = MemoServ::send($senderNick, $target, $msg);
+            } elseif ($sub === 'READ') {
+                $num = (int)($parts[2] ?? 1);
+                $res = MemoServ::read($senderNick, $num);
+            } elseif ($sub === 'DEL' || $sub === 'DELETE') {
+                $num = (int)($parts[2] ?? 1);
+                $res = MemoServ::delete($senderNick, $num);
+            } else {
+                $res = MemoServ::listMemos($senderNick);
+            }
+
+            return [
+                'is_service_command' => true,
+                'service' => MemoServ::SERVICE_NAME,
+                'response' => $res['message'],
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/vhost') {
+            $sub = strtoupper($parts[1] ?? 'INFO');
+            if ($sub === 'REQUEST' || $sub === 'SET') {
+                $vh = $parts[2] ?? '';
+                $res = HostServ::requestVhost($senderNick, $vh);
+            } elseif ($sub === 'ON') {
+                $res = HostServ::setVhostStatus($senderNick, true);
+            } elseif ($sub === 'OFF') {
+                $res = HostServ::setVhostStatus($senderNick, false);
+            } else {
+                $target = $parts[1] ?? $senderNick;
+                $res = HostServ::getVhostInfo($target);
+            }
+
+            return [
+                'is_service_command' => true,
+                'service' => HostServ::SERVICE_NAME,
+                'response' => $res['message'],
                 'channel' => $channel
             ];
         }
@@ -206,31 +317,66 @@ class IrcServices
 
             return [
                 'is_service_command' => true,
-                'service' => 'SERVICESERV',
+                'service' => 'SERVSERV',
                 'response' => $resp,
                 'channel' => $channel
             ];
         }
 
+        if ($first === '/supersilent') {
+            $msgText = trim(substr($text, strlen($parts[0])));
+            if ($msgText === '') {
+                return [
+                    'is_service_command' => true,
+                    'service' => 'SERVICESERV',
+                    'response' => 'Usage: /supersilent <message> — Post a message to super room only without propagating to subrooms.',
+                    'channel' => $channel
+                ];
+            }
+
+            \Fortress\Signaling\RoomManager::broadcastSignal($channel, $senderNick, [
+                'type' => 'chat',
+                'sender' => $senderNick,
+                'message' => $msgText,
+                'supersilent' => true
+            ], false);
+
+            return [
+                'is_service_command' => true,
+                'service' => 'SUPERSILENT',
+                'response' => "[SUPERSILENT to {$channel}] {$msgText}",
+                'channel' => $channel,
+                'skip_bot_broadcast' => true
+            ];
+        }
+
         if ($first === '/help') {
             $helpMsg = "Available IRC Commands:\n" .
-                       "• /msg NAMESERV REGISTER <pass> [email] — Register your current nickname\n" .
+                       "• /msg NAMESERV REGISTER <pass> [email] — Register your nickname\n" .
                        "• /msg NAMESERV IDENTIFY <pass> — Identify with your password\n" .
                        "• /msg NAMESERV INFO [nick] — View nickname registration info\n" .
-                       "• /msg CHANSERV REGISTER <#channel> [passkey] — Register a new channel\n" .
-                       "• /msg CHANSERV OP <#channel> <nick> — Grant channel operator status\n" .
-                       "• /msg CHANSERV DEOP <#channel> <nick> — Remove channel operator status\n" .
+                       "• /msg CHANSERV REGISTER <#channel> [passkey] — Register a channel\n" .
+                       "• /msg CHANSERV OP <#channel> <nick> — Grant channel OP status\n" .
                        "• /msg MOTDSERV SET <new_motd> — Update serverwide Message of the Day\n" .
                        "• /msg QUOTESERV SUB / UNSUB — Subscribe or unsubscribe to periodic quotes\n" .
                        "• /msg QUOTESERV ADD <text> | EDIT <id> <text> | DEL <id> — Quote management\n" .
+                       "• /msg MEMOSERV SEND <nick> <msg> — Send memo to offline/online user\n" .
+                       "• /msg MEMOSERV READ [num] / LIST — Read or list your memos\n" .
+                       "• /msg HOSTSERV REQUEST <vhost> — Request or set virtual host\n" .
+                       "• /msg SERVSERV LIST — List core & registered foreign services\n" .
+                       "• /msg SERVSERV REGISTER <name> <host> <endpoint> — Register foreign service\n" .
                        "• /quote [text] — Add a new quote or view a random quote\n" .
-                       "• /motd [new_motd] — View or update server Message of the Day\n" .
+                       "• /memo [SEND|READ|DEL|LIST] — MemoServ shortcut\n" .
+                       "• /vhost [REQUEST|ON|OFF|INFO] — HostServ shortcut\n" .
+                       "• /motd [new_motd] — View/update Message of the Day\n" .
                        "• /topic <new_topic> — Change channel topic\n" .
+                       "• /theme [list|dark|light|halloween|console|christmas|custom] — Switch or manage themes\n" .
+                       "• /supersilent <message> — Post a message to super room only without propagating to subrooms\n" .
                        "• /settings [SET <key> <value>] — View or update serverwide settings in MySQL";
 
             return [
                 'is_service_command' => true,
-                'service' => 'SERVICESERV',
+                'service' => 'SERVSERV',
                 'response' => $helpMsg,
                 'channel' => $channel
             ];
@@ -400,6 +546,109 @@ class IrcServices
         return [
             'is_service_command' => true,
             'service' => QuoteServ::SERVICE_NAME,
+            'response' => $res['message'],
+            'channel' => $channel
+        ];
+    }
+
+    private static function handleMemoServCommand(string $senderNick, string $channel, string $cmd, array $args): array
+    {
+        switch ($cmd) {
+            case 'SEND':
+                $target = $args[0] ?? '';
+                $msg = trim(implode(' ', array_slice($args, 1)));
+                $res = MemoServ::send($senderNick, $target, $msg);
+                break;
+
+            case 'READ':
+                $num = (int)($args[0] ?? 1);
+                $res = MemoServ::read($senderNick, $num);
+                break;
+
+            case 'DEL':
+            case 'DELETE':
+                $num = (int)($args[0] ?? 1);
+                $res = MemoServ::delete($senderNick, $num);
+                break;
+
+            case 'LIST':
+            default:
+                $res = MemoServ::listMemos($senderNick);
+                break;
+        }
+
+        return [
+            'is_service_command' => true,
+            'service' => MemoServ::SERVICE_NAME,
+            'response' => $res['message'],
+            'channel' => $channel
+        ];
+    }
+
+    private static function handleHostServCommand(string $senderNick, string $channel, string $cmd, array $args): array
+    {
+        switch ($cmd) {
+            case 'REQUEST':
+            case 'SET':
+            case 'OFFER':
+                $vh = $args[0] ?? '';
+                $res = HostServ::requestVhost($senderNick, $vh);
+                break;
+
+            case 'ON':
+                $res = HostServ::setVhostStatus($senderNick, true);
+                break;
+
+            case 'OFF':
+                $res = HostServ::setVhostStatus($senderNick, false);
+                break;
+
+            case 'INFO':
+            default:
+                $target = $args[0] ?? $senderNick;
+                $res = HostServ::getVhostInfo($target);
+                break;
+        }
+
+        return [
+            'is_service_command' => true,
+            'service' => HostServ::SERVICE_NAME,
+            'response' => $res['message'],
+            'channel' => $channel
+        ];
+    }
+
+    private static function handleServServCommand(string $senderNick, string $channel, string $cmd, array $args): array
+    {
+        switch ($cmd) {
+            case 'REGISTER':
+                $name = $args[0] ?? '';
+                $host = $args[1] ?? '';
+                $endpoint = $args[2] ?? '';
+                $meta = isset($args[3]) ? implode(' ', array_slice($args, 3)) : null;
+                $res = ServServ::registerForeignService($name, $host, $endpoint, $meta);
+                break;
+
+            case 'INFO':
+                $target = $args[0] ?? '';
+                $res = ServServ::getServiceInfo($target);
+                break;
+
+            case 'COMMAND':
+                $sName = $args[0] ?? '';
+                $cText = implode(' ', array_slice($args, 1));
+                $res = ServServ::dispatchForeignCommand($senderNick, $sName, $cText);
+                break;
+
+            case 'LIST':
+            default:
+                $res = ServServ::listAllServices();
+                break;
+        }
+
+        return [
+            'is_service_command' => true,
+            'service' => ServServ::SERVICE_NAME,
             'response' => $res['message'],
             'channel' => $channel
         ];

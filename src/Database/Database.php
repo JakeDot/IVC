@@ -62,15 +62,6 @@ class Database
         return self::$driver;
     }
 
-    public static function setPdo(?PDO $pdo, string $driver = 'mysql'): void
-    {
-        self::$pdo = $pdo;
-        self::$driver = $driver;
-        if ($pdo !== null) {
-            self::initializeSchema();
-        }
-    }
-
     /**
      * Prepare and execute a SQL query with bound parameters.
      *

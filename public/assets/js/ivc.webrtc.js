@@ -6,6 +6,10 @@ function parseChannelFromUrl() {
         return normalizeChannel(hash);
     }
     const params = new URLSearchParams(window.location.search);
+    if (params.has('uri')) {
+        const parsed = parseServerUri(params.get('uri'));
+        if (parsed && parsed.channel) return parsed.channel;
+    }
     if (params.has('room')) {
         return normalizeChannel(params.get('room'));
     }
@@ -873,6 +877,94 @@ async function handleChatSubmit() {
 
     const tab = openTabs[activeTabId];
     chatInput.value = '';
+
+    // Check if message is /connect command
+    if (text.startsWith('/connect')) {
+        addMessageToTab(activeTabId, {
+            sender: myNickname,
+            text: text,
+            type: 'self'
+        });
+
+        const parts = text.split(/\s+/);
+        const uri = parts[1] || '';
+
+        if (!uri) {
+            const keys = Object.keys(connectedServers);
+            let resp = 'SERVERSERV: Usage: /connect <URI> (Supported protocols: https://, ivc://, irc://)';
+            if (keys.length > 0) {
+                const listStr = keys.map(k => `${connectedServers[k].protocol}://${k} (Channel: ${connectedServers[k].channel})`).join(', ');
+                resp += ` | Active Connections: [${listStr}]`;
+            }
+            addMessageToTab(activeTabId, {
+                sender: 'SERVERSERV',
+                text: resp,
+                type: 'bot'
+            });
+            return;
+        }
+
+        const parsed = parseServerUri(uri);
+        if (!parsed) {
+            addMessageToTab(activeTabId, {
+                sender: 'SERVERSERV',
+                text: 'SERVERSERV: Invalid URI format. Supported protocols are https://, ivc://, and irc:// (e.g. https://server.com/#channel)',
+                type: 'bot'
+            });
+            return;
+        }
+
+        connectedServers[parsed.serverKey] = {
+            host: parsed.host,
+            port: parsed.port,
+            protocol: parsed.protocol,
+            channel: parsed.channel,
+            uri: parsed.uri,
+            connectedAt: Date.now()
+        };
+
+        openTab(parsed.channel, true);
+
+        addMessageToTab(parsed.channel, {
+            sender: 'SERVERSERV',
+            text: `SERVERSERV: Connected to server '${parsed.host}:${parsed.port}' via ${parsed.protocol} (Channel: ${parsed.channel}).`,
+            type: 'bot'
+        });
+        return;
+    }
+
+    // Check if message is /disconnect command
+    if (text.startsWith('/disconnect')) {
+        addMessageToTab(activeTabId, {
+            sender: myNickname,
+            text: text,
+            type: 'self'
+        });
+
+        const parts = text.split(/\s+/);
+        const target = parts[1] || '';
+
+        if (target) {
+            const parsed = parseServerUri(target);
+            const key = parsed ? parsed.serverKey : target;
+            if (connectedServers[key]) {
+                delete connectedServers[key];
+            }
+            addMessageToTab(activeTabId, {
+                sender: 'SERVERSERV',
+                text: `SERVERSERV: Disconnected from server '${target}'.`,
+                type: 'bot'
+            });
+        } else {
+            Object.keys(connectedServers).forEach(k => delete connectedServers[k]);
+            addMessageToTab(activeTabId, {
+                sender: 'SERVERSERV',
+                text: 'SERVERSERV: Disconnected from active server connection.',
+                type: 'bot'
+            });
+        }
+        return;
+    }
 
     // Check if message is the IRC /theme command
     if (text.startsWith('/theme')) {

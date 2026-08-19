@@ -12,12 +12,65 @@ namespace Fortress\IRC;
 class IrcServices
 {
     /**
+     * Parse server URI supporting https://, ivc://, and irc:// protocols.
+     *
+     * @param string $uri
+     * @return array{protocol: string, host: string, port: int, channel: string, uri: string}|null
+     */
+    public static function parseServerUri(string $uri): ?array
+    {
+        $uri = trim($uri);
+        if (!preg_match('/^(https|ivc(?:-[a-zA-Z0-9_-]+)?|irc):\/\//i', $uri)) {
+            return null;
+        }
+
+        $parsed = parse_url($uri);
+        if (!$parsed || empty($parsed['host'])) {
+            return null;
+        }
+
+        $scheme = strtolower($parsed['scheme'] ?? 'https');
+        $host = strtolower($parsed['host']);
+
+        $defaultPorts = [
+            'https' => 443,
+            'ivc'   => 8080,
+            'irc'   => 6667,
+        ];
+        if (str_starts_with($scheme, 'ivc-')) {
+            $defaultPorts[$scheme] = 8080;
+        }
+        $port = isset($parsed['port']) ? (int)$parsed['port'] : ($defaultPorts[$scheme] ?? 443);
+
+        $channel = '#lobby';
+        if (!empty($parsed['fragment'])) {
+            $chanRaw = $parsed['fragment'];
+            $channel = str_starts_with($chanRaw, '#') ? $chanRaw : '#' . $chanRaw;
+        } elseif (!empty($parsed['path']) && $parsed['path'] !== '/') {
+            $pathClean = ltrim($parsed['path'], '/');
+            if ($pathClean !== '') {
+                $channel = str_starts_with($pathClean, '#') ? $pathClean : '#' . $pathClean;
+            }
+        }
+
+        $channel = \Fortress\Security\Sanitizer::sanitizeRoomId($channel);
+
+        return [
+            'protocol' => strtoupper($scheme),
+            'host'     => $host,
+            'port'     => $port,
+            'channel'  => $channel,
+            'uri'      => $uri
+        ];
+    }
+
+    /**
      * Check if a message is an IRC service command and execute it.
      *
      * @param string $senderNick
      * @param string $channel
      * @param string $text
-     * @return array{is_service_command: true, service: string, response: string, channel: string}|null
+     * @return array{is_service_command: true, service: string, response: string, channel: string, skip_bot_broadcast?: bool}|null
      */
     public static function processCommand(string $senderNick, string $channel, string $text): ?array
     {
@@ -54,6 +107,47 @@ class IrcServices
                     'channel' => $channel
                 ];
             }
+        }
+
+        // Server Management Commands: /connect and /disconnect
+        if ($first === '/connect') {
+            $uri = $parts[1] ?? '';
+            if (empty($uri)) {
+                return [
+                    'is_service_command' => true,
+                    'service' => 'SERVERSERV',
+                    'response' => 'SERVERSERV: Usage: /connect <URI> (Supported protocols: https://, ivc://, irc://)',
+                    'channel' => $channel
+                ];
+            }
+
+            $parsed = self::parseServerUri($uri);
+            if (!$parsed) {
+                return [
+                    'is_service_command' => true,
+                    'service' => 'SERVERSERV',
+                    'response' => 'SERVERSERV: Invalid URI format. Supported protocols are https://, ivc://, and irc:// (e.g. https://server.com/#channel)',
+                    'channel' => $channel
+                ];
+            }
+
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "SERVERSERV: Connected to server '{$parsed['host']}:{$parsed['port']}' via {$parsed['protocol']} (Channel: {$parsed['channel']}).",
+                'channel' => $parsed['channel']
+            ];
+        }
+
+        if ($first === '/disconnect') {
+            $target = $parts[1] ?? '';
+            $targetStr = !empty($target) ? " '{$target}'" : "";
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "SERVERSERV: Disconnected from server{$targetStr}.",
+                'channel' => $channel
+            ];
         }
 
         // 1. Direct /msg or bot service command
@@ -202,6 +296,13 @@ class IrcServices
         }
 
         // 3. Theme Command
+        if ($first === '/cabpfaserv') {
+            $cmd = strtoupper($parts[1] ?? '');
+            $args = array_slice($parts, 2);
+            return self::handleCabPfaServCommand($senderNick, $channel, $cmd, $args);
+        }
+
+        // 2. Theme Command
         if ($first === '/theme') {
             $arg = strtolower($parts[1] ?? 'list');
             if ($arg === 'list' || $arg === 'help') {
@@ -417,6 +518,8 @@ class IrcServices
                        "• /pay [user|channel|server] [target] — Generate instant Stripe payment link\n" .
                        "• /msg PAYSERV PLANS — View all Stripe subscription plans\n" .
                        "• /msg PAYSERV SUBSCRIBE <user|channel|server> [target] — Subscribe level from chat\n" .
+                       "• /connect <URI> — Connect to server via URI (supports https://, ivc://, irc://)\n" .
+                       "• /disconnect [server|URI] — Disconnect from active or specified server\n" .
                        "• /msg NAMESERV REGISTER <pass> [email] — Register your nickname\n" .
                        "• /msg NAMESERV IDENTIFY <pass> — Identify with your password\n" .
                        "• /msg NAMESERV SUBSCRIBE [tier] — Subscribe nickname to User Pro\n" .
@@ -434,7 +537,8 @@ class IrcServices
                        "• /topic <new_topic> — Change channel topic\n" .
                        "• /theme [list|dark|light|halloween|console|christmas|custom] — Switch or manage themes\n" .
                        "• /supersilent <message> — Post a message to super room only without propagating to subrooms\n" .
-                       "• /settings [SET <key> <value>] — View or update serverwide settings in MySQL";
+                       "• /settings [SET <key> <value>] — View or update serverwide settings in MySQL\n" .
+                       "• /cabpfaserv <command> — Computer Aided Best Practice Favorite Algorithm Service";
 
             return [
                 'is_service_command' => true,
@@ -523,6 +627,20 @@ class IrcServices
             'is_service_command' => true,
             'service' => NameServ::SERVICE_NAME,
             'response' => $res['message'],
+            'channel' => $channel
+        ];
+    }
+
+    private static function handleCabPfaServCommand(string $senderNick, string $channel, string $cmd, array $args): array
+    {
+        $text = trim(implode(' ', array_merge([$cmd], $args)));
+        $res = CabPfaServ::process($senderNick, $text);
+
+        return [
+            'is_service_command' => true,
+            'service' => CabPfaServ::SERVICE_NAME,
+            'response' => $res['message'],
+            'success' => $res['success'] ?? false,
             'channel' => $channel
         ];
     }

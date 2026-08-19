@@ -442,6 +442,29 @@ assertTest(count($channelFiles) >= 1 && $channelFiles[0]->getId() === 'file-test
 $deletedFile = SharedFileRepository::deleteById('file-test-999');
 assertTest($deletedFile === true, 'SharedFileRepository::deleteById deleted file record');
 
+// Test 16: Server Management & URI Parsing (https://, ivc://, irc://)
+echo "\n16. Testing Server Management & URI Protocols...\n";
+$uriHttps = IrcServices::parseServerUri('https://chat.fortress.net/#lobby');
+assertTest($uriHttps !== null && $uriHttps['protocol'] === 'HTTPS' && $uriHttps['host'] === 'chat.fortress.net' && $uriHttps['port'] === 443 && $uriHttps['channel'] === '#lobby', 'Parsed https:// URI correctly');
+
+$uriIvc = IrcServices::parseServerUri('ivc://node1.network.org:8080/general');
+assertTest($uriIvc !== null && $uriIvc['protocol'] === 'IVC' && $uriIvc['host'] === 'node1.network.org' && $uriIvc['port'] === 8080 && $uriIvc['channel'] === '#general', 'Parsed ivc:// URI with port and channel correctly');
+
+$uriIrc = IrcServices::parseServerUri('irc://irc.fortress.net:6667/#dev');
+assertTest($uriIrc !== null && $uriIrc['protocol'] === 'IRC' && $uriIrc['host'] === 'irc.fortress.net' && $uriIrc['port'] === 6667 && $uriIrc['channel'] === '#dev', 'Parsed irc:// URI correctly');
+
+$uriInvalid = IrcServices::parseServerUri('ftp://invalid.uri.com/file');
+assertTest($uriInvalid === null, 'Rejected unsupported protocol scheme');
+
+$cmdConnUsage = IrcServices::processCommand('User1', '#lobby', '/connect');
+assertTest($cmdConnUsage !== null && $cmdConnUsage['service'] === 'SERVERSERV' && str_contains($cmdConnUsage['response'], 'Usage: /connect'), 'Processed /connect usage info');
+
+$cmdConn = IrcServices::processCommand('User1', '#lobby', '/connect https://chat.fortress.net/#lobby');
+assertTest($cmdConn !== null && $cmdConn['service'] === 'SERVERSERV' && str_contains($cmdConn['response'], 'Connected to server'), 'Processed /connect command');
+
+$cmdDisc = IrcServices::processCommand('User1', '#lobby', '/disconnect chat.fortress.net');
+assertTest($cmdDisc !== null && $cmdDisc['service'] === 'SERVERSERV' && str_contains($cmdDisc['response'], 'Disconnected from server'), 'Processed /disconnect command');
+
 echo "\n-----------------------------------------\n";
 echo "Test Results: $testsPassed Passed, $testsFailed Failed.\n";
 echo "-----------------------------------------\n\n";

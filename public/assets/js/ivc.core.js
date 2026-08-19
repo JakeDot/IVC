@@ -4,14 +4,46 @@
  * Fortress / IVC WebRTC Client & Multi-Tab IRC Infrastructure
  * High-Availability Multi-Peer WebRTC Mesh with Audio Speaking Detection & Talking-User First Sorting.
  * Supports #channel hash navigation, multi-tab room sessions, #stats connection stats, NAMESERV/CHANSERV integration,
- * and comprehensive theme support (light, dark, halloween, console, christmas, + user-defined custom themes).
+ * server management with /connect and /disconnect commands, and terminal/multi-theme support.
  */
-
 
 // Theme Management Constants
 const STORAGE_ACTIVE_THEME = 'ivc_theme_active';
 const STORAGE_CUSTOM_THEMES = 'ivc_custom_themes';
 const BUILTIN_THEMES = ['dark', 'light', 'halloween', 'console', 'christmas'];
+
+// Server Management Tracking
+const connectedServers = {};
+
+function parseServerUri(uri) {
+    if (!uri) return null;
+    uri = uri.trim();
+    const match = uri.match(/^(https|ivc|irc):\/\/([^\/:#?]+)(?::(\d+))?(?:[\/#](.*))?$/i);
+    if (!match) return null;
+
+    const protocol = match[1].toUpperCase();
+    const host = match[2].toLowerCase();
+    const defaultPorts = { HTTPS: 443, IVC: 8080, IRC: 6667 };
+    const port = match[3] ? parseInt(match[3], 10) : (defaultPorts[protocol] || 443);
+    let channelRaw = match[4] || '#lobby';
+
+    if (channelRaw.includes('#')) {
+        channelRaw = '#' + channelRaw.split('#').pop();
+    } else if (channelRaw && !channelRaw.startsWith('#')) {
+        channelRaw = '#' + channelRaw;
+    }
+
+    const channel = normalizeChannel(channelRaw);
+
+    return {
+        protocol,
+        host,
+        port,
+        channel,
+        serverKey: `${host}:${port}`,
+        uri
+    };
+}
 
 // Anonymous Name Generator
 const ADJECTIVES = ['Crypto', 'Cyber', 'Silent', 'Shadow', 'Fortress', 'Quantum', 'Stealth', 'Hyper', 'Neon', 'Matrix', 'Ghost', 'Vector'];
@@ -68,6 +100,5 @@ const rtcConfig = {
         { urls: 'stun:stun1.l.google.com:19302' }
     ]
 };
-
 
 const localSharedFilesMap = {};

@@ -165,6 +165,12 @@ class IrcServices
             return self::handleTextServCommand($senderNick, $channel, $cmd, $args);
         }
 
+        if ($first === '/cabpfaserv') {
+            $cmd = strtoupper($parts[1] ?? '');
+            $args = array_slice($parts, 2);
+            return self::handleCabPfaServCommand($senderNick, $channel, $cmd, $args);
+        }
+
         // 2. Theme Command
         if ($first === '/theme') {
             $arg = strtolower($parts[1] ?? 'list');
@@ -392,7 +398,8 @@ class IrcServices
                        "• /topic <new_topic> — Change channel topic\n" .
                        "• /theme [list|dark|light|halloween|console|christmas|custom] — Switch or manage themes\n" .
                        "• /supersilent <message> — Post a message to super room only without propagating to subrooms\n" .
-                       "• /settings [SET <key> <value>] — View or update serverwide settings in MySQL";
+                       "• /settings [SET <key> <value>] — View or update serverwide settings in MySQL\n" .
+                       "• /cabpfaserv <command> — Computer Aided Best Practice Favorite Algorithm Service";
 
             return [
                 'is_service_command' => true,
@@ -433,6 +440,20 @@ class IrcServices
             'is_service_command' => true,
             'service' => NameServ::SERVICE_NAME,
             'response' => $res['message'],
+            'channel' => $channel
+        ];
+    }
+
+    private static function handleCabPfaServCommand(string $senderNick, string $channel, string $cmd, array $args): array
+    {
+        $text = trim(implode(' ', array_merge([$cmd], $args)));
+        $res = CabPfaServ::process($senderNick, $text);
+
+        return [
+            'is_service_command' => true,
+            'service' => CabPfaServ::SERVICE_NAME,
+            'response' => $res['message'],
+            'success' => $res['success'] ?? false,
             'channel' => $channel
         ];
     }

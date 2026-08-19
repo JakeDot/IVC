@@ -17,7 +17,8 @@ class UserNickRepository
     public static function findByNickname(string $nickname): ?UserNick
     {
         $row = Database::fetchOne(
-            "SELECT nickname, password_hash, email, registered_at, last_seen, is_identified FROM nameserv_nicks WHERE LOWER(nickname) = LOWER(:nick)",
+            "SELECT nickname, password_hash, email, registered_at, last_seen, is_identified, subscription_tier, subscription_status, subscription_expires_at
+             FROM nameserv_nicks WHERE LOWER(nickname) = LOWER(:nick)",
             [':nick' => trim($nickname)]
         );
 
@@ -34,25 +35,40 @@ class UserNickRepository
 
         if ($exists) {
             $stmt = Database::execute(
-                "UPDATE nameserv_nicks SET password_hash = :hash, email = :email, last_seen = :last, is_identified = :id WHERE LOWER(nickname) = LOWER(:nick)",
+                "UPDATE nameserv_nicks SET
+                    password_hash = :hash,
+                    email = :email,
+                    last_seen = :last,
+                    is_identified = :id,
+                    subscription_tier = :stier,
+                    subscription_status = :sstatus,
+                    subscription_expires_at = :sexp
+                 WHERE LOWER(nickname) = LOWER(:nick)",
                 [
                     ':hash' => $userNick->getPasswordHash(),
                     ':email' => $userNick->getEmail(),
                     ':last' => $userNick->getLastSeen(),
                     ':id' => $userNick->isIdentified() ? 1 : 0,
+                    ':stier' => $userNick->getSubscriptionTier(),
+                    ':sstatus' => $userNick->getSubscriptionStatus(),
+                    ':sexp' => $userNick->getSubscriptionExpiresAt(),
                     ':nick' => $userNick->getNickname()
                 ]
             );
         } else {
             $stmt = Database::execute(
-                "INSERT INTO nameserv_nicks (nickname, password_hash, email, registered_at, last_seen, is_identified) VALUES (:nick, :hash, :email, :reg, :last, :id)",
+                "INSERT INTO nameserv_nicks (nickname, password_hash, email, registered_at, last_seen, is_identified, subscription_tier, subscription_status, subscription_expires_at)
+                 VALUES (:nick, :hash, :email, :reg, :last, :id, :stier, :sstatus, :sexp)",
                 [
                     ':nick' => $userNick->getNickname(),
                     ':hash' => $userNick->getPasswordHash(),
                     ':email' => $userNick->getEmail(),
                     ':reg' => $userNick->getRegisteredAt(),
                     ':last' => $now,
-                    ':id' => $userNick->isIdentified() ? 1 : 0
+                    ':id' => $userNick->isIdentified() ? 1 : 0,
+                    ':stier' => $userNick->getSubscriptionTier(),
+                    ':sstatus' => $userNick->getSubscriptionStatus(),
+                    ':sexp' => $userNick->getSubscriptionExpiresAt()
                 ]
             );
         }
@@ -79,6 +95,24 @@ class UserNickRepository
     }
 
     /**
+     * Update nickname subscription details.
+     */
+    public static function updateSubscription(string $nickname, ?string $tier, string $status, int $expiresAt): bool
+    {
+        $stmt = Database::execute(
+            "UPDATE nameserv_nicks SET subscription_tier = :tier, subscription_status = :status, subscription_expires_at = :exp WHERE LOWER(nickname) = LOWER(:nick)",
+            [
+                ':tier' => $tier,
+                ':status' => strtolower(trim($status)),
+                ':exp' => $expiresAt,
+                ':nick' => trim($nickname)
+            ]
+        );
+
+        return $stmt->rowCount() > 0;
+    }
+
+    /**
      * Check if a nickname exists.
      */
     public static function exists(string $nickname): bool
@@ -92,16 +126,23 @@ class UserNickRepository
     }
 
     /**
-     * Find user nick records that have expired (last seen older than $expireSeconds).
+     * Find user nick records that have expired (last seen older than $expireSeconds) and are NOT active paid subscribers.
      *
      * @return UserNick[]
      */
     public static function findExpired(int $expireSeconds): array
     {
         $expireTime = time() - $expireSeconds;
+        $now = time();
         $rows = Database::fetchAll(
-            "SELECT nickname, password_hash, email, registered_at, last_seen, is_identified FROM nameserv_nicks WHERE last_seen < :expireTime",
-            [':expireTime' => $expireTime]
+            "SELECT nickname, password_hash, email, registered_at, last_seen, is_identified, subscription_tier, subscription_status, subscription_expires_at
+             FROM nameserv_nicks
+             WHERE last_seen < :expireTime
+               AND NOT (subscription_status IN ('active', 'trialing') AND subscription_expires_at > :now)",
+            [
+                ':expireTime' => $expireTime,
+                ':now' => $now
+            ]
         );
 
         $expired = [];

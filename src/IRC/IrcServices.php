@@ -6,7 +6,7 @@ namespace Fortress\IRC;
 
 /**
  * IRC Service Command Dispatcher & Parser
- * Handles interaction with NAMESERV, CHANSERV, MOTDSERV, MEMOSERV, HOSTSERV, SERVICESERV,
+ * Handles interaction with NAMESERV, CHANSERV, PAYSERV, MOTDSERV, MEMOSERV, HOSTSERV, SERVICESERV,
  * THEMESERV, and Foreign Services operating under different hosts via IRC-style slash commands or direct messages.
  */
 class IrcServices
@@ -83,9 +83,6 @@ class IrcServices
         $first = strtolower($parts[0] ?? '');
 
         // Check for BOTSERV integration (External bot routing based on username)
-        $msgWithoutPrefix = '';
-        $targetBotNick = null;
-
         if ($first === '/msg' || $first === '/privmsg') {
             $targetNick = $parts[1] ?? '';
             if (!empty($targetNick) && ($service = BotServ::resolveBotService($channel, $targetNick))) {
@@ -167,6 +164,10 @@ class IrcServices
                 return self::handleChanServCommand($senderNick, $channel, $cmd, $args);
             }
 
+            if ($targetService === PayServ::SERVICE_NAME || $targetService === 'SUBSERV') {
+                return self::handlePayServCommand($senderNick, $channel, $cmd, $args);
+            }
+
             if ($targetService === MotdServ::SERVICE_NAME) {
                 return self::handleMotdServCommand($senderNick, $channel, $cmd, $args);
             }
@@ -217,6 +218,12 @@ class IrcServices
             return self::handleChanServCommand($senderNick, $channel, $cmd, $args);
         }
 
+        if ($first === '/payserv' || $first === '/subserv') {
+            $cmd = strtoupper($parts[1] ?? '');
+            $args = array_slice($parts, 2);
+            return self::handlePayServCommand($senderNick, $channel, $cmd, $args);
+        }
+
         if ($first === '/motdserv') {
             $cmd = strtoupper($parts[1] ?? '');
             $args = array_slice($parts, 2);
@@ -259,6 +266,36 @@ class IrcServices
             return self::handleTextServCommand($senderNick, $channel, $cmd, $args);
         }
 
+        // 2. Chat-based Subscription & Payment Shortcuts (/subscribe & /pay)
+        if ($first === '/subscribe' || $first === '/pay') {
+            $level = strtolower($parts[1] ?? 'user');
+            $target = $parts[2] ?? '';
+            $planId = $parts[3] ?? null;
+
+            if ($level === 'plans' || $level === 'list') {
+                $res = PayServ::listPlans();
+            } else {
+                if (empty($target)) {
+                    if ($level === 'channel') {
+                        $target = $channel;
+                    } elseif ($level === 'server') {
+                        $target = 'IVC-IRC Network';
+                    } else {
+                        $target = $senderNick;
+                    }
+                }
+                $res = PayServ::subscribe($senderNick, $level, $target, $planId);
+            }
+
+            return [
+                'is_service_command' => true,
+                'service' => PayServ::SERVICE_NAME,
+                'response' => $res['message'],
+                'channel' => $channel
+            ];
+        }
+
+        // 3. Theme Command
         if ($first === '/cabpfaserv') {
             $cmd = strtoupper($parts[1] ?? '');
             $args = array_slice($parts, 2);
@@ -286,7 +323,7 @@ class IrcServices
             ];
         }
 
-        // 3. Convenience Slash Commands
+        // 4. Convenience Slash Commands
         if ($first === '/memo') {
             $sub = strtoupper($parts[1] ?? 'LIST');
             if ($sub === 'SEND') {
@@ -477,11 +514,17 @@ class IrcServices
 
         if ($first === '/help') {
             $helpMsg = "Available IRC Commands:\n" .
+                       "• /subscribe [user|channel|server] [target] [plan] — Chat-based Stripe checkout subscription\n" .
+                       "• /pay [user|channel|server] [target] — Generate instant Stripe payment link\n" .
+                       "• /msg PAYSERV PLANS — View all Stripe subscription plans\n" .
+                       "• /msg PAYSERV SUBSCRIBE <user|channel|server> [target] — Subscribe level from chat\n" .
                        "• /connect <URI> — Connect to server via URI (supports https://, ivc://, irc://)\n" .
                        "• /disconnect [server|URI] — Disconnect from active or specified server\n" .
                        "• /msg NAMESERV REGISTER <pass> [email] — Register your nickname\n" .
                        "• /msg NAMESERV IDENTIFY <pass> — Identify with your password\n" .
+                       "• /msg NAMESERV SUBSCRIBE [tier] — Subscribe nickname to User Pro\n" .
                        "• /msg CHANSERV REGISTER <#channel> [passkey] — Register a channel\n" .
+                       "• /msg CHANSERV SUBSCRIBE <#channel> [tier] — Subscribe channel to Channel Pro\n" .
                        "• /msg CHANSERV OP <#channel> <nick> — Grant channel OP status\n" .
                        "• /msg MEMOSERV SEND <nick> <msg> — Send memo to offline/online user\n" .
                        "• /msg MEMOSERV READ [num] / LIST — Read or list your memos\n" .
@@ -508,6 +551,49 @@ class IrcServices
         return null;
     }
 
+    private static function handlePayServCommand(string $senderNick, string $channel, string $cmd, array $args): array
+    {
+        switch ($cmd) {
+            case 'PLANS':
+            case 'TIERS':
+            case 'LIST':
+                $res = PayServ::listPlans();
+                break;
+
+            case 'SUBSCRIBE':
+            case 'PAY':
+                $level = $args[0] ?? 'user';
+                $target = $args[1] ?? '';
+                $planId = $args[2] ?? null;
+                $res = PayServ::subscribe($senderNick, $level, $target, $planId);
+                break;
+
+            case 'STATUS':
+            case 'INFO':
+                $level = $args[0] ?? 'user';
+                $target = $args[1] ?? $senderNick;
+                $res = PayServ::getStatus($level, $target);
+                break;
+
+            case 'CANCEL':
+                $level = $args[0] ?? 'user';
+                $target = $args[1] ?? $senderNick;
+                $res = PayServ::cancel($senderNick, $level, $target);
+                break;
+
+            default:
+                $res = PayServ::listPlans();
+                break;
+        }
+
+        return [
+            'is_service_command' => true,
+            'service' => PayServ::SERVICE_NAME,
+            'response' => $res['message'],
+            'channel' => $channel
+        ];
+    }
+
     private static function handleNameServCommand(string $senderNick, string $channel, string $cmd, array $args): array
     {
         switch ($cmd) {
@@ -522,13 +608,18 @@ class IrcServices
                 $res = NameServ::identify($senderNick, $pass);
                 break;
 
+            case 'SUBSCRIBE':
+                $tier = $args[0] ?? 'nick_pro';
+                $res = NameServ::subscribe($senderNick, $tier);
+                break;
+
             case 'INFO':
                 $target = $args[0] ?? $senderNick;
                 $res = NameServ::getInfo($target);
                 break;
 
             default:
-                $res = ['message' => "NAMESERV: Unknown command '{$cmd}'. Use REGISTER, IDENTIFY, or INFO."];
+                $res = ['message' => "NAMESERV: Unknown command '{$cmd}'. Use REGISTER, IDENTIFY, SUBSCRIBE, or INFO."];
                 break;
         }
 
@@ -561,6 +652,12 @@ class IrcServices
                 $chan = !empty($args[0]) ? $args[0] : $channel;
                 $passkey = $args[1] ?? null;
                 $res = ChanServ::register($chan, $senderNick, $passkey);
+                break;
+
+            case 'SUBSCRIBE':
+                $chan = !empty($args[0]) && str_starts_with($args[0], '#') ? $args[0] : $channel;
+                $tier = !empty($args[0]) && !str_starts_with($args[0], '#') ? $args[0] : ($args[1] ?? 'channel_pro');
+                $res = ChanServ::subscribe($chan, $senderNick, $tier);
                 break;
 
             case 'OP':
@@ -611,7 +708,7 @@ class IrcServices
                 break;
 
             default:
-                $res = ['message' => "CHANSERV: Unknown command '{$cmd}'. Use REGISTER, OP, DEOP, VOICE, DEVOICE, MODE, TOPIC, or INFO."];
+                $res = ['message' => "CHANSERV: Unknown command '{$cmd}'. Use REGISTER, SUBSCRIBE, OP, DEOP, VOICE, DEVOICE, MODE, TOPIC, or INFO."];
                 break;
         }
 

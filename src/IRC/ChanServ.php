@@ -11,7 +11,7 @@ use Fortress\Models\ChannelUser;
 
 /**
  * CHANSERV (Channel Service) IRC System Bot
- * Handles channel registration, operator management, topic control, passkeys, and channel modes.
+ * Handles channel registration, operator management, topic control, passkeys, modes, and paid channel subscriptions.
  */
 class ChanServ
 {
@@ -63,6 +63,19 @@ class ChanServ
     }
 
     /**
+     * Subscribe channel to Channel Pro tier from chat
+     */
+    public static function subscribe(string $channel, string $ownerNick, string $planTier = 'channel_pro'): array
+    {
+        $channel = self::normalizeChannelName($channel);
+        if (!self::isRegistered($channel)) {
+            return ['success' => false, 'message' => "CHANSERV: Channel '{$channel}' must be registered before subscribing."];
+        }
+
+        return PayServ::subscribe($ownerNick, 'channel', $channel, $planTier);
+    }
+
+    /**
      * Assign OP role to user in channel
      */
     public static function op(string $channel, string $targetNick, string $requesterNick = ''): array
@@ -85,10 +98,6 @@ class ChanServ
     {
         return Channel::setTopicCommand($channel, $topic, $requesterNick);
     }
-
-    /**
-     * Get channel info
-     */
 
     /**
      * Set modes for a channel
@@ -137,7 +146,6 @@ class ChanServ
 
         return ['success' => true, 'message' => "CHANSERV: Modes for {$channel} updated to {$modes}.", 'modes' => $modes];
     }
-
 
     /**
      * Assign VOICE role to user in channel
@@ -188,13 +196,15 @@ class ChanServ
         $opsList = !empty($ops) ? implode(', ', $ops) : 'None';
         $topicStr = $chanModel->getTopic() ?? '(No topic set)';
         $regDate = date('Y-m-d H:i:s', $chanModel->getRegisteredAt());
+        $subStr = $chanModel->isPremium() ? "🚀 Active ({$chanModel->getSubscriptionTier()})" : 'None (Standard)';
 
         $msg = "CHANSERV Info for {$chanModel->getChannelName()}:\n" .
                "• Owner: {$chanModel->getOwnerNick()}\n" .
                "• Registered: {$regDate}\n" .
                "• Modes: {$chanModel->getModes()}\n" .
                "• Topic: {$topicStr}\n" .
-               "• Operators: {$opsList}";
+               "• Operators: {$opsList}\n" .
+               "• Subscription Status: {$subStr}";
 
         return ['success' => true, 'message' => $msg, 'data' => $chanModel->toArray()];
     }
@@ -236,7 +246,7 @@ class ChanServ
     /**
      * List registered channels
      *
-     * @return array<int, array{channel_name: string, owner_nick: string, topic: string|null, registered_at: int}>
+     * @return array<int, array{channel_name: string, owner_nick: string, topic: string|null, registered_at: int, subscription_tier: string|null, is_premium: int}>
      */
     public static function listChannels(): array
     {
@@ -251,7 +261,9 @@ class ChanServ
                 'channel_name' => $c->getChannelName(),
                 'owner_nick' => $c->getOwnerNick(),
                 'topic' => $c->getTopic(),
-                'registered_at' => $c->getRegisteredAt()
+                'registered_at' => $c->getRegisteredAt(),
+                'subscription_tier' => $c->getSubscriptionTier(),
+                'is_premium' => $c->isPremium() ? 1 : 0
             ];
         }
 

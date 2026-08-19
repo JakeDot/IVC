@@ -85,13 +85,22 @@ const activeMediaUrls = new Set();
 
 function renderTabsNav() {
     tabsBar.innerHTML = '';
+    tabsBar.setAttribute('role', 'tablist');
+    tabsBar.setAttribute('aria-label', 'IRC Channels');
 
     for (const [chanId, tab] of Object.entries(openTabs)) {
         const tabEl = document.createElement('div');
-        tabEl.className = `room-tab ${chanId === activeTabId ? 'active' : ''}`;
+        const isActive = chanId === activeTabId;
+        tabEl.className = `room-tab ${isActive ? 'active' : ''}`;
+        tabEl.setAttribute('role', 'tab');
+        tabEl.setAttribute('tabindex', '0');
+        tabEl.setAttribute('aria-selected', isActive ? 'true' : 'false');
 
         const icon = tab.isStats ? '📊 ' : '#';
         const cleanTitle = tab.isStats ? 'Connection Stats' : chanId.replace(/^#/, '');
+
+        tabEl.setAttribute('aria-label', `Channel ${cleanTitle}`);
+        tabEl.setAttribute('title', `Switch to ${cleanTitle}`);
 
         tabEl.innerHTML = `<span>${icon}${cleanTitle}</span>`;
 
@@ -99,6 +108,7 @@ function renderTabsNav() {
             const badge = document.createElement('span');
             badge.className = 'unread-badge';
             badge.textContent = tab.unreadCount;
+            badge.setAttribute('aria-label', `${tab.unreadCount} unread messages`);
             tabEl.appendChild(badge);
         }
 
@@ -106,15 +116,33 @@ function renderTabsNav() {
             const closeBtn = document.createElement('span');
             closeBtn.className = 'close-tab';
             closeBtn.textContent = '×';
-            closeBtn.title = 'Close Channel';
-            closeBtn.addEventListener('click', (e) => {
+            closeBtn.setAttribute('role', 'button');
+            closeBtn.setAttribute('tabindex', '0');
+            closeBtn.setAttribute('aria-label', `Close channel ${cleanTitle}`);
+            closeBtn.setAttribute('title', `Close ${cleanTitle}`);
+
+            const handleClose = (e) => {
                 e.stopPropagation();
                 closeTab(chanId);
+            };
+
+            closeBtn.addEventListener('click', handleClose);
+            closeBtn.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleClose(e);
+                }
             });
             tabEl.appendChild(closeBtn);
         }
 
         tabEl.addEventListener('click', () => switchToTab(chanId));
+        tabEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                switchToTab(chanId);
+            }
+        });
         tabsBar.appendChild(tabEl);
     }
 }

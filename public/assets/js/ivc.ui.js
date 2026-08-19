@@ -116,6 +116,10 @@ function renderTabsNav() {
             const closeBtn = document.createElement('span');
             closeBtn.className = 'close-tab';
             closeBtn.textContent = '×';
+            closeBtn.title = 'Close Channel';
+            closeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                closeTab(chanId);
             closeBtn.setAttribute('role', 'button');
             closeBtn.setAttribute('tabindex', '0');
             closeBtn.setAttribute('aria-label', `Close channel ${cleanTitle}`);

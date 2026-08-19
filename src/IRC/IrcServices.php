@@ -20,7 +20,7 @@ class IrcServices
     public static function parseServerUri(string $uri): ?array
     {
         $uri = trim($uri);
-        if (!preg_match('/^(https|ivc|irc):\/\//i', $uri)) {
+        if (!preg_match('/^(https|ivc(?:-[a-zA-Z0-9_-]+)?|irc):\/\//i', $uri)) {
             return null;
         }
 
@@ -37,6 +37,9 @@ class IrcServices
             'ivc'   => 8080,
             'irc'   => 6667,
         ];
+        if (str_starts_with($scheme, 'ivc-')) {
+            $defaultPorts[$scheme] = 8080;
+        }
         $port = isset($parsed['port']) ? (int)$parsed['port'] : ($defaultPorts[$scheme] ?? 443);
 
         $channel = '#lobby';

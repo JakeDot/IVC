@@ -24,6 +24,8 @@ class ServServ
             'MEMOSERV' => 'Offline Messaging & Memo Storage',
             'HOSTSERV' => 'Virtual Host (VHost) Management',
             'SERVSERV' => 'Network & Foreign Services Directory',
+            'HELPSERV' => 'Detailed Help & Documentation Service',
+            'CABPFASERV' => 'Computer Aided Best Practice Favorite Algorithm Service',
         ];
 
         $foreignServices = ServiceRegistry::listServices();
@@ -67,6 +69,8 @@ class ServServ
             'MEMOSERV' => 'Offline Messaging & Memo Storage',
             'HOSTSERV' => 'Virtual Host (VHost) Management',
             'SERVSERV' => 'Network & Foreign Services Directory',
+            'HELPSERV' => 'Detailed Help & Documentation Service',
+            'CABPFASERV' => 'Computer Aided Best Practice Favorite Algorithm Service',
         ];
 
         if (isset($coreServices[$serviceName])) {

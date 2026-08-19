@@ -7,17 +7,67 @@ namespace Fortress\IRC;
 /**
  * IRC Service Command Dispatcher & Parser
  * Handles interaction with NAMESERV, CHANSERV, MOTDSERV, MEMOSERV, HOSTSERV, SERVICESERV,
- * and Foreign Services operating under different hosts via IRC-style slash commands or direct messages.
+ * THEMESERV, and Foreign Services operating under different hosts via IRC-style slash commands or direct messages.
  */
 class IrcServices
 {
+    /**
+     * Parse server URI supporting https://, ivc://, and irc:// protocols.
+     *
+     * @param string $uri
+     * @return array{protocol: string, host: string, port: int, channel: string, uri: string}|null
+     */
+    public static function parseServerUri(string $uri): ?array
+    {
+        $uri = trim($uri);
+        if (!preg_match('/^(https|ivc|irc):\/\//i', $uri)) {
+            return null;
+        }
+
+        $parsed = parse_url($uri);
+        if (!$parsed || empty($parsed['host'])) {
+            return null;
+        }
+
+        $scheme = strtolower($parsed['scheme'] ?? 'https');
+        $host = strtolower($parsed['host']);
+
+        $defaultPorts = [
+            'https' => 443,
+            'ivc'   => 8080,
+            'irc'   => 6667,
+        ];
+        $port = isset($parsed['port']) ? (int)$parsed['port'] : ($defaultPorts[$scheme] ?? 443);
+
+        $channel = '#lobby';
+        if (!empty($parsed['fragment'])) {
+            $chanRaw = $parsed['fragment'];
+            $channel = str_starts_with($chanRaw, '#') ? $chanRaw : '#' . $chanRaw;
+        } elseif (!empty($parsed['path']) && $parsed['path'] !== '/') {
+            $pathClean = ltrim($parsed['path'], '/');
+            if ($pathClean !== '') {
+                $channel = str_starts_with($pathClean, '#') ? $pathClean : '#' . $pathClean;
+            }
+        }
+
+        $channel = \Fortress\Security\Sanitizer::sanitizeRoomId($channel);
+
+        return [
+            'protocol' => strtoupper($scheme),
+            'host'     => $host,
+            'port'     => $port,
+            'channel'  => $channel,
+            'uri'      => $uri
+        ];
+    }
+
     /**
      * Check if a message is an IRC service command and execute it.
      *
      * @param string $senderNick
      * @param string $channel
      * @param string $text
-     * @return array{is_service_command: true, service: string, response: string, channel: string}|null
+     * @return array{is_service_command: true, service: string, response: string, channel: string, skip_bot_broadcast?: bool}|null
      */
     public static function processCommand(string $senderNick, string $channel, string $text): ?array
     {
@@ -28,6 +78,77 @@ class IrcServices
 
         $parts = preg_split('/\s+/', $text);
         $first = strtolower($parts[0] ?? '');
+
+        // Check for BOTSERV integration (External bot routing based on username)
+        $msgWithoutPrefix = '';
+        $targetBotNick = null;
+
+        if ($first === '/msg' || $first === '/privmsg') {
+            $targetNick = $parts[1] ?? '';
+            if (!empty($targetNick) && ($service = BotServ::resolveBotService($channel, $targetNick))) {
+                $fullCommand = implode(' ', array_slice($parts, 2));
+                $res = ServServ::dispatchForeignCommand($senderNick, $service, $fullCommand);
+                return [
+                    'is_service_command' => true,
+                    'service' => $targetNick,
+                    'response' => $res['message'],
+                    'channel' => $channel
+                ];
+            }
+        } elseif (str_ends_with($first, ':')) {
+            $targetNick = rtrim($first, ':');
+            if (!empty($targetNick) && ($service = BotServ::resolveBotService($channel, $targetNick))) {
+                $fullCommand = implode(' ', array_slice($parts, 1));
+                $res = ServServ::dispatchForeignCommand($senderNick, $service, $fullCommand);
+                return [
+                    'is_service_command' => true,
+                    'service' => $targetNick,
+                    'response' => $res['message'],
+                    'channel' => $channel
+                ];
+            }
+        }
+
+        // Server Management Commands: /connect and /disconnect
+        if ($first === '/connect') {
+            $uri = $parts[1] ?? '';
+            if (empty($uri)) {
+                return [
+                    'is_service_command' => true,
+                    'service' => 'SERVERSERV',
+                    'response' => 'SERVERSERV: Usage: /connect <URI> (Supported protocols: https://, ivc://, irc://)',
+                    'channel' => $channel
+                ];
+            }
+
+            $parsed = self::parseServerUri($uri);
+            if (!$parsed) {
+                return [
+                    'is_service_command' => true,
+                    'service' => 'SERVERSERV',
+                    'response' => 'SERVERSERV: Invalid URI format. Supported protocols are https://, ivc://, and irc:// (e.g. https://server.com/#channel)',
+                    'channel' => $channel
+                ];
+            }
+
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "SERVERSERV: Connected to server '{$parsed['host']}:{$parsed['port']}' via {$parsed['protocol']} (Channel: {$parsed['channel']}).",
+                'channel' => $parsed['channel']
+            ];
+        }
+
+        if ($first === '/disconnect') {
+            $target = $parts[1] ?? '';
+            $targetStr = !empty($target) ? " '{$target}'" : "";
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "SERVERSERV: Disconnected from server{$targetStr}.",
+                'channel' => $channel
+            ];
+        }
 
         // 1. Direct /msg or bot service command
         if ($first === '/msg' || $first === '/privmsg') {
@@ -49,6 +170,14 @@ class IrcServices
 
             if ($targetService === MemoServ::SERVICE_NAME) {
                 return self::handleMemoServCommand($senderNick, $channel, $cmd, $args);
+            }
+
+            if ($targetService === BotServ::SERVICE_NAME) {
+                return self::handleBotServCommand($senderNick, $channel, $cmd, $args);
+            }
+
+            if ($targetService === HelpServ::SERVICE_NAME) {
+                return self::handleHelpServCommand($senderNick, $channel, $cmd, $args);
             }
 
             if ($targetService === HostServ::SERVICE_NAME) {
@@ -109,7 +238,52 @@ class IrcServices
             return self::handleServServCommand($senderNick, $channel, $cmd, $args);
         }
 
-        // 2. Convenience Slash Commands
+        if ($first === '/helpserv') {
+            $cmd = strtoupper($parts[1] ?? '');
+            $args = array_slice($parts, 2);
+            return self::handleHelpServCommand($senderNick, $channel, $cmd, $args);
+        }
+
+        if ($first === '/botserv') {
+            $cmd = strtoupper($parts[1] ?? '');
+            $args = array_slice($parts, 2);
+            return self::handleBotServCommand($senderNick, $channel, $cmd, $args);
+        }
+
+        if ($first === '/textserv') {
+            $cmd = strtoupper($parts[1] ?? '');
+            $args = array_slice($parts, 2);
+            return self::handleTextServCommand($senderNick, $channel, $cmd, $args);
+        }
+
+        if ($first === '/cabpfaserv') {
+            $cmd = strtoupper($parts[1] ?? '');
+            $args = array_slice($parts, 2);
+            return self::handleCabPfaServCommand($senderNick, $channel, $cmd, $args);
+        }
+
+        // 2. Theme Command
+        if ($first === '/theme') {
+            $arg = strtolower($parts[1] ?? 'list');
+            if ($arg === 'list' || $arg === 'help') {
+                $resp = "Available themes: dark, light, halloween, console, christmas. Usage: /theme <name> or /theme custom";
+            } elseif (in_array($arg, ['dark', 'light', 'halloween', 'console', 'christmas'], true)) {
+                $resp = "THEMESERV: Theme set to '{$arg}'.";
+            } elseif ($arg === 'custom' || $arg === 'create') {
+                $resp = "THEMESERV: Custom Theme Creator mode activated.";
+            } else {
+                $resp = "THEMESERV: Theme set to '{$arg}'.";
+            }
+
+            return [
+                'is_service_command' => true,
+                'service' => 'THEMESERV',
+                'response' => $resp,
+                'channel' => $channel
+            ];
+        }
+
+        // 3. Convenience Slash Commands
         if ($first === '/memo') {
             $sub = strtoupper($parts[1] ?? 'LIST');
             if ($sub === 'SEND') {
@@ -271,44 +445,6 @@ class IrcServices
             ];
         }
 
-        if ($first === '/dcc') {
-            $sub = strtoupper($parts[1] ?? 'HELP');
-            if ($sub === 'SEND') {
-                $filename = $parts[2] ?? 'file.dat';
-                $filesize = isset($parts[3]) ? (int)$parts[3] : 0;
-                $sizeStr = $filesize > 0 ? " (" . self::formatFileSize($filesize) . ")" : "";
-                $resp = "DCC SEND: Direct WebRTC transfer offer initiated for '{$filename}'{$sizeStr}.";
-            } elseif ($sub === 'CLOUD' || $sub === 'DRIVE' || $sub === 'MEGA') {
-                $service = $sub === 'CLOUD' ? ($parts[2] ?? 'Cloud') : $sub;
-                $urlIndex = $sub === 'CLOUD' ? 3 : 2;
-                $fileIndex = $sub === 'CLOUD' ? 4 : 3;
-                $sizeIndex = $sub === 'CLOUD' ? 5 : 4;
-
-                $url = $parts[$urlIndex] ?? ($sub !== 'CLOUD' ? ($parts[2] ?? '') : '');
-                $filename = $parts[$fileIndex] ?? ($sub !== 'CLOUD' ? ($parts[3] ?? 'cloud-file') : 'cloud-file');
-                $filesize = isset($parts[$sizeIndex]) ? (int)$parts[$sizeIndex] : 0;
-
-                if (empty($url)) {
-                    $resp = "DCC CLOUD: Usage: /dcc cloud <service> <url> <filename> [filesize]";
-                } else {
-                    $sizeStr = $filesize > 0 ? " (" . self::formatFileSize($filesize) . ")" : "";
-                    $resp = "DCC CLOUD SHARE [{$service}]: '{$filename}'{$sizeStr} -> {$url}";
-                }
-            } else {
-                $resp = "DCC File Sharing Service:\n" .
-                        "• /dcc send <filename> [filesize] — Offer direct WebRTC P2P file transfer\n" .
-                        "• /dcc cloud <GoogleDrive|Mega|Dropbox> <url> <filename> [filesize] — Share multi-gigabyte cloud storage link\n" .
-                        "• Click 📁 DCC Share button in chat for interactive file selection UI";
-            }
-
-            return [
-                'is_service_command' => true,
-                'service' => 'DCCSERV',
-                'response' => $resp,
-                'channel' => $channel
-            ];
-        }
-
         if ($first === '/supersilent') {
             $msgText = trim(substr($text, strlen($parts[0])));
             if ($msgText === '') {
@@ -338,6 +474,8 @@ class IrcServices
 
         if ($first === '/help') {
             $helpMsg = "Available IRC Commands:\n" .
+                       "• /connect <URI> — Connect to server via URI (supports https://, ivc://, irc://)\n" .
+                       "• /disconnect [server|URI] — Disconnect from active or specified server\n" .
                        "• /msg NAMESERV REGISTER <pass> [email] — Register your nickname\n" .
                        "• /msg NAMESERV IDENTIFY <pass> — Identify with your password\n" .
                        "• /msg CHANSERV REGISTER <#channel> [passkey] — Register a channel\n" .
@@ -351,9 +489,10 @@ class IrcServices
                        "• /vhost [REQUEST|ON|OFF|INFO] — HostServ shortcut\n" .
                        "• /motd [new_motd] — View/update Message of the Day\n" .
                        "• /topic <new_topic> — Change channel topic\n" .
+                       "• /theme [list|dark|light|halloween|console|christmas|custom] — Switch or manage themes\n" .
                        "• /supersilent <message> — Post a message to super room only without propagating to subrooms\n" .
-                       "• /dcc [send|cloud|help] — Direct WebRTC or multi-gigabyte cloud file sharing\n" .
-                       "• /settings [SET <key> <value>] — View or update serverwide settings in MySQL";
+                       "• /settings [SET <key> <value>] — View or update serverwide settings in MySQL\n" .
+                       "• /cabpfaserv <command> — Computer Aided Best Practice Favorite Algorithm Service";
 
             return [
                 'is_service_command' => true,
@@ -364,20 +503,6 @@ class IrcServices
         }
 
         return null;
-    }
-
-    public static function formatFileSize(int $bytes): string
-    {
-        if ($bytes >= 1073741824) {
-            return number_format($bytes / 1073741824, 2) . ' GB';
-        }
-        if ($bytes >= 1048576) {
-            return number_format($bytes / 1048576, 2) . ' MB';
-        }
-        if ($bytes >= 1024) {
-            return number_format($bytes / 1024, 2) . ' KB';
-        }
-        return $bytes . ' B';
     }
 
     private static function handleNameServCommand(string $senderNick, string $channel, string $cmd, array $args): array
@@ -412,6 +537,20 @@ class IrcServices
         ];
     }
 
+    private static function handleCabPfaServCommand(string $senderNick, string $channel, string $cmd, array $args): array
+    {
+        $text = trim(implode(' ', array_merge([$cmd], $args)));
+        $res = CabPfaServ::process($senderNick, $text);
+
+        return [
+            'is_service_command' => true,
+            'service' => CabPfaServ::SERVICE_NAME,
+            'response' => $res['message'],
+            'success' => $res['success'] ?? false,
+            'channel' => $channel
+        ];
+    }
+
     private static function handleChanServCommand(string $senderNick, string $channel, string $cmd, array $args): array
     {
         switch ($cmd) {
@@ -433,6 +572,30 @@ class IrcServices
                 $res = ChanServ::deop($chan, $target, $senderNick);
                 break;
 
+            case 'VOICE':
+                $chan = !empty($args[0]) && str_starts_with($args[0], '#') ? $args[0] : $channel;
+                $target = !empty($args[0]) && !str_starts_with($args[0], '#') ? $args[0] : ($args[1] ?? '');
+                $res = ChanServ::voice($chan, $target, $senderNick);
+                break;
+
+            case 'DEVOICE':
+                $chan = !empty($args[0]) && str_starts_with($args[0], '#') ? $args[0] : $channel;
+                $target = !empty($args[0]) && !str_starts_with($args[0], '#') ? $args[0] : ($args[1] ?? '');
+                $res = ChanServ::devoice($chan, $target, $senderNick);
+                break;
+
+            case 'MODE':
+            case 'MODES':
+                $chan = !empty($args[0]) && str_starts_with($args[0], '#') ? $args[0] : $channel;
+                $modes = !empty($args[0]) && !str_starts_with($args[0], '#') ? $args[0] : ($args[1] ?? '');
+                if (empty($modes)) {
+                    $info = ChanServ::getInfo($chan);
+                    $res = ['message' => $info['message']]; // Info includes modes
+                } else {
+                    $res = ChanServ::setModes($chan, $modes, $senderNick);
+                }
+                break;
+
             case 'TOPIC':
                 $chan = !empty($args[0]) && str_starts_with($args[0], '#') ? $args[0] : $channel;
                 $topic = trim(implode(' ', !empty($args[0]) && str_starts_with($args[0], '#') ? array_slice($args, 1) : $args));
@@ -445,7 +608,7 @@ class IrcServices
                 break;
 
             default:
-                $res = ['message' => "CHANSERV: Unknown command '{$cmd}'. Use REGISTER, OP, DEOP, TOPIC, or INFO."];
+                $res = ['message' => "CHANSERV: Unknown command '{$cmd}'. Use REGISTER, OP, DEOP, VOICE, DEVOICE, MODE, TOPIC, or INFO."];
                 break;
         }
 
@@ -542,6 +705,61 @@ class IrcServices
         return [
             'is_service_command' => true,
             'service' => HostServ::SERVICE_NAME,
+            'response' => $res['message'],
+            'channel' => $channel
+        ];
+    }
+
+    private static function handleHelpServCommand(string $senderNick, string $channel, string $cmd, array $args): array
+    {
+        $topic = $cmd ?: ($args[0] ?? '');
+        $res = HelpServ::getHelp($topic);
+
+        return [
+            'is_service_command' => true,
+            'service' => HelpServ::SERVICE_NAME,
+            'response' => $res['message'],
+            'channel' => $channel
+        ];
+    }
+
+    private static function handleTextServCommand(string $senderNick, string $channel, string $cmd, array $args): array
+    {
+        $text = implode(' ', $args);
+        $res = TextServ::process($cmd, $text);
+
+        return [
+            'is_service_command' => true,
+            'service' => TextServ::SERVICE_NAME,
+            'response' => $res['message'],
+            'channel' => $channel
+        ];
+    }
+
+    private static function handleBotServCommand(string $senderNick, string $channel, string $cmd, array $args): array
+    {
+        switch ($cmd) {
+            case 'ASSIGN':
+                $target = $args[0] ?? '';
+                $botNick = $args[1] ?? '';
+                $serviceName = $args[2] ?? '';
+                $res = BotServ::assign($target, $botNick, $serviceName, $senderNick);
+                break;
+
+            case 'UNASSIGN':
+                $target = $args[0] ?? '';
+                $botNick = $args[1] ?? '';
+                $res = BotServ::unassign($target, $botNick, $senderNick);
+                break;
+
+            default:
+                $res = ['message' => "BOTSERV: Unknown command '{$cmd}'. Use ASSIGN or UNASSIGN."];
+                break;
+        }
+
+        return [
+            'is_service_command' => true,
+            'service' => BotServ::SERVICE_NAME,
             'response' => $res['message'],
             'channel' => $channel
         ];

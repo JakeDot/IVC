@@ -37,6 +37,7 @@ class ChanServ
      */
     public static function register(string $channel, string $ownerNick, ?string $passkey = null): array
     {
+        return Channel::register($channel, $ownerNick, $passkey);
         $channel = self::normalizeChannelName($channel);
         $ownerNick = trim($ownerNick);
 
@@ -48,7 +49,8 @@ class ChanServ
             return ['success' => false, 'message' => "CHANSERV: Channel '{$channel}' is already registered."];
         }
 
-        $chanModel = new Channel($channel, $ownerNick, null, $passkey, '+t', time());
+        $hashedPasskey = ($passkey !== null && $passkey !== '') ? password_hash($passkey, PASSWORD_DEFAULT) : null;
+        $chanModel = new Channel($channel, $ownerNick, null, $hashedPasskey, '+t', time());
         $success = ChannelRepository::save($chanModel);
 
         if ($success) {
@@ -65,15 +67,7 @@ class ChanServ
      */
     public static function op(string $channel, string $targetNick, string $requesterNick = ''): array
     {
-        $channel = self::normalizeChannelName($channel);
-        $targetNick = trim($targetNick);
-
-        if (!empty($requesterNick) && !self::isOp($channel, $requesterNick)) {
-            return ['success' => false, 'message' => "CHANSERV: Permission denied. You must be an OP on {$channel} to grant OP status."];
-        }
-
-        self::setRole($channel, $targetNick, 'OP');
-        return ['success' => true, 'message' => "CHANSERV: Granted OP status (+o) to '{$targetNick}' in {$channel}."];
+        return Channel::op($channel, $targetNick, $requesterNick);
     }
 
     /**
@@ -81,15 +75,7 @@ class ChanServ
      */
     public static function deop(string $channel, string $targetNick, string $requesterNick = ''): array
     {
-        $channel = self::normalizeChannelName($channel);
-        $targetNick = trim($targetNick);
-
-        if (!empty($requesterNick) && !self::isOp($channel, $requesterNick)) {
-            return ['success' => false, 'message' => "CHANSERV: Permission denied. You must be an OP on {$channel} to remove OP status."];
-        }
-
-        self::setRole($channel, $targetNick, 'MEMBER');
-        return ['success' => true, 'message' => "CHANSERV: Removed OP status (-o) from '{$targetNick}' in {$channel}."];
+        return Channel::deop($channel, $targetNick, $requesterNick);
     }
 
     /**
@@ -97,22 +83,98 @@ class ChanServ
      */
     public static function setTopic(string $channel, string $topic, string $requesterNick = ''): array
     {
-        $channel = self::normalizeChannelName($channel);
-
-        if (!empty($requesterNick) && self::isRegistered($channel) && !self::isOp($channel, $requesterNick)) {
-            return ['success' => false, 'message' => "CHANSERV: Permission denied. Only channel operators can set the topic for {$channel}."];
-        }
-
-        if (self::isRegistered($channel)) {
-            ChannelRepository::updateTopic($channel, $topic);
-        }
-
-        return ['success' => true, 'message' => "CHANSERV: Topic for {$channel} updated to: \"{$topic}\"", 'topic' => $topic];
+        return Channel::setTopicCommand($channel, $topic, $requesterNick);
     }
 
     /**
      * Get channel info
      */
+
+    /**
+     * Set modes for a channel
+     */
+    public static function setModes(string $channel, string $modes, string $requesterNick = ''): array
+    {
+        $channel = self::normalizeChannelName($channel);
+
+        if (!empty($requesterNick) && self::isRegistered($channel) && !self::isOp($channel, $requesterNick)) {
+            return ['success' => false, 'message' => "CHANSERV: Permission denied. Only channel operators can set modes for {$channel}."];
+        }
+
+        if (self::isRegistered($channel)) {
+            $chanModel = ChannelRepository::findByChannelName($channel);
+            if ($chanModel) {
+                $currentModes = $chanModel->getModes();
+                $add = true;
+                for ($i = 0; $i < strlen($modes); $i++) {
+                    $char = $modes[$i];
+                    if ($char === '+') {
+                        $add = true;
+                    } elseif ($char === '-') {
+                        $add = false;
+                    } elseif (preg_match('/[a-zA-Z]/', $char)) {
+                        if ($add && !str_contains($currentModes, $char)) {
+                            $currentModes .= $char;
+                        } elseif (!$add && str_contains($currentModes, $char)) {
+                            $currentModes = str_replace($char, '', $currentModes);
+                        }
+                    }
+                }
+                // Ensure there is a + at the start if not empty, otherwise default to +t
+                if (!empty($currentModes) && !str_starts_with($currentModes, '+')) {
+                    $currentModes = '+' . $currentModes;
+                }
+
+                $currentModes = str_replace('+', '', $currentModes);
+                $currentModes = '+' . $currentModes;
+
+                if ($currentModes === '+') $currentModes = '';
+
+                ChannelRepository::updateModes($channel, $currentModes);
+                $modes = $currentModes;
+            }
+        }
+
+        return ['success' => true, 'message' => "CHANSERV: Modes for {$channel} updated to {$modes}.", 'modes' => $modes];
+    }
+
+
+    /**
+     * Assign VOICE role to user in channel
+     */
+    public static function voice(string $channel, string $targetNick, string $requesterNick = ''): array
+    {
+        $channel = self::normalizeChannelName($channel);
+        $targetNick = trim($targetNick);
+
+        if (!empty($requesterNick) && !self::isOp($channel, $requesterNick)) {
+            return ['success' => false, 'message' => "CHANSERV: Permission denied. You must be an OP on {$channel} to grant VOICE status."];
+        }
+
+        if (self::isOp($channel, $targetNick)) {
+            return ['success' => false, 'message' => "CHANSERV: Target user is already an OP."];
+        }
+
+        self::setRole($channel, $targetNick, 'VOICE');
+        return ['success' => true, 'message' => "CHANSERV: Granted VOICE status (+v) to '{$targetNick}' in {$channel}."];
+    }
+
+    /**
+     * Remove VOICE role from user in channel
+     */
+    public static function devoice(string $channel, string $targetNick, string $requesterNick = ''): array
+    {
+        $channel = self::normalizeChannelName($channel);
+        $targetNick = trim($targetNick);
+
+        if (!empty($requesterNick) && !self::isOp($channel, $requesterNick)) {
+            return ['success' => false, 'message' => "CHANSERV: Permission denied. You must be an OP on {$channel} to remove VOICE status."];
+        }
+
+        self::setRole($channel, $targetNick, 'MEMBER');
+        return ['success' => true, 'message' => "CHANSERV: Removed VOICE status (-v) from '{$targetNick}' in {$channel}."];
+    }
+
     public static function getInfo(string $channel): array
     {
         $channel = self::normalizeChannelName($channel);
@@ -142,8 +204,7 @@ class ChanServ
      */
     public static function isRegistered(string $channel): bool
     {
-        $channel = self::normalizeChannelName($channel);
-        return ChannelRepository::exists($channel);
+        return Channel::isRegistered($channel);
     }
 
     /**
@@ -151,9 +212,7 @@ class ChanServ
      */
     public static function setRole(string $channel, string $nickname, string $role): void
     {
-        $channel = self::normalizeChannelName($channel);
-        $channelUser = new ChannelUser($channel, $nickname, $role);
-        ChannelUserRepository::saveRole($channelUser);
+        Channel::setRole($channel, $nickname, $role);
     }
 
     /**
@@ -161,8 +220,7 @@ class ChanServ
      */
     public static function isOp(string $channel, string $nickname): bool
     {
-        $channel = self::normalizeChannelName($channel);
-        return ChannelUserRepository::isOp($channel, $nickname);
+        return Channel::isOp($channel, $nickname);
     }
 
     /**
@@ -172,8 +230,7 @@ class ChanServ
      */
     public static function getOperators(string $channel): array
     {
-        $channel = self::normalizeChannelName($channel);
-        return ChannelUserRepository::getOperators($channel);
+        return Channel::getOperators($channel);
     }
 
     /**
@@ -187,6 +244,9 @@ class ChanServ
         $list = [];
 
         foreach ($channels as $c) {
+            if (str_contains($c->getModes(), 's')) {
+                continue;
+            }
             $list[] = [
                 'channel_name' => $c->getChannelName(),
                 'owner_nick' => $c->getOwnerNick(),

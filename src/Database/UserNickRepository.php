@@ -90,4 +90,38 @@ class UserNickRepository
 
         return $count > 0;
     }
+
+    /**
+     * Find user nick records that have expired (last seen older than $expireSeconds).
+     *
+     * @return UserNick[]
+     */
+    public static function findExpired(int $expireSeconds): array
+    {
+        $expireTime = time() - $expireSeconds;
+        $rows = Database::fetchAll(
+            "SELECT nickname, password_hash, email, registered_at, last_seen, is_identified FROM nameserv_nicks WHERE last_seen < :expireTime",
+            [':expireTime' => $expireTime]
+        );
+
+        $expired = [];
+        foreach ($rows as $row) {
+            $expired[] = UserNick::fromArray($row);
+        }
+
+        return $expired;
+    }
+
+    /**
+     * Delete user nick record by nickname.
+     */
+    public static function delete(string $nickname): bool
+    {
+        $stmt = Database::execute(
+            "DELETE FROM nameserv_nicks WHERE LOWER(nickname) = LOWER(:nick)",
+            [':nick' => trim($nickname)]
+        );
+
+        return $stmt->rowCount() > 0;
+    }
 }

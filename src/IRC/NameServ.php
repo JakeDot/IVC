@@ -20,6 +20,7 @@ class NameServ
      */
     public static function register(string $nickname, string $password, ?string $email = null): array
     {
+        return UserNick::register($nickname, $password, $email);
         $nickname = trim($nickname);
         if (empty($nickname) || empty($password)) {
             return ['success' => false, 'message' => 'NAMESERV: Nickname and password are required.'];
@@ -33,6 +34,12 @@ class NameServ
         $userNick = new UserNick($nickname, $passHash, $email, null, null, true);
 
         if (UserNickRepository::save($userNick)) {
+            if ($email !== null) {
+                $subject = 'NAMESERV Registration Confirmation';
+                $body = "Hello {$nickname},\n\nYour nickname has been successfully registered on the IVC-IRC Network.";
+                $headers = "From: noreply@fortress.ivc.local\r\n";
+                @mail($email, $subject, $body, $headers);
+            }
             return ['success' => true, 'message' => "NAMESERV: Nickname '{$nickname}' successfully registered and identified."];
         }
 
@@ -44,16 +51,7 @@ class NameServ
      */
     public static function identify(string $nickname, string $password): array
     {
-        $nickname = trim($nickname);
-        $userNick = UserNickRepository::findByNickname($nickname);
-
-        if ($userNick === null || !$userNick->verifyPassword($password)) {
-            return ['success' => false, 'message' => 'NAMESERV: Password verification failed. Access denied.'];
-        }
-
-        UserNickRepository::updateIdentification($userNick->getNickname(), true, time());
-
-        return ['success' => true, 'message' => "NAMESERV: Password accepted. Nickname '{$nickname}' identified."];
+        return UserNick::identify($nickname, $password);
     }
 
     /**
@@ -95,5 +93,32 @@ class NameServ
     {
         $userNick = UserNickRepository::findByNickname($nickname);
         return $userNick !== null && $userNick->isIdentified();
+    }
+
+    /**
+     * Purge expired nicknames and send email notifications.
+     */
+    public static function purgeExpired(int $expireSeconds): int
+    {
+        $expiredNicks = UserNickRepository::findExpired($expireSeconds);
+        $purgedCount = 0;
+
+        foreach ($expiredNicks as $userNick) {
+            $nickname = $userNick->getNickname();
+            $email = $userNick->getEmail();
+
+            if ($email !== null) {
+                $subject = 'NAMESERV Nickname Expiration';
+                $body = "Hello {$nickname},\n\nYour nickname on the IVC-IRC Network has expired due to inactivity and has been removed.";
+                $headers = "From: noreply@fortress.ivc.local\r\n";
+                @mail($email, $subject, $body, $headers);
+            }
+
+            if (UserNickRepository::delete($nickname)) {
+                $purgedCount++;
+            }
+        }
+
+        return $purgedCount;
     }
 }

@@ -78,6 +78,23 @@ class ChannelRepository
     /**
      * Check if a channel is registered.
      */
+
+    /**
+     * Update modes for a channel.
+     */
+    public static function updateModes(string $channelName, string $modes): bool
+    {
+        $stmt = Database::execute(
+            "UPDATE chanserv_channels SET modes = :modes WHERE LOWER(channel_name) = LOWER(:chan)",
+            [
+                ':modes' => $modes,
+                ':chan' => trim($channelName)
+            ]
+        );
+
+        return $stmt->rowCount() > 0;
+    }
+
     public static function exists(string $channelName): bool
     {
         $count = (int)Database::fetchColumn(

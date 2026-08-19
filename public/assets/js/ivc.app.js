@@ -81,13 +81,9 @@ btnOpenNewTab.addEventListener('click', () => {
 btnCreateRoom.addEventListener('click', async () => {
     const randChan = '#room-' + Math.random().toString(36).substring(2, 8);
     roomInput.value = randChan;
-
-    const nickPass = document.getElementById('nick-password-input')?.value.trim();
-    if (nickPass) {
-        await performIrcServiceCommands(randChan, nickPass, keyInput.value.trim(), true);
-    }
-
-    openTab(randChan, true, keyInput.value.trim());
+    myNickname = nicknameInput.value.trim() || myNickname;
+    await openTab(randChan, true, keyInput.value.trim());
+    performIrcServiceCommands(randChan, nickPasswordInput.value, keyInput.value.trim(), true);
 });
 
 btnJoinRoom.addEventListener('click', async () => {
@@ -96,13 +92,9 @@ btnJoinRoom.addEventListener('click', async () => {
         alert('Please enter a channel name (e.g. #general).');
         return;
     }
-
-    const nickPass = document.getElementById('nick-password-input')?.value.trim();
-    if (nickPass) {
-        await performIrcServiceCommands(chan, nickPass, keyInput.value.trim(), false);
-    }
-
-    openTab(chan, true, keyInput.value.trim());
+    myNickname = nicknameInput.value.trim() || myNickname;
+    await openTab(chan, true, keyInput.value.trim());
+    performIrcServiceCommands(chan, nickPasswordInput.value, keyInput.value.trim(), false);
 });
 
 btnCopyLink.addEventListener('click', () => {

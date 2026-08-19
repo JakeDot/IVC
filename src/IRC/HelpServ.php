@@ -29,6 +29,9 @@ class HelpServ
                           "• REGISTER <#channel> [passkey] — Registers a channel under your nickname.\n" .
                           "• OP <#channel> <nickname> — Gives operator privileges (+o) to a user.\n" .
                           "• DEOP <#channel> <nickname> — Removes operator privileges (-o) from a user.\n" .
+                          "• VOICE <#channel> <nickname> — Gives voice privileges (+v) to a user.\n" .
+                          "• DEVOICE <#channel> <nickname> — Removes voice privileges (-v) from a user.\n" .
+                          "• MODE <#channel> <modes> — Sets channel modes (e.g., +s for secret, +m for moderated, +t for topic protection).\n" .
                           "• TOPIC <#channel> <new topic> — Changes the channel topic.\n" .
                           "• INFO <#channel> — Displays information about a registered channel.",
 

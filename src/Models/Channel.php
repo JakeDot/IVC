@@ -15,6 +15,9 @@ class Channel
     private ?string $passkey;
     private string $modes;
     private int $registeredAt;
+    private ?string $subscriptionTier;
+    private string $subscriptionStatus;
+    private int $subscriptionExpiresAt;
 
     public function __construct(
         string $channelName,
@@ -22,7 +25,10 @@ class Channel
         ?string $topic = null,
         ?string $passkey = null,
         string $modes = '+t',
-        ?int $registeredAt = null
+        ?int $registeredAt = null,
+        ?string $subscriptionTier = null,
+        string $subscriptionStatus = 'none',
+        int $subscriptionExpiresAt = 0
     ) {
         $this->channelName = trim($channelName);
         $this->ownerNick = trim($ownerNick);
@@ -30,6 +36,9 @@ class Channel
         $this->passkey = $passkey;
         $this->modes = $modes;
         $this->registeredAt = $registeredAt ?? time();
+        $this->subscriptionTier = $subscriptionTier;
+        $this->subscriptionStatus = strtolower(trim($subscriptionStatus));
+        $this->subscriptionExpiresAt = $subscriptionExpiresAt;
     }
 
     public function getChannelName(): string
@@ -92,6 +101,41 @@ class Channel
         $this->registeredAt = $registeredAt;
     }
 
+    public function getSubscriptionTier(): ?string
+    {
+        return $this->subscriptionTier;
+    }
+
+    public function setSubscriptionTier(?string $subscriptionTier): void
+    {
+        $this->subscriptionTier = $subscriptionTier;
+    }
+
+    public function getSubscriptionStatus(): string
+    {
+        return $this->subscriptionStatus;
+    }
+
+    public function setSubscriptionStatus(string $subscriptionStatus): void
+    {
+        $this->subscriptionStatus = strtolower(trim($subscriptionStatus));
+    }
+
+    public function getSubscriptionExpiresAt(): int
+    {
+        return $this->subscriptionExpiresAt;
+    }
+
+    public function setSubscriptionExpiresAt(int $subscriptionExpiresAt): void
+    {
+        $this->subscriptionExpiresAt = $subscriptionExpiresAt;
+    }
+
+    public function isPremium(): bool
+    {
+        return in_array($this->subscriptionStatus, ['active', 'trialing'], true) && $this->subscriptionExpiresAt > time();
+    }
+
     public function toArray(): array
     {
         return [
@@ -101,6 +145,10 @@ class Channel
             'passkey' => $this->passkey,
             'modes' => $this->modes,
             'registered_at' => $this->registeredAt,
+            'subscription_tier' => $this->subscriptionTier,
+            'subscription_status' => $this->subscriptionStatus,
+            'subscription_expires_at' => $this->subscriptionExpiresAt,
+            'is_premium' => $this->isPremium() ? 1 : 0,
         ];
     }
 
@@ -112,7 +160,10 @@ class Channel
             isset($data['topic']) ? (string)$data['topic'] : null,
             isset($data['passkey']) ? (string)$data['passkey'] : null,
             (string)($data['modes'] ?? '+t'),
-            isset($data['registered_at']) ? (int)$data['registered_at'] : null
+            isset($data['registered_at']) ? (int)$data['registered_at'] : null,
+            isset($data['subscription_tier']) ? (string)$data['subscription_tier'] : null,
+            (string)($data['subscription_status'] ?? 'none'),
+            isset($data['subscription_expires_at']) ? (int)$data['subscription_expires_at'] : 0
         );
     }
 }

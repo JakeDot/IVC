@@ -11,6 +11,7 @@ require_once __DIR__ . '/../src/Models/Channel.php';
 require_once __DIR__ . '/../src/Models/ChannelUser.php';
 require_once __DIR__ . '/../src/Models/IrcSetting.php';
 require_once __DIR__ . '/../src/Models/SharedFile.php';
+require_once __DIR__ . '/../src/Models/Subscription.php';
 require_once __DIR__ . '/../src/Database/Database.php';
 require_once __DIR__ . '/../src/Database/SharedFileRepository.php';
 require_once __DIR__ . '/../src/Database/UserNickRepository.php';
@@ -19,9 +20,11 @@ require_once __DIR__ . '/../src/Database/ChannelUserRepository.php';
 require_once __DIR__ . '/../src/Database/SettingRepository.php';
 require_once __DIR__ . '/../src/Database/BotServRepository.php';
 require_once __DIR__ . '/../src/Database/TextServRepository.php';
+require_once __DIR__ . '/../src/Database/SubscriptionRepository.php';
 require_once __DIR__ . '/../src/IRC/SettingsManager.php';
 require_once __DIR__ . '/../src/IRC/NameServ.php';
 require_once __DIR__ . '/../src/IRC/ChanServ.php';
+require_once __DIR__ . '/../src/IRC/PayServ.php';
 require_once __DIR__ . '/../src/IRC/MotdServ.php';
 require_once __DIR__ . '/../src/IRC/MemoServ.php';
 require_once __DIR__ . '/../src/IRC/HostServ.php';
@@ -31,6 +34,7 @@ require_once __DIR__ . '/../src/IRC/HelpServ.php';
 require_once __DIR__ . '/../src/IRC/BotServ.php';
 require_once __DIR__ . '/../src/IRC/TextServ.php';
 require_once __DIR__ . '/../src/IRC/IrcServices.php';
+require_once __DIR__ . '/../src/Services/StripeService.php';
 require_once __DIR__ . '/../src/Signaling/RoomManager.php';
 
 use Fortress\Security\Sanitizer;
@@ -41,6 +45,7 @@ use Fortress\Models\Channel;
 use Fortress\Models\ChannelUser;
 use Fortress\Models\IrcSetting;
 use Fortress\Models\SharedFile;
+use Fortress\Models\Subscription;
 use Fortress\Database\Database;
 use Fortress\Database\SharedFileRepository;
 use Fortress\Database\UserNickRepository;
@@ -49,9 +54,11 @@ use Fortress\Database\ChannelUserRepository;
 use Fortress\Database\SettingRepository;
 use Fortress\Database\BotServRepository;
 use Fortress\Database\TextServRepository;
+use Fortress\Database\SubscriptionRepository;
 use Fortress\IRC\SettingsManager;
 use Fortress\IRC\NameServ;
 use Fortress\IRC\ChanServ;
+use Fortress\IRC\PayServ;
 use Fortress\IRC\MotdServ;
 use Fortress\IRC\MemoServ;
 use Fortress\IRC\HostServ;
@@ -60,6 +67,7 @@ use Fortress\IRC\ServServ;
 use Fortress\IRC\BotServ;
 use Fortress\IRC\TextServ;
 use Fortress\IRC\IrcServices;
+use Fortress\Services\StripeService;
 use Fortress\Signaling\RoomManager;
 
 echo "=========================================\n";
@@ -107,7 +115,6 @@ for ($i = 0; $i < 501; $i++) {
     RateLimiter::check("client-$i", 5, -1);
 }
 
-
 $reflection = new ReflectionClass(RateLimiter::class);
 $method = $reflection->getMethod('getStateFilePath');
 $method->setAccessible(true);
@@ -120,7 +127,6 @@ RateLimiter::check('client-trigger-gc', 5, 60);
 
 $buckets = json_decode(file_get_contents($filePath), true);
 assertTest(count($buckets) === 1, 'Expired buckets purged by gc() when threshold > 500 is reached');
-
 
 // Test 3: Token Manager
 echo "\n3. Testing Token Manager & Room Session Keys...\n";
@@ -441,6 +447,78 @@ assertTest(count($channelFiles) >= 1 && $channelFiles[0]->getId() === 'file-test
 
 $deletedFile = SharedFileRepository::deleteById('file-test-999');
 assertTest($deletedFile === true, 'SharedFileRepository::deleteById deleted file record');
+
+// Test 16: Paid Subscriptions, Stripe Integration & Chat-Based PayServ Commands
+echo "\n16. Testing Paid Subscriptions, Stripe Integration & Chat-Based PayServ Commands...\n";
+
+// A. Subscription model & SubscriptionRepository
+$sub = new Subscription('user', 'CyberFox', 'CyberFox', 'nick_pro', 'cus_test123', 'sub_test123', 'cs_test123', 'active', 499, 'usd', time() + 86400);
+assertTest($sub->getTargetType() === 'user' && $sub->getTargetName() === 'CyberFox', 'Subscription model getters work');
+assertTest($sub->isActive() === true, 'Subscription isActive returns true for active non-expired sub');
+
+$savedSub = SubscriptionRepository::save($sub);
+assertTest($savedSub === true, 'SubscriptionRepository successfully saved subscription record');
+
+$foundSub = SubscriptionRepository::findById($sub->getId());
+assertTest($foundSub !== null && $foundSub->getTargetName() === 'CyberFox', 'SubscriptionRepository::findById retrieved subscription');
+
+$foundActive = SubscriptionRepository::findActiveByTarget('user', 'CyberFox');
+assertTest($foundActive !== null && $foundActive->getId() === $sub->getId(), 'SubscriptionRepository::findActiveByTarget retrieved active sub');
+
+// B. StripeService & Webhook HMAC signature verification
+$plans = StripeService::getPlans();
+assertTest(isset($plans['nick_pro'], $plans['channel_pro'], $plans['server_vip']), 'StripeService::getPlans returns user, channel, and server tiers');
+
+$checkout = StripeService::createCheckoutSession('user', 'CyberFox', 'nick_pro', 'CyberFox');
+assertTest($checkout['success'] === true && !empty($checkout['checkout_url']), 'StripeService::createCheckoutSession created checkout session');
+
+$payload = '{"id":"evt_test","type":"checkout.session.completed"}';
+$secret = 'whsec_test_secret';
+$time = time();
+$sig = hash_hmac('sha256', "{$time}.{$payload}", $secret);
+$sigHeader = "t={$time},v1={$sig}";
+
+assertTest(StripeService::verifyWebhookSignature($payload, $sigHeader, $secret) === true, 'StripeService::verifyWebhookSignature verified valid HMAC SHA256 signature');
+assertTest(StripeService::verifyWebhookSignature($payload, "t={$time},v1=bad_sig", $secret) === false, 'StripeService::verifyWebhookSignature rejected invalid signature');
+
+// C. PayServ Bot Service & Chat-Based Commands
+$plansMsg = PayServ::listPlans();
+assertTest($plansMsg['success'] === true && str_contains($plansMsg['message'], 'PAYSERV Subscription Plans'), 'PayServ::listPlans returned subscription plans');
+
+$subUserCmd = PayServ::subscribe('CyberFox', 'user', 'CyberFox', 'nick_pro');
+assertTest($subUserCmd['success'] === true && str_contains($subUserCmd['message'], 'Stripe Checkout Generated for user level'), 'PayServ::subscribe generated user level checkout link');
+
+$subChanCmd = PayServ::subscribe('CyberFox', 'channel', '#fortress', 'channel_pro');
+assertTest($subChanCmd['success'] === true && str_contains($subChanCmd['message'], 'Stripe Checkout Generated for channel level'), 'PayServ::subscribe generated channel level checkout link');
+
+$subServerCmd = PayServ::subscribe('CyberFox', 'server', 'IVC-IRC Network', 'server_vip');
+assertTest($subServerCmd['success'] === true && str_contains($subServerCmd['message'], 'Stripe Checkout Generated for server level'), 'PayServ::subscribe generated server level checkout link');
+
+$statusRes = PayServ::getStatus('user', 'CyberFox');
+assertTest($statusRes['success'] === true && str_contains($statusRes['message'], 'PAYSERV Subscription Information'), 'PayServ::getStatus returned active user subscription info');
+
+// D. NameServ & ChanServ Subscription Integration
+$nsSub = NameServ::subscribe('CyberFox', 'nick_pro');
+assertTest($nsSub['success'] === true && str_contains($nsSub['message'], 'Stripe Checkout Generated'), 'NameServ::subscribe generated Stripe checkout link');
+
+$csSub = ChanServ::subscribe('#fortress', 'CyberFox', 'channel_pro');
+assertTest($csSub['success'] === true && str_contains($csSub['message'], 'Stripe Checkout Generated'), 'ChanServ::subscribe generated Stripe checkout link');
+
+// E. IrcServices Chat Slash Commands (/subscribe and /pay)
+$slashSubUser = IrcServices::processCommand('CyberFox', '#lobby', '/subscribe user CyberFox nick_pro');
+assertTest($slashSubUser !== null && $slashSubUser['service'] === 'PAYSERV' && str_contains($slashSubUser['response'], 'Stripe Checkout Generated'), 'Parsed /subscribe user chat command');
+
+$slashPayChan = IrcServices::processCommand('CyberFox', '#lobby', '/pay channel #fortress channel_pro');
+assertTest($slashPayChan !== null && $slashPayChan['service'] === 'PAYSERV' && str_contains($slashPayChan['response'], 'Stripe Checkout Generated'), 'Parsed /pay channel chat command');
+
+$slashPayServer = IrcServices::processCommand('CyberFox', '#lobby', '/pay server IVC-IRC server_vip');
+assertTest($slashPayServer !== null && $slashPayServer['service'] === 'PAYSERV' && str_contains($slashPayServer['response'], 'Stripe Checkout Generated'), 'Parsed /pay server chat command');
+
+// F. Active Paid Nick Expiration Protection in NameServ::purgeExpired
+UserNickRepository::updateSubscription('CyberFox', 'nick_pro', 'active', time() + 86400);
+UserNickRepository::updateIdentification('CyberFox', false, time() - 7200); // 2 hours inactive
+$purgedCount = NameServ::purgeExpired(3600);
+assertTest($purgedCount === 0 && NameServ::isRegistered('CyberFox') === true, 'NameServ::purgeExpired protected active paid user CyberFox from expiration');
 
 echo "\n-----------------------------------------\n";
 echo "Test Results: $testsPassed Passed, $testsFailed Failed.\n";

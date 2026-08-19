@@ -6,6 +6,10 @@ function parseChannelFromUrl() {
         return normalizeChannel(hash);
     }
     const params = new URLSearchParams(window.location.search);
+    if (params.has('uri')) {
+        const parsed = parseServerUri(params.get('uri'));
+        if (parsed && parsed.channel) return parsed.channel;
+    }
     if (params.has('room')) {
         return normalizeChannel(params.get('room'));
     }

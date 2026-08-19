@@ -1,0 +1,11 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Handle ivc:// pseudo-protocol smartly
+    RewriteCond %{REQUEST_URI} ^/ivc:/(/)?(.*)$ [NC]
+    RewriteRule ^ /?uri=ivc://%2 [R=301,L]
+
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.html [L]
+</IfModule>

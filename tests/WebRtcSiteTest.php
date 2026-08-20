@@ -573,6 +573,21 @@ assertTest($parsedTarget['base_target'] === '#network/handshake' && $parsedTarge
 $parsedRawTarget = ChanServ::parseTargetAndModes('@object+raw');
 assertTest($parsedRawTarget['base_target'] === '@object' && $parsedRawTarget['mode_flags']['raw'] === true, 'ChanServ::parseTargetAndModes extracts @object base and +raw mode');
 
+$parsedSectionTarget = ChanServ::parseTargetAndModes('@object§prop=value+mo-des');
+assertTest($parsedSectionTarget['base_target'] === '@object' && $parsedSectionTarget['prop'] === 'prop' && $parsedSectionTarget['prop_value'] === 'value', 'ChanServ::parseTargetAndModes parses §prop subobject');
+assertTest($parsedSectionTarget['mode_flags']['m'] === true && $parsedSectionTarget['mode_flags']['o'] === true && $parsedSectionTarget['mode_flags']['d'] === false, 'ChanServ::parseModeFlags parses +mo-des additions and removals');
+assertTest($parsedSectionTarget['object_notation'] === '{object prop:value}', 'ChanServ::parseTargetAndModes generates object notation string');
+assertTest($parsedSectionTarget['ivc_uri'] === 'ivc://$me/object§prop=value', 'ChanServ::parseTargetAndModes generates ivc://$me/object§prop=value URI string');
+
+$parsedObjUri = IrcServices::parseServerUri('{object prop:value}');
+assertTest($parsedObjUri !== null && $parsedObjUri['protocol'] === 'IVC' && $parsedObjUri['channel'] === '#object§prop=value', 'IrcServices::parseServerUri parses inline object notation {object prop:value}');
+
+$parsedCompoundUri = IrcServices::parseServerUri('ivc+https://facebook.net/<object>/<name>');
+assertTest($parsedCompoundUri !== null && $parsedCompoundUri['protocol'] === 'IVC+HTTPS' && $parsedCompoundUri['host'] === 'facebook.net', 'IrcServices::parseServerUri parses compound protocol ivc+https://');
+
+$parsedComplexIvcUri = IrcServices::parseServerUri('ivc://+gmodes?£network$server@user@host.int#chan&oper+Oo&admins+AaOo£network/∆global=true');
+assertTest($parsedComplexIvcUri !== null && $parsedComplexIvcUri['host'] === 'host.int' && $parsedComplexIvcUri['host_modes'] === '+gmodes' && str_contains($parsedComplexIvcUri['channel'], 'chan'), 'IrcServices::parseServerUri parses complex IVC URI with host modes, query targets, and channel mode suffixes');
+
 // B. Channel modes setting with ChanServ::setModes
 $chanModeSet = ChanServ::setModes('#fortress', '+n+s+Δmodes', 'CyberFox');
 assertTest($chanModeSet['success'] === true && str_contains($chanModeSet['modes'], 'Δmodes'), 'ChanServ::setModes sets channel modes including Δmodes');

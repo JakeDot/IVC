@@ -20,8 +20,75 @@ class IrcServices
     public static function parseServerUri(string $uri): ?array
     {
         $uri = trim($uri);
-        if (!preg_match('/^(https|ivc(?:-[a-zA-Z0-9_-]+)?|irc):\/\//i', $uri)) {
+
+        // Check for inline object notation {object prop:value}
+        if (str_starts_with($uri, '{') && str_ends_with($uri, '}')) {
+            $inner = trim(substr($uri, 1, -1));
+            $parts = preg_split('/\s+/', $inner, 2);
+            $objName = $parts[0] ?? 'object';
+            $propStr = $parts[1] ?? '';
+            $propVal = 'true';
+            $propKey = 'prop';
+
+            if (($colonPos = strpos($propStr, ':')) !== false) {
+                $propKey = substr($propStr, 0, $colonPos);
+                $propVal = substr($propStr, $colonPos + 1);
+            } elseif ($propStr !== '') {
+                $propKey = $propStr;
+            }
+
+            return [
+                'protocol' => 'IVC',
+                'host'     => '$me',
+                'port'     => 8080,
+                'channel'  => '#' . $objName . '§' . $propKey . '=' . $propVal,
+                'modes'    => '',
+                'uri'      => "ivc://\$me/" . $objName . "§" . $propKey . "=" . $propVal,
+                'sub_object' => '§' . $propKey . '=' . $propVal,
+                'object_notation' => $uri
+            ];
+        }
+
+        if (!preg_match('/^(https|ivc(?:\+[a-zA-Z0-9_-]+)?(?:-[a-zA-Z0-9_-]+)?|irc):\/\//i', $uri)) {
             return null;
+        }
+
+        // Special handling for URIs where host begins with mode flags like +gmodes (e.g. ivc://+gmodes?query#chan)
+        if (preg_match('/^([a-zA-Z0-9\+-]+):\/\/(\+[a-zA-Z0-9_-]+)?([^:\/\?#]+)?(?::(\d+))?([^?#]*)?(?:\?([^#]*))?(?:#(.*))?$/i', $uri, $m)) {
+            $scheme = strtolower($m[1]);
+            $hostMode = $m[2] ?? '';
+            $rawHost = $m[3] ?? '';
+            $port = !empty($m[4]) ? (int)$m[4] : (str_starts_with($scheme, 'ivc') ? 8080 : 443);
+            $path = $m[5] ?? '';
+            $query = $m[6] ?? '';
+            $fragment = $m[7] ?? '';
+
+            $effectiveHost = $rawHost !== '' ? strtolower($rawHost) : ($query !== '' ? 'localhost' : 'localhost');
+            if (!empty($query) && str_contains($query, '@')) {
+                $atParts = explode('@', $query);
+                $effectiveHost = strtolower(array_pop($atParts));
+            }
+
+            $chanRaw = $fragment !== '' ? $fragment : $path;
+            $extractedModes = '';
+            if (($plusPos = strpos($chanRaw, '+')) !== false) {
+                $extractedModes = substr($chanRaw, $plusPos + 1);
+                $chanRaw = substr($chanRaw, 0, $plusPos);
+            }
+
+            $chanRaw = trim($chanRaw, '/');
+            $channel = !empty($chanRaw) ? (str_starts_with($chanRaw, '#') || str_starts_with($chanRaw, '&') ? $chanRaw : '#' . $chanRaw) : '#lobby';
+            $channel = \Fortress\Security\Sanitizer::sanitizeRoomId($channel);
+
+            return [
+                'protocol' => strtoupper($scheme),
+                'host'     => $effectiveHost,
+                'port'     => $port,
+                'channel'  => $channel,
+                'modes'    => $extractedModes,
+                'uri'      => $uri,
+                'host_modes' => $hostMode
+            ];
         }
 
         $parsed = parse_url($uri);

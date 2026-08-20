@@ -193,24 +193,45 @@ class ChanServ
     }
 
     /**
-     * Parse mode string into structured mode flags array
+     * Parse mode string into structured mode flags array supporting additions and removals (e.g. +mo-des)
      *
      * @param string $modeStr
-     * @return array{n: bool, N: bool, S: bool, s: bool, k: bool, v: bool, o: bool, a: bool, m: bool, t: bool, no_t: bool, raw: bool, delta_modes: bool}
+     * @return array{n: bool, N: bool, S: bool, s: bool, k: bool, v: bool, o: bool, a: bool, m: bool, d: bool, e: bool, t: bool, no_t: bool, raw: bool, delta_modes: bool}
      */
     public static function parseModeFlags(string $modeStr): array
     {
+        $add = true;
+        $activeModes = [];
+        $chars = mb_str_split($modeStr);
+
+        for ($i = 0; $i < count($chars); $i++) {
+            $c = $chars[$i];
+            if ($c === '+') {
+                $add = true;
+            } elseif ($c === '-') {
+                $add = false;
+            } else {
+                if ($add) {
+                    $activeModes[$c] = true;
+                } else {
+                    unset($activeModes[$c]);
+                }
+            }
+        }
+
         $flags = [
-            'n' => str_contains($modeStr, 'n'),
-            'N' => str_contains($modeStr, 'N'),
-            'S' => str_contains($modeStr, 'S'),
-            's' => str_contains($modeStr, 's'),
-            'k' => str_contains($modeStr, 'k'),
-            'v' => str_contains($modeStr, 'v'),
-            'o' => str_contains($modeStr, 'o'),
-            'a' => str_contains($modeStr, 'a'),
-            'm' => str_contains($modeStr, 'm'),
-            't' => str_contains($modeStr, 't') && !str_contains($modeStr, '-t'),
+            'n' => isset($activeModes['n']),
+            'N' => isset($activeModes['N']),
+            'S' => isset($activeModes['S']),
+            's' => isset($activeModes['s']),
+            'k' => isset($activeModes['k']),
+            'v' => isset($activeModes['v']),
+            'o' => isset($activeModes['o']),
+            'a' => isset($activeModes['a']),
+            'm' => isset($activeModes['m']),
+            'd' => isset($activeModes['d']),
+            'e' => isset($activeModes['e']),
+            't' => isset($activeModes['t']),
             'no_t' => str_contains($modeStr, '-t'),
             'raw' => str_contains($modeStr, 'raw'),
             'delta_modes' => str_contains($modeStr, 'Δmodes') || str_contains($modeStr, 'deltamodes') || str_contains($modeStr, 'Δ'),
@@ -220,10 +241,10 @@ class ChanServ
     }
 
     /**
-     * Parse target and attached mode suffixes (e.g. #channel+Δmodes, @object+bookmarks, #room+v+t)
+     * Parse target, §prop section subobjects, and attached mode suffixes (e.g. #channel+Δmodes, @object§prop=val+mo-des)
      *
      * @param string $target
-     * @return array{base_target: string, raw_target: string, modes: string, mode_flags: array}
+     * @return array{base_target: string, sub_object: string|null, prop: string|null, prop_value: string|null, raw_target: string, modes: string, mode_flags: array, object_notation: string|null, ivc_uri: string|null}
      */
     public static function parseTargetAndModes(string $target): array
     {
@@ -239,13 +260,43 @@ class ChanServ
             $modes = substr($target, $pos);
         }
 
+        $prop = null;
+        $propValue = null;
+        $subObject = null;
+        $objectNotation = null;
+        $ivcUri = null;
+
+        // Check for §prop or §prop=val property subobjects
+        if (($secPos = strpos($baseTarget, '§')) !== false) {
+            $subObject = substr($baseTarget, $secPos);
+            $propRaw = substr($baseTarget, $secPos + strlen('§'));
+            $baseTarget = substr($baseTarget, 0, $secPos);
+
+            if (($eqPos = strpos($propRaw, '=')) !== false) {
+                $prop = substr($propRaw, 0, $eqPos);
+                $propValue = substr($propRaw, $eqPos + 1);
+            } else {
+                $prop = $propRaw;
+                $propValue = 'true';
+            }
+
+            $cleanObj = ltrim($baseTarget, '#@&£$');
+            $objectNotation = "{" . $cleanObj . " " . $prop . ":" . $propValue . "}";
+            $ivcUri = "ivc://\$me/" . $cleanObj . "§" . $prop . "=" . $propValue;
+        }
+
         $flags = self::parseModeFlags($modes);
 
         return [
             'base_target' => $baseTarget,
+            'sub_object' => $subObject,
+            'prop' => $prop,
+            'prop_value' => $propValue,
             'raw_target' => $target,
             'modes' => $modes,
-            'mode_flags' => $flags
+            'mode_flags' => $flags,
+            'object_notation' => $objectNotation,
+            'ivc_uri' => $ivcUri
         ];
     }
 

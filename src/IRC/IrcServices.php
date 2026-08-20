@@ -49,7 +49,7 @@ class IrcServices
             ];
         }
 
-        if (!preg_match('/^(https|ivc(?:-[a-zA-Z0-9_-]+)?|irc):\/\//i', $uri)) {
+        if (!preg_match('/^(https|ivc(?:\+[a-zA-Z0-9_-]+)?(?:-[a-zA-Z0-9_-]+)?|irc):\/\//i', $uri)) {
             return null;
         }
 

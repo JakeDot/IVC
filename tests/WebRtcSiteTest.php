@@ -579,6 +579,9 @@ assertTest($parsedSectionTarget['ivc_uri'] === 'ivc://$me/object§prop=value', '
 $parsedObjUri = IrcServices::parseServerUri('{object prop:value}');
 assertTest($parsedObjUri !== null && $parsedObjUri['protocol'] === 'IVC' && $parsedObjUri['channel'] === '#object§prop=value', 'IrcServices::parseServerUri parses inline object notation {object prop:value}');
 
+$parsedCompoundUri = IrcServices::parseServerUri('ivc+https://facebook.net/<object>/<name>');
+assertTest($parsedCompoundUri !== null && $parsedCompoundUri['protocol'] === 'IVC+HTTPS' && $parsedCompoundUri['host'] === 'facebook.net', 'IrcServices::parseServerUri parses compound protocol ivc+https://');
+
 // B. Channel modes setting with ChanServ::setModes
 $chanModeSet = ChanServ::setModes('#fortress', '+n+s+Δmodes', 'CyberFox');
 assertTest($chanModeSet['success'] === true && str_contains($chanModeSet['modes'], 'Δmodes'), 'ChanServ::setModes sets channel modes including Δmodes');

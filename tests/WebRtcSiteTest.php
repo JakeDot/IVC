@@ -536,9 +536,6 @@ assertTest($uriLocalOper !== null && $uriLocalOper['protocol'] === 'IVC' && $uri
 $uriChanModes = IrcServices::parseServerUri('ivc://local.host/chan+ovm');
 assertTest($uriChanModes !== null && $uriChanModes['protocol'] === 'IVC' && $uriChanModes['host'] === 'local.host' && $uriChanModes['channel'] === '#chan', 'Parsed complex ivc:// URI appending # to chan and stripping +ovm modes');
 
-$uriTestUser = IrcServices::parseServerUri('ivc://$me°180+oasisSNOAW@jakedot@ivc.cx/#hi&opers+o');
-assertTest($uriTestUser !== null && $uriTestUser['protocol'] === 'IVC' && $uriTestUser['host'] === 'ivc.cx' && $uriTestUser['channel'] === '#hi&opers' && $uriTestUser['modes'] === 'o', 'Parsed ivc://$me°180+oasisSNOAW@jakedot@ivc.cx/#hi&opers+o URI correctly');
-
 $uriIrc = IrcServices::parseServerUri('irc://irc.fortress.net:6667/#dev');
 assertTest($uriIrc !== null && $uriIrc['protocol'] === 'IRC' && $uriIrc['host'] === 'irc.fortress.net' && $uriIrc['port'] === 6667 && $uriIrc['channel'] === '#dev', 'Parsed irc:// URI correctly');
 

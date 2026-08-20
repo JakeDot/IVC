@@ -20,6 +20,35 @@ class IrcServices
     public static function parseServerUri(string $uri): ?array
     {
         $uri = trim($uri);
+
+        // Check for inline object notation {object prop:value}
+        if (str_starts_with($uri, '{') && str_ends_with($uri, '}')) {
+            $inner = trim(substr($uri, 1, -1));
+            $parts = preg_split('/\s+/', $inner, 2);
+            $objName = $parts[0] ?? 'object';
+            $propStr = $parts[1] ?? '';
+            $propVal = 'true';
+            $propKey = 'prop';
+
+            if (($colonPos = strpos($propStr, ':')) !== false) {
+                $propKey = substr($propStr, 0, $colonPos);
+                $propVal = substr($propStr, $colonPos + 1);
+            } elseif ($propStr !== '') {
+                $propKey = $propStr;
+            }
+
+            return [
+                'protocol' => 'IVC',
+                'host'     => '$me',
+                'port'     => 8080,
+                'channel'  => '#' . $objName . '§' . $propKey . '=' . $propVal,
+                'modes'    => '',
+                'uri'      => "ivc://\$me/" . $objName . "§" . $propKey . "=" . $propVal,
+                'sub_object' => '§' . $propKey . '=' . $propVal,
+                'object_notation' => $uri
+            ];
+        }
+
         if (!preg_match('/^(https|ivc(?:-[a-zA-Z0-9_-]+)?|irc):\/\//i', $uri)) {
             return null;
         }

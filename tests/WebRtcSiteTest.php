@@ -90,7 +90,7 @@ function assertTest(bool $condition, string $message): void {
 
 // Test 1: Sanitizer & IRC #room scheme
 echo "1. Testing Sanitizer & IRC #room channel scheme...\n";
-assertTest(Sanitizer::sanitizeRoomId('room123!@#') === '#room123', 'Sanitize invalid characters and normalize to #room123');
+assertTest(Sanitizer::sanitizeRoomId('room123!@#') === '#room123@', 'Sanitize invalid characters and normalize to #room123@');
 assertTest(Sanitizer::sanitizeRoomId('#fortress-channel') === '#fortress-channel', 'Retain existing leading # in channel name');
 assertTest(Sanitizer::sanitizeClientId('peer-abc-123') === 'peer-abc-123', 'Valid client ID retained');
 
@@ -547,6 +547,12 @@ assertTest($cmdConnUsage !== null && $cmdConnUsage['service'] === 'SERVERSERV' &
 
 $cmdConn = IrcServices::processCommand('User1', '#lobby', '/connect https://chat.fortress.net/#lobby');
 assertTest($cmdConn !== null && $cmdConn['service'] === 'SERVERSERV' && str_contains($cmdConn['response'], 'Connected to server'), 'Processed /connect command');
+
+$cmdConnUnauthorized = IrcServices::processCommand('Alice', '#lobby', '/connect ivc://local.host/#fortress+o');
+assertTest($cmdConnUnauthorized !== null && $cmdConnUnauthorized['service'] === 'SERVERSERV' && str_contains($cmdConnUnauthorized['response'], 'Permission denied'), 'Rejected /connect with +o mode for non-operator user');
+
+$cmdConnAuthorized = IrcServices::processCommand('CyberFox', '#lobby', '/connect ivc://local.host/#fortress+o');
+assertTest($cmdConnAuthorized !== null && $cmdConnAuthorized['service'] === 'SERVERSERV' && str_contains($cmdConnAuthorized['response'], 'Connected to server'), 'Allowed /connect with +o mode for authorized operator user');
 
 $cmdDisc = IrcServices::processCommand('User1', '#lobby', '/disconnect chat.fortress.net');
 assertTest($cmdDisc !== null && $cmdDisc['service'] === 'SERVERSERV' && str_contains($cmdDisc['response'], 'Disconnected from server'), 'Processed /disconnect command');

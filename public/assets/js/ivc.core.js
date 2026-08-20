@@ -15,6 +15,248 @@ const BUILTIN_THEMES = ['dark', 'light', 'halloween', 'console', 'christmas'];
 // Server Management Tracking
 const connectedServers = {};
 
+function parseModeFlagsJS(modeStr) {
+    if (!modeStr) return {};
+    return {
+        m: modeStr.includes('m'),
+        v: modeStr.includes('v'),
+        o: modeStr.includes('o'),
+        e: modeStr.includes('e'),
+        d: modeStr.includes('d'),
+        raw: modeStr.includes('raw'),
+        deltaModes: modeStr.includes('Δmodes') || modeStr.includes('deltamodes') || modeStr.includes('∆')
+    };
+}
+
+function parseSubobjects(input) {
+    if (!input) {
+        return { baseTarget: '', subobjects: [], props: {}, events: {} };
+    }
+    input = String(input).trim();
+
+    const posSec = input.indexOf('§');
+    const posDelta = input.indexOf('∆');
+
+    let firstSubPos = null;
+    if (posSec !== -1 && posDelta !== -1) {
+        firstSubPos = Math.min(posSec, posDelta);
+    } else if (posSec !== -1) {
+        firstSubPos = posSec;
+    } else if (posDelta !== -1) {
+        firstSubPos = posDelta;
+    }
+
+    if (firstSubPos === null) {
+        return { baseTarget: input, subobjects: [], props: {}, events: {} };
+    }
+
+    const baseTarget = input.substring(0, firstSubPos);
+    const subStr = input.substring(firstSubPos);
+
+    const tokens = subStr.split(/([§∆])/g).filter(Boolean);
+
+    const subobjects = [];
+    const props = {};
+    const events = {};
+
+    for (let i = 0; i < tokens.length; i += 2) {
+        const symbol = tokens[i];
+        const segment = tokens[i + 1] || '';
+
+        if (symbol !== '§' && symbol !== '∆') continue;
+
+        const type = (symbol === '§') ? 'property' : 'event';
+        let name = '';
+        let value = 'true';
+        let modes = '';
+
+        let match;
+        if ((match = segment.match(/^([a-zA-Z0-9_\-\.\/]+)(?:\+([a-zA-Z0-9_]+))?=(.*?)([\+\-][a-zA-Z0-9_\-\+]+)?$/))) {
+            name = match[1];
+            modes = match[2] ? '+' + match[2] : (match[4] || '');
+            value = match[3];
+        } else if ((match = segment.match(/^([a-zA-Z0-9_\-\.\/]+)=(.*?)([\+\-][a-zA-Z0-9_\-\+]+)?$/))) {
+            name = match[1];
+            value = match[2];
+            modes = match[3] || '';
+        } else if ((match = segment.match(/^([a-zA-Z0-9_\-\.\/]+)([\+\-][a-zA-Z0-9_\-\+]+)?$/))) {
+            name = match[1];
+            modes = match[2] || '';
+            value = 'true';
+        } else {
+            name = segment;
+        }
+
+        const modeFlags = parseModeFlagsJS(modes);
+
+        const subItem = {
+            symbol,
+            type,
+            name,
+            value,
+            modes,
+            modeFlags
+        };
+
+        subobjects.push(subItem);
+
+        const dictItem = {
+            value,
+            modes,
+            modeFlags
+        };
+
+        if (type === 'property') {
+            props[name] = dictItem;
+        } else {
+            events[name] = dictItem;
+        }
+    }
+
+    return { baseTarget, subobjects, props, events };
+}
+
+function formatObjectUri(objData, host = '$me') {
+    if (!objData) return `ivc://${host}/object`;
+
+    if (typeof objData === 'string') {
+        objData = objData.trim();
+        if (objData.startsWith('ivc://')) return objData;
+        if (objData.includes(' ') || objData.includes(':')) {
+            const clean = objData.replace(/^\{|\}$/g, '');
+            const parts = clean.split(/\s+/);
+            const objName = parts[0];
+            const kv = parts.slice(1).join(' ');
+            if (kv) {
+                const kvParts = kv.split(':', 2);
+                const propName = kvParts[0].trim();
+                const propVal = (kvParts[1] !== undefined ? kvParts[1] : 'true').trim();
+                return `ivc://${host}/${objName}§${propName}=${propVal}`;
+            }
+            return `ivc://${host}/${objName}`;
+        }
+        return `ivc://${host}/${objData}`;
+    }
+
+    let baseObject = objData.object || objData.name || null;
+    let props = objData;
+
+    if (!baseObject) {
+        const keys = Object.keys(objData);
+        if (keys.length === 1 && typeof objData[keys[0]] === 'object' && objData[keys[0]] !== null) {
+            baseObject = keys[0];
+            props = objData[keys[0]];
+        } else {
+            baseObject = 'object';
+        }
+    }
+
+    let subStr = '';
+    const reservedKeys = new Set(['object', 'name', 'host', 'protocol', 'scheme', 'subobjects', 'props', 'events', 'uri', 'asObject']);
+
+    for (const [k, v] of Object.entries(props)) {
+        if (reservedKeys.has(k)) continue;
+
+        let symbol = '§';
+        let keyName = String(k);
+
+        if (keyName.startsWith('§')) {
+            symbol = '§';
+            keyName = keyName.substring(1);
+        } else if (keyName.startsWith('∆')) {
+            symbol = '∆';
+            keyName = keyName.substring(1);
+        }
+
+        let valStr = 'true';
+        let modeStr = '';
+
+        if (v && typeof v === 'object') {
+            valStr = v.value !== undefined ? String(v.value) : 'true';
+            modeStr = v.modes ? String(v.modes) : '';
+        } else if (v !== undefined) {
+            valStr = String(v);
+        }
+
+        subStr += `${symbol}${keyName}=${valStr}${modeStr}`;
+    }
+
+    return `ivc://${host}/${baseObject}${subStr}`;
+}
+
+function parseObjectFromUri(uri) {
+    const parsedServer = parseServerUri(uri);
+    if (!parsedServer) {
+        const subParsed = parseSubobjects(uri);
+        const baseObj = subParsed.baseTarget.replace(/^#/, '');
+        const asObject = { object: baseObj };
+        for (const [k, item] of Object.entries(subParsed.props)) {
+            asObject[k] = item.value;
+        }
+        for (const [k, item] of Object.entries(subParsed.events)) {
+            asObject[`∆${k}`] = item.value;
+        }
+        return {
+            scheme: 'ivc',
+            host: '$me',
+            object: baseObj,
+            uri,
+            subobjects: subParsed.subobjects,
+            props: subParsed.props,
+            events: subParsed.events,
+            asObject
+        };
+    }
+
+    const baseObj = parsedServer.channel.replace(/^#/, '');
+    const asObject = { object: baseObj };
+
+    for (const [k, item] of Object.entries(parsedServer.props || {})) {
+        asObject[k] = item.value;
+    }
+    for (const [k, item] of Object.entries(parsedServer.events || {})) {
+        asObject[`∆${k}`] = item.value;
+    }
+
+    return {
+        scheme: (parsedServer.protocol || 'ivc').toLowerCase(),
+        host: parsedServer.host,
+        object: baseObj,
+        uri,
+        subobjects: parsedServer.subobjects || [],
+        props: parsedServer.props || {},
+        events: parsedServer.events || {},
+        asObject
+    };
+}
+
+function applySubobjectModes(subobj, modeChange) {
+    if (!subobj) return subobj;
+    let currentModes = subobj.modes || '';
+    let add = true;
+
+    for (const char of modeChange) {
+        if (char === '+') {
+            add = true;
+        } else if (char === '-') {
+            add = false;
+        } else if (/[a-zA-Z]/.test(char)) {
+            if (add && !currentModes.includes(char)) {
+                currentModes += char;
+            } else if (!add && currentModes.includes(char)) {
+                currentModes = currentModes.replace(char, '');
+            }
+        }
+    }
+
+    const cleanModes = currentModes.replace(/\+/g, '');
+    currentModes = cleanModes ? '+' + cleanModes : '';
+
+    subobj.modes = currentModes;
+    subobj.modeFlags = parseModeFlagsJS(currentModes);
+    return subobj;
+}
+
 function parseServerUri(uri) {
     if (!uri) return null;
     uri = uri.trim();
@@ -33,13 +275,16 @@ function parseServerUri(uri) {
 
     let channelRaw = match[4] || '#lobby';
 
-    if (channelRaw.includes('#')) {
-        channelRaw = '#' + channelRaw.split('#').pop();
-    } else if (channelRaw && !channelRaw.startsWith('#')) {
-        channelRaw = '#' + channelRaw;
+    const subParsed = parseSubobjects(channelRaw);
+    let baseChanRaw = subParsed.baseTarget || '#lobby';
+
+    if (baseChanRaw.includes('#')) {
+        baseChanRaw = '#' + baseChanRaw.split('#').pop();
+    } else if (baseChanRaw && !baseChanRaw.startsWith('#')) {
+        baseChanRaw = '#' + baseChanRaw;
     }
 
-    const channel = normalizeChannel(channelRaw);
+    const channel = normalizeChannel(baseChanRaw);
 
     return {
         protocol,
@@ -47,7 +292,10 @@ function parseServerUri(uri) {
         port,
         channel,
         serverKey: `${host}:${port}`,
-        uri
+        uri,
+        subobjects: subParsed.subobjects,
+        props: subParsed.props,
+        events: subParsed.events
     };
 }
 

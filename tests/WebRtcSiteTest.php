@@ -557,6 +557,78 @@ assertTest($cmdConnAuthorized !== null && $cmdConnAuthorized['service'] === 'SER
 $cmdDisc = IrcServices::processCommand('User1', '#lobby', '/disconnect chat.fortress.net');
 assertTest($cmdDisc !== null && $cmdDisc['service'] === 'SERVERSERV' && str_contains($cmdDisc['response'], 'Disconnected from server'), 'Processed /disconnect command');
 
+// Test 17: Extended Modes & New Slash Commands (/join, /part, /mode, /raw, /delta)
+echo "\n17. Testing Extended Modes & New Slash Commands...\n";
+
+// A. Mode parsing & target mode suffix parsing
+$modeFlags = ChanServ::parseModeFlags('+n+v+o+Δmodes');
+assertTest($modeFlags['n'] === true && $modeFlags['v'] === true && $modeFlags['o'] === true && $modeFlags['delta_modes'] === true, 'ChanServ::parseModeFlags correctly identifies mode flags');
+
+$parsedTarget = ChanServ::parseTargetAndModes('#network/handshake+Δmodes');
+assertTest($parsedTarget['base_target'] === '#network/handshake' && $parsedTarget['mode_flags']['delta_modes'] === true, 'ChanServ::parseTargetAndModes correctly extracts base target and Δmodes flag');
+
+$parsedRawTarget = ChanServ::parseTargetAndModes('@object+raw');
+assertTest($parsedRawTarget['base_target'] === '@object' && $parsedRawTarget['mode_flags']['raw'] === true, 'ChanServ::parseTargetAndModes extracts @object base and +raw mode');
+
+// B. Channel modes setting with ChanServ::setModes
+$chanModeSet = ChanServ::setModes('#fortress', '+n+s+Δmodes', 'CyberFox');
+assertTest($chanModeSet['success'] === true && str_contains($chanModeSet['modes'], 'Δmodes'), 'ChanServ::setModes sets channel modes including Δmodes');
+
+// C. Slash commands processing
+$joinCmd = IrcServices::processCommand('User1', '#lobby', '/join #network/handshake+Δmodes');
+assertTest($joinCmd !== null && $joinCmd['service'] === 'SERVERSERV' && $joinCmd['channel'] === '#network/handshake' && str_contains($joinCmd['response'], 'Joined channel #network/handshake'), 'Processed /join command with target mode suffix');
+
+$partCmd = IrcServices::processCommand('User1', '#network/handshake', '/part');
+assertTest($partCmd !== null && $partCmd['service'] === 'SERVERSERV' && str_contains($partCmd['response'], 'Left channel #network/handshake'), 'Processed /part command');
+
+$modeCmd = IrcServices::processCommand('CyberFox', '#fortress', '/mode #fortress +v');
+assertTest($modeCmd !== null && $modeCmd['service'] === 'CHANSERV' && str_contains($modeCmd['response'], 'Modes for #fortress updated'), 'Processed /mode command');
+
+$rawCmd = IrcServices::processCommand('User1', '#lobby', '/raw PING :123456');
+assertTest($rawCmd !== null && $rawCmd['service'] === 'SERVERSERV' && str_contains($rawCmd['response'], '[RAW OUTPUT] PING :123456'), 'Processed /raw command with payload');
+
+$deltaCmd = IrcServices::processCommand('CyberFox', '#fortress', '/delta #fortress');
+assertTest($deltaCmd !== null && $deltaCmd['service'] === 'CHANSERV' && str_contains($deltaCmd['response'], 'Δmodes active for #fortress'), 'Processed /delta command');
+
+// Test 18: Subobjects (§prop & ∆event) with +mo-des & ivc://$me/object§prop=value Objects
+echo "\n18. Testing Subobjects (§prop & ∆event) with +mo-des & ivc://\$me/object Parsing...\n";
+
+// A. Parse subobjects & modes from string
+$subParsed = IrcServices::parseSubobjects('object§prop=value+m∆event=trigger+e');
+assertTest($subParsed['base_target'] === 'object', 'Extracted base object name from subobject string');
+assertTest(isset($subParsed['props']['prop']) && $subParsed['props']['prop']['value'] === 'value', 'Extracted §prop property value');
+assertTest($subParsed['props']['prop']['modes'] === '+m' && $subParsed['props']['prop']['mode_flags']['m'] === true, 'Extracted +m mode flag on §prop subobject');
+assertTest(isset($subParsed['events']['event']) && $subParsed['events']['event']['value'] === 'trigger', 'Extracted ∆event event value');
+assertTest($subParsed['events']['event']['modes'] === '+e' && $subParsed['events']['event']['mode_flags']['e'] === true, 'Extracted +e mode flag on ∆event subobject');
+
+// B. Convert {object prop:value ...} representation to ivc://$me/object§prop=value URI
+$formattedUri1 = IrcServices::formatObjectUri('{object prop:value}');
+assertTest($formattedUri1 === 'ivc://$me/object§prop=value', 'Formatted string {object prop:value} to ivc://$me/object§prop=value');
+
+$formattedUri2 = IrcServices::formatObjectUri(['object' => 'server', '§status' => 'active', 'modes' => '+m']);
+assertTest(str_contains($formattedUri2, 'ivc://$me/server§status=active'), 'Formatted object map to ivc://$me/server§status=active URI');
+
+$formattedUri3 = IrcServices::formatObjectUri(['myobj' => ['prop' => 'value']], 'node1.cx');
+assertTest($formattedUri3 === 'ivc://node1.cx/myobj§prop=value', 'Formatted nested map with custom host to ivc://node1.cx/myobj§prop=value');
+
+// C. Convert ivc://$me/object§prop=value URI back to object structure
+$parsedObj = IrcServices::parseObjectFromUri('ivc://$me/object§prop=value+m');
+assertTest($parsedObj['object'] === 'object', 'Parsed object name "object" from URI');
+assertTest($parsedObj['asObject']['object'] === 'object' && $parsedObj['asObject']['prop'] === 'value', 'Parsed asObject dictionary matching {object prop:value}');
+assertTest(isset($parsedObj['props']['prop']) && $parsedObj['props']['prop']['modes'] === '+m', 'Parsed modes on §prop subobject from URI');
+
+// D. Apply mode changes (+mo-des) to subobject
+$subItem = ['symbol' => '§', 'type' => 'property', 'name' => 'prop', 'value' => 'value', 'modes' => '+m'];
+$updatedSub = IrcServices::setSubobjectMode($subItem, '+v-m');
+assertTest($updatedSub['modes'] === '+v' && $updatedSub['mode_flags']['v'] === true && $updatedSub['mode_flags']['m'] === false, 'Updated subobject modes from +m to +v via +v-m change');
+
+// E. Integration with ChanServ::parseTargetAndModes & IrcServices::parseServerUri
+$chanSubTarget = ChanServ::parseTargetAndModes('object§prop=val+m');
+assertTest($chanSubTarget['base_target'] === 'object' && isset($chanSubTarget['props']['prop']), 'ChanServ::parseTargetAndModes parsed object subobjects');
+
+$servSubUri = IrcServices::parseServerUri('ivc://$me/object§prop=value+m');
+assertTest($servSubUri !== null && $servSubUri['channel'] === '#object' && isset($servSubUri['props']['prop']), 'IrcServices::parseServerUri parsed subobjects on ivc:// URI');
+
 echo "\n-----------------------------------------\n";
 echo "Test Results: $testsPassed Passed, $testsFailed Failed.\n";
 echo "-----------------------------------------\n\n";

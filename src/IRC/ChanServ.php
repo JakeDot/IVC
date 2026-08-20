@@ -148,6 +148,70 @@ class ChanServ
     }
 
     /**
+     * Parse mode string into structured mode flags array
+     *
+     * @param string $modeStr
+     * @return array{n: bool, N: bool, S: bool, s: bool, k: bool, v: bool, o: bool, a: bool, m: bool, t: bool, no_t: bool, raw: bool, delta_modes: bool}
+     */
+    public static function parseModeFlags(string $modeStr): array
+    {
+        $flags = [
+            'n' => str_contains($modeStr, 'n'),
+            'N' => str_contains($modeStr, 'N'),
+            'S' => str_contains($modeStr, 'S'),
+            's' => str_contains($modeStr, 's'),
+            'k' => str_contains($modeStr, 'k'),
+            'v' => str_contains($modeStr, 'v'),
+            'o' => str_contains($modeStr, 'o'),
+            'a' => str_contains($modeStr, 'a'),
+            'm' => str_contains($modeStr, 'm'),
+            'e' => str_contains($modeStr, 'e'),
+            'd' => str_contains($modeStr, 'd'),
+            't' => str_contains($modeStr, 't') && !str_contains($modeStr, '-t'),
+            'no_t' => str_contains($modeStr, '-t'),
+            'raw' => str_contains($modeStr, 'raw'),
+            'delta_modes' => str_contains($modeStr, 'Δmodes') || str_contains($modeStr, 'deltamodes') || str_contains($modeStr, 'Δ'),
+        ];
+
+        return $flags;
+    }
+
+    /**
+     * Parse target and attached mode suffixes (e.g. #channel+Δmodes, @object+bookmarks, #room+v+t)
+     *
+     * @param string $target
+     * @return array{base_target: string, raw_target: string, modes: string, mode_flags: array}
+     */
+    public static function parseTargetAndModes(string $target): array
+    {
+        $target = trim($target);
+        $subParsed = IrcServices::parseSubobjects($target);
+
+        $baseTarget = $subParsed['base_target'];
+        $modes = '';
+
+        if (($pos = strpos($baseTarget, '+')) !== false) {
+            $modes = substr($baseTarget, $pos);
+            $baseTarget = substr($baseTarget, 0, $pos);
+        } elseif (($pos = strpos($baseTarget, '-')) !== false) {
+            $modes = substr($baseTarget, $pos);
+            $baseTarget = substr($baseTarget, 0, $pos);
+        }
+
+        $flags = self::parseModeFlags($modes);
+
+        return [
+            'base_target' => $baseTarget,
+            'raw_target' => $target,
+            'modes' => $modes,
+            'mode_flags' => $flags,
+            'subobjects' => $subParsed['subobjects'],
+            'props' => $subParsed['props'],
+            'events' => $subParsed['events']
+        ];
+    }
+
+    /**
      * Assign VOICE role to user in channel
      */
     public static function voice(string $channel, string $targetNick, string $requesterNick = ''): array

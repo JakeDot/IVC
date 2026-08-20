@@ -18,13 +18,19 @@ const connectedServers = {};
 function parseServerUri(uri) {
     if (!uri) return null;
     uri = uri.trim();
-    const match = uri.match(/^(https|ivc|irc):\/\/([^\/:#?]+)(?::(\d+))?(?:[\/#](.*))?$/i);
+    const match = uri.match(/^(https|ivc(?:-[a-zA-Z0-9_-]+)?|irc):\/\/([^\/:#?]+)(?::(\d+))?(?:[\/#](.*))?$/i);
     if (!match) return null;
 
     const protocol = match[1].toUpperCase();
     const host = match[2].toLowerCase();
     const defaultPorts = { HTTPS: 443, IVC: 8080, IRC: 6667 };
-    const port = match[3] ? parseInt(match[3], 10) : (defaultPorts[protocol] || 443);
+
+    let defaultPort = defaultPorts[protocol] || 443;
+    if (protocol.startsWith('IVC-')) {
+        defaultPort = 8080;
+    }
+    const port = match[3] ? parseInt(match[3], 10) : defaultPort;
+
     let channelRaw = match[4] || '#lobby';
 
     if (channelRaw.includes('#')) {

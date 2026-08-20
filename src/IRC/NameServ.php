@@ -9,7 +9,7 @@ use Fortress\Models\UserNick;
 
 /**
  * NAMESERV (Nickname Service) IRC System Bot
- * Handles user nickname registration, identification, and information queries stored in MySQL.
+ * Handles user nickname registration, identification, subscription, and information queries stored in MySQL.
  */
 class NameServ
 {
@@ -20,7 +20,6 @@ class NameServ
      */
     public static function register(string $nickname, string $password, ?string $email = null): array
     {
-        return UserNick::register($nickname, $password, $email);
         $nickname = trim($nickname);
         if (empty($nickname) || empty($password)) {
             return ['success' => false, 'message' => 'NAMESERV: Nickname and password are required.'];
@@ -51,7 +50,29 @@ class NameServ
      */
     public static function identify(string $nickname, string $password): array
     {
-        return UserNick::identify($nickname, $password);
+        $nickname = trim($nickname);
+        $userNick = UserNickRepository::findByNickname($nickname);
+
+        if ($userNick === null || !$userNick->verifyPassword($password)) {
+            return ['success' => false, 'message' => 'NAMESERV: Password verification failed. Access denied.'];
+        }
+
+        UserNickRepository::updateIdentification($userNick->getNickname(), true, time());
+
+        return ['success' => true, 'message' => "NAMESERV: Password accepted. Nickname '{$nickname}' identified."];
+    }
+
+    /**
+     * Subscribe user nickname to premium plan tier
+     */
+    public static function subscribe(string $nickname, string $planTier = 'nick_pro'): array
+    {
+        $nickname = trim($nickname);
+        if (!self::isRegistered($nickname)) {
+            return ['success' => false, 'message' => "NAMESERV: Nickname '{$nickname}' must be registered before subscribing."];
+        }
+
+        return PayServ::subscribe($nickname, 'user', $nickname, $planTier);
     }
 
     /**
@@ -69,11 +90,13 @@ class NameServ
         $regDate = date('Y-m-d H:i:s', $userNick->getRegisteredAt());
         $lastSeenDate = date('Y-m-d H:i:s', $userNick->getLastSeen());
         $identifiedStr = $userNick->isIdentified() ? 'Yes' : 'No';
+        $subStr = $userNick->isPremium() ? "⭐ Active ({$userNick->getSubscriptionTier()})" : 'None (Standard)';
 
         $msg = "NAMESERV Information for {$userNick->getNickname()}:\n" .
                "• Registered: {$regDate}\n" .
                "• Last Seen: {$lastSeenDate}\n" .
-               "• Currently Identified: {$identifiedStr}";
+               "• Currently Identified: {$identifiedStr}\n" .
+               "• Subscription Status: {$subStr}";
 
         return ['success' => true, 'message' => $msg, 'data' => $userNick->toArray()];
     }
@@ -96,7 +119,7 @@ class NameServ
     }
 
     /**
-     * Purge expired nicknames and send email notifications.
+     * Purge expired nicknames and send email notifications (Excludes active paid subscribers).
      */
     public static function purgeExpired(int $expireSeconds): int
     {

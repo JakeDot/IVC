@@ -204,7 +204,10 @@ class Database
                 email VARCHAR(128) NULL,
                 registered_at INT NOT NULL,
                 last_seen INT NOT NULL,
-                is_identified TINYINT DEFAULT 0
+                is_identified TINYINT DEFAULT 0,
+                subscription_tier VARCHAR(64) NULL,
+                subscription_status VARCHAR(32) DEFAULT 'none',
+                subscription_expires_at INT DEFAULT 0
             );",
 
             // Table for CHANSERV registered channels
@@ -214,7 +217,10 @@ class Database
                 topic TEXT NULL,
                 passkey VARCHAR(128) NULL,
                 modes VARCHAR(32) DEFAULT '+t',
-                registered_at INT NOT NULL
+                registered_at INT NOT NULL,
+                subscription_tier VARCHAR(64) NULL,
+                subscription_status VARCHAR(32) DEFAULT 'none',
+                subscription_expires_at INT DEFAULT 0
             );",
 
             // Table for BOTSERV channel/global bot assignments
@@ -273,6 +279,24 @@ class Database
                 encrypted_metadata TEXT NOT NULL,
                 cloud_link TEXT NULL,
                 created_at INT NOT NULL
+            );",
+
+            // Table for paid subscriptions (nick, channel, server)
+            "CREATE TABLE IF NOT EXISTS subscriptions (
+                id VARCHAR(64) PRIMARY KEY,
+                target_type VARCHAR(16) NOT NULL,
+                target_name VARCHAR(64) NOT NULL,
+                subscriber_nick VARCHAR(64) NOT NULL,
+                plan_id VARCHAR(64) NOT NULL,
+                stripe_customer_id VARCHAR(128) NULL,
+                stripe_subscription_id VARCHAR(128) NULL,
+                stripe_checkout_session_id VARCHAR(128) NULL,
+                status VARCHAR(32) DEFAULT 'active',
+                price_cents INT DEFAULT 499,
+                currency VARCHAR(10) DEFAULT 'usd',
+                expires_at INT NOT NULL,
+                created_at INT NOT NULL,
+                updated_at INT NOT NULL
             );"
         ];
 
@@ -280,9 +304,39 @@ class Database
             self::$pdo->exec($sql);
         }
 
+        self::ensureColumnsExist();
+
         // Initialize default serverwide settings if not present
         self::seedDefaultSettings();
         self::registerDefaultForeignServices();
+    }
+
+    private static function ensureColumnsExist(): void
+    {
+        if (self::$pdo === null) return;
+
+        $columns = [
+            'nameserv_nicks' => [
+                'subscription_tier' => 'VARCHAR(64) NULL',
+                'subscription_status' => "VARCHAR(32) DEFAULT 'none'",
+                'subscription_expires_at' => 'INT DEFAULT 0'
+            ],
+            'chanserv_channels' => [
+                'subscription_tier' => 'VARCHAR(64) NULL',
+                'subscription_status' => "VARCHAR(32) DEFAULT 'none'",
+                'subscription_expires_at' => 'INT DEFAULT 0'
+            ]
+        ];
+
+        foreach ($columns as $table => $cols) {
+            foreach ($cols as $colName => $colDef) {
+                try {
+                    self::$pdo->exec("ALTER TABLE {$table} ADD COLUMN {$colName} {$colDef};");
+                } catch (Throwable $e) {
+                    // Column already exists or table handles it natively
+                }
+            }
+        }
     }
 
     private static function seedDefaultSettings(): void
@@ -293,7 +347,10 @@ class Database
             'motd' => ['Welcome to IVC WebRTC IRC Network! Secure, Anonymous & Encrypted.', 'Message of the day'],
             'max_channels_per_user' => ['10', 'Maximum channels a user can register'],
             'allow_anonymous' => ['1', 'Allow anonymous client connections'],
-            'version' => ['2.0.0-IRC', 'Server Infrastructure Version']
+            'version' => ['2.0.0-IRC', 'Server Infrastructure Version'],
+            'stripe_publishable_key' => ['pk_test_sample', 'Stripe Publishable Key'],
+            'stripe_secret_key' => ['sk_test_sample', 'Stripe Secret Key'],
+            'stripe_webhook_secret' => ['whsec_sample', 'Stripe Webhook Signing Secret']
         ];
 
         $now = time();
@@ -344,6 +401,7 @@ class Database
         self::$pdo->exec("DELETE FROM hostserv_vhosts;");
         self::$pdo->exec("DELETE FROM foreign_services;");
         self::$pdo->exec("DELETE FROM shared_files;");
+        self::$pdo->exec("DELETE FROM subscriptions;");
         self::seedDefaultSettings();
         self::registerDefaultForeignServices();
     }

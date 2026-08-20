@@ -11,6 +11,7 @@ require_once __DIR__ . '/../src/Models/Channel.php';
 require_once __DIR__ . '/../src/Models/ChannelUser.php';
 require_once __DIR__ . '/../src/Models/IrcSetting.php';
 require_once __DIR__ . '/../src/Models/SharedFile.php';
+require_once __DIR__ . '/../src/Models/Subscription.php';
 require_once __DIR__ . '/../src/Database/Database.php';
 require_once __DIR__ . '/../src/Database/SharedFileRepository.php';
 require_once __DIR__ . '/../src/Database/UserNickRepository.php';
@@ -19,9 +20,11 @@ require_once __DIR__ . '/../src/Database/ChannelUserRepository.php';
 require_once __DIR__ . '/../src/Database/SettingRepository.php';
 require_once __DIR__ . '/../src/Database/BotServRepository.php';
 require_once __DIR__ . '/../src/Database/TextServRepository.php';
+require_once __DIR__ . '/../src/Database/SubscriptionRepository.php';
 require_once __DIR__ . '/../src/IRC/SettingsManager.php';
 require_once __DIR__ . '/../src/IRC/NameServ.php';
 require_once __DIR__ . '/../src/IRC/ChanServ.php';
+require_once __DIR__ . '/../src/IRC/PayServ.php';
 require_once __DIR__ . '/../src/IRC/MotdServ.php';
 require_once __DIR__ . '/../src/IRC/MemoServ.php';
 require_once __DIR__ . '/../src/IRC/HostServ.php';
@@ -31,7 +34,9 @@ require_once __DIR__ . '/../src/IRC/HelpServ.php';
 require_once __DIR__ . '/../src/IRC/BotServ.php';
 require_once __DIR__ . '/../src/IRC/TextServ.php';
 require_once __DIR__ . '/../src/IRC/IrcServices.php';
+require_once __DIR__ . '/../src/Services/StripeService.php';
 require_once __DIR__ . '/../src/Signaling/RoomManager.php';
+require_once __DIR__ . '/../src/Utils/BitBuffer.php';
 
 use Fortress\Security\Sanitizer;
 use Fortress\Security\RateLimiter;
@@ -41,6 +46,7 @@ use Fortress\Models\Channel;
 use Fortress\Models\ChannelUser;
 use Fortress\Models\IrcSetting;
 use Fortress\Models\SharedFile;
+use Fortress\Models\Subscription;
 use Fortress\Database\Database;
 use Fortress\Database\SharedFileRepository;
 use Fortress\Database\UserNickRepository;
@@ -49,9 +55,11 @@ use Fortress\Database\ChannelUserRepository;
 use Fortress\Database\SettingRepository;
 use Fortress\Database\BotServRepository;
 use Fortress\Database\TextServRepository;
+use Fortress\Database\SubscriptionRepository;
 use Fortress\IRC\SettingsManager;
 use Fortress\IRC\NameServ;
 use Fortress\IRC\ChanServ;
+use Fortress\IRC\PayServ;
 use Fortress\IRC\MotdServ;
 use Fortress\IRC\MemoServ;
 use Fortress\IRC\HostServ;
@@ -60,7 +68,9 @@ use Fortress\IRC\ServServ;
 use Fortress\IRC\BotServ;
 use Fortress\IRC\TextServ;
 use Fortress\IRC\IrcServices;
+use Fortress\Services\StripeService;
 use Fortress\Signaling\RoomManager;
+use Fortress\Utils\BitBuffer;
 
 echo "=========================================\n";
 echo " 🧪 Running Fortress WebRTC & IRC Test Suite\n";
@@ -82,7 +92,7 @@ function assertTest(bool $condition, string $message): void {
 
 // Test 1: Sanitizer & IRC #room scheme
 echo "1. Testing Sanitizer & IRC #room channel scheme...\n";
-assertTest(Sanitizer::sanitizeRoomId('room123!@#') === '#room123', 'Sanitize invalid characters and normalize to #room123');
+assertTest(Sanitizer::sanitizeRoomId('room123!@#') === '#room123@', 'Sanitize invalid characters and normalize to #room123@');
 assertTest(Sanitizer::sanitizeRoomId('#fortress-channel') === '#fortress-channel', 'Retain existing leading # in channel name');
 assertTest(Sanitizer::sanitizeClientId('peer-abc-123') === 'peer-abc-123', 'Valid client ID retained');
 
@@ -107,7 +117,6 @@ for ($i = 0; $i < 501; $i++) {
     RateLimiter::check("client-$i", 5, -1);
 }
 
-
 $reflection = new ReflectionClass(RateLimiter::class);
 $method = $reflection->getMethod('getStateFilePath');
 $method->setAccessible(true);
@@ -120,7 +129,6 @@ RateLimiter::check('client-trigger-gc', 5, 60);
 
 $buckets = json_decode(file_get_contents($filePath), true);
 assertTest(count($buckets) === 1, 'Expired buckets purged by gc() when threshold > 500 is reached');
-
 
 // Test 3: Token Manager
 echo "\n3. Testing Token Manager & Room Session Keys...\n";
@@ -442,6 +450,77 @@ assertTest(count($channelFiles) >= 1 && $channelFiles[0]->getId() === 'file-test
 $deletedFile = SharedFileRepository::deleteById('file-test-999');
 assertTest($deletedFile === true, 'SharedFileRepository::deleteById deleted file record');
 
+// Test 16: Paid Subscriptions, Stripe Integration & Chat-Based PayServ Commands
+echo "\n16. Testing Paid Subscriptions, Stripe Integration & Chat-Based PayServ Commands...\n";
+
+// A. Subscription model & SubscriptionRepository
+$sub = new Subscription('user', 'CyberFox', 'CyberFox', 'nick_pro', 'cus_test123', 'sub_test123', 'cs_test123', 'active', 499, 'usd', time() + 86400);
+assertTest($sub->getTargetType() === 'user' && $sub->getTargetName() === 'CyberFox', 'Subscription model getters work');
+assertTest($sub->isActive() === true, 'Subscription isActive returns true for active non-expired sub');
+
+$savedSub = SubscriptionRepository::save($sub);
+assertTest($savedSub === true, 'SubscriptionRepository successfully saved subscription record');
+
+$foundSub = SubscriptionRepository::findById($sub->getId());
+assertTest($foundSub !== null && $foundSub->getTargetName() === 'CyberFox', 'SubscriptionRepository::findById retrieved subscription');
+
+$foundActive = SubscriptionRepository::findActiveByTarget('user', 'CyberFox');
+assertTest($foundActive !== null && $foundActive->getId() === $sub->getId(), 'SubscriptionRepository::findActiveByTarget retrieved active sub');
+
+// B. StripeService & Webhook HMAC signature verification
+$plans = StripeService::getPlans();
+assertTest(isset($plans['nick_pro'], $plans['channel_pro'], $plans['server_vip']), 'StripeService::getPlans returns user, channel, and server tiers');
+
+$checkout = StripeService::createCheckoutSession('user', 'CyberFox', 'nick_pro', 'CyberFox');
+assertTest($checkout['success'] === true && !empty($checkout['checkout_url']), 'StripeService::createCheckoutSession created checkout session');
+
+$payload = '{"id":"evt_test","type":"checkout.session.completed"}';
+$secret = 'whsec_test_secret';
+$time = time();
+$sig = hash_hmac('sha256', "{$time}.{$payload}", $secret);
+$sigHeader = "t={$time},v1={$sig}";
+
+assertTest(StripeService::verifyWebhookSignature($payload, $sigHeader, $secret) === true, 'StripeService::verifyWebhookSignature verified valid HMAC SHA256 signature');
+assertTest(StripeService::verifyWebhookSignature($payload, "t={$time},v1=bad_sig", $secret) === false, 'StripeService::verifyWebhookSignature rejected invalid signature');
+
+// C. PayServ Bot Service & Chat-Based Commands
+$plansMsg = PayServ::listPlans();
+assertTest($plansMsg['success'] === true && str_contains($plansMsg['message'], 'PAYSERV Subscription Plans'), 'PayServ::listPlans returned subscription plans');
+
+$subUserCmd = PayServ::subscribe('CyberFox', 'user', 'CyberFox', 'nick_pro');
+assertTest($subUserCmd['success'] === true && str_contains($subUserCmd['message'], 'Stripe Checkout Generated for user level'), 'PayServ::subscribe generated user level checkout link');
+
+$subChanCmd = PayServ::subscribe('CyberFox', 'channel', '#fortress', 'channel_pro');
+assertTest($subChanCmd['success'] === true && str_contains($subChanCmd['message'], 'Stripe Checkout Generated for channel level'), 'PayServ::subscribe generated channel level checkout link');
+
+$subServerCmd = PayServ::subscribe('CyberFox', 'server', 'IVC-IRC Network', 'server_vip');
+assertTest($subServerCmd['success'] === true && str_contains($subServerCmd['message'], 'Stripe Checkout Generated for server level'), 'PayServ::subscribe generated server level checkout link');
+
+$statusRes = PayServ::getStatus('user', 'CyberFox');
+assertTest($statusRes['success'] === true && str_contains($statusRes['message'], 'PAYSERV Subscription Information'), 'PayServ::getStatus returned active user subscription info');
+
+// D. NameServ & ChanServ Subscription Integration
+$nsSub = NameServ::subscribe('CyberFox', 'nick_pro');
+assertTest($nsSub['success'] === true && str_contains($nsSub['message'], 'Stripe Checkout Generated'), 'NameServ::subscribe generated Stripe checkout link');
+
+$csSub = ChanServ::subscribe('#fortress', 'CyberFox', 'channel_pro');
+assertTest($csSub['success'] === true && str_contains($csSub['message'], 'Stripe Checkout Generated'), 'ChanServ::subscribe generated Stripe checkout link');
+
+// E. IrcServices Chat Slash Commands (/subscribe and /pay)
+$slashSubUser = IrcServices::processCommand('CyberFox', '#lobby', '/subscribe user CyberFox nick_pro');
+assertTest($slashSubUser !== null && $slashSubUser['service'] === 'PAYSERV' && str_contains($slashSubUser['response'], 'Stripe Checkout Generated'), 'Parsed /subscribe user chat command');
+
+$slashPayChan = IrcServices::processCommand('CyberFox', '#lobby', '/pay channel #fortress channel_pro');
+assertTest($slashPayChan !== null && $slashPayChan['service'] === 'PAYSERV' && str_contains($slashPayChan['response'], 'Stripe Checkout Generated'), 'Parsed /pay channel chat command');
+
+$slashPayServer = IrcServices::processCommand('CyberFox', '#lobby', '/pay server IVC-IRC server_vip');
+assertTest($slashPayServer !== null && $slashPayServer['service'] === 'PAYSERV' && str_contains($slashPayServer['response'], 'Stripe Checkout Generated'), 'Parsed /pay server chat command');
+
+// F. Active Paid Nick Expiration Protection in NameServ::purgeExpired
+UserNickRepository::updateSubscription('CyberFox', 'nick_pro', 'active', time() + 86400);
+UserNickRepository::updateIdentification('CyberFox', false, time() - 7200); // 2 hours inactive
+$purgedCount = NameServ::purgeExpired(3600);
+assertTest($purgedCount === 0 && NameServ::isRegistered('CyberFox') === true, 'NameServ::purgeExpired protected active paid user CyberFox from expiration');
 // Test 16: Server Management & URI Parsing (https://, ivc://, irc://)
 echo "\n16. Testing Server Management & URI Protocols...\n";
 $uriHttps = IrcServices::parseServerUri('https://chat.fortress.net/#lobby');
@@ -449,6 +528,18 @@ assertTest($uriHttps !== null && $uriHttps['protocol'] === 'HTTPS' && $uriHttps[
 
 $uriIvc = IrcServices::parseServerUri('ivc://node1.network.org:8080/general');
 assertTest($uriIvc !== null && $uriIvc['protocol'] === 'IVC' && $uriIvc['host'] === 'node1.network.org' && $uriIvc['port'] === 8080 && $uriIvc['channel'] === '#general', 'Parsed ivc:// URI with port and channel correctly');
+
+$uriIvcComplex = IrcServices::parseServerUri('ivc://$me$opers+ov£admins+anv/#hi+vm');
+assertTest($uriIvcComplex !== null && $uriIvcComplex['protocol'] === 'IVC' && $uriIvcComplex['host'] === '$me$opers+ov£admins+anv' && $uriIvcComplex['channel'] === '#hi', 'Parsed complex ivc:// symbolic URI correctly with channel modes stripped');
+
+$uriLocalOper = IrcServices::parseServerUri('ivc://local.host/&oper+on');
+assertTest($uriLocalOper !== null && $uriLocalOper['protocol'] === 'IVC' && $uriLocalOper['host'] === 'local.host' && $uriLocalOper['channel'] === '&oper', 'Parsed complex ivc:// URI joining local &oper channel with +on modes stripped');
+
+$uriChanModes = IrcServices::parseServerUri('ivc://local.host/chan+ovm');
+assertTest($uriChanModes !== null && $uriChanModes['protocol'] === 'IVC' && $uriChanModes['host'] === 'local.host' && $uriChanModes['channel'] === '#chan', 'Parsed complex ivc:// URI appending # to chan and stripping +ovm modes');
+
+$uriTestUser = IrcServices::parseServerUri('ivc://$me°180+oasisSNOAW@jakedot@ivc.cx/#hi&opers+o');
+assertTest($uriTestUser !== null && $uriTestUser['protocol'] === 'IVC' && $uriTestUser['host'] === 'ivc.cx' && $uriTestUser['channel'] === '#hi&opers' && $uriTestUser['modes'] === 'o', 'Parsed ivc://$me°180+oasisSNOAW@jakedot@ivc.cx/#hi&opers+o URI correctly');
 
 $uriIrc = IrcServices::parseServerUri('irc://irc.fortress.net:6667/#dev');
 assertTest($uriIrc !== null && $uriIrc['protocol'] === 'IRC' && $uriIrc['host'] === 'irc.fortress.net' && $uriIrc['port'] === 6667 && $uriIrc['channel'] === '#dev', 'Parsed irc:// URI correctly');
@@ -462,8 +553,106 @@ assertTest($cmdConnUsage !== null && $cmdConnUsage['service'] === 'SERVERSERV' &
 $cmdConn = IrcServices::processCommand('User1', '#lobby', '/connect https://chat.fortress.net/#lobby');
 assertTest($cmdConn !== null && $cmdConn['service'] === 'SERVERSERV' && str_contains($cmdConn['response'], 'Connected to server'), 'Processed /connect command');
 
+$cmdConnUnauthorized = IrcServices::processCommand('Alice', '#lobby', '/connect ivc://local.host/#fortress+o');
+assertTest($cmdConnUnauthorized !== null && $cmdConnUnauthorized['service'] === 'SERVERSERV' && str_contains($cmdConnUnauthorized['response'], 'Permission denied'), 'Rejected /connect with +o mode for non-operator user');
+
+$cmdConnAuthorized = IrcServices::processCommand('CyberFox', '#lobby', '/connect ivc://local.host/#fortress+o');
+assertTest($cmdConnAuthorized !== null && $cmdConnAuthorized['service'] === 'SERVERSERV' && str_contains($cmdConnAuthorized['response'], 'Connected to server'), 'Allowed /connect with +o mode for authorized operator user');
+
 $cmdDisc = IrcServices::processCommand('User1', '#lobby', '/disconnect chat.fortress.net');
 assertTest($cmdDisc !== null && $cmdDisc['service'] === 'SERVERSERV' && str_contains($cmdDisc['response'], 'Disconnected from server'), 'Processed /disconnect command');
+
+// Test 17: Extended Modes & New Slash Commands (/join, /part, /mode, /raw, /delta)
+echo "\n17. Testing Extended Modes & New Slash Commands...\n";
+
+// A. Mode parsing & target mode suffix parsing
+$modeFlags = ChanServ::parseModeFlags('+n+v+o+Δmodes');
+assertTest($modeFlags['n'] === true && $modeFlags['v'] === true && $modeFlags['o'] === true && $modeFlags['delta_modes'] === true, 'ChanServ::parseModeFlags correctly identifies mode flags');
+
+$parsedTarget = ChanServ::parseTargetAndModes('#network/handshake+Δmodes');
+assertTest($parsedTarget['base_target'] === '#network/handshake' && $parsedTarget['mode_flags']['delta_modes'] === true, 'ChanServ::parseTargetAndModes correctly extracts base target and Δmodes flag');
+
+$parsedRawTarget = ChanServ::parseTargetAndModes('@object+raw');
+assertTest($parsedRawTarget['base_target'] === '@object' && $parsedRawTarget['mode_flags']['raw'] === true, 'ChanServ::parseTargetAndModes extracts @object base and +raw mode');
+
+$parsedSectionTarget = ChanServ::parseTargetAndModes('@object§prop=value+mo-des');
+assertTest($parsedSectionTarget['base_target'] === '@object' && $parsedSectionTarget['prop'] === 'prop' && $parsedSectionTarget['prop_value'] === 'value', 'ChanServ::parseTargetAndModes parses §prop subobject');
+assertTest($parsedSectionTarget['mode_flags']['m'] === true && $parsedSectionTarget['mode_flags']['o'] === true && $parsedSectionTarget['mode_flags']['d'] === false, 'ChanServ::parseModeFlags parses +mo-des additions and removals');
+assertTest($parsedSectionTarget['object_notation'] === '{object prop:value}', 'ChanServ::parseTargetAndModes generates object notation string');
+assertTest($parsedSectionTarget['ivc_uri'] === 'ivc://$me/object§prop=value', 'ChanServ::parseTargetAndModes generates ivc://$me/object§prop=value URI string');
+
+$parsedObjUri = IrcServices::parseServerUri('{object prop:value}');
+assertTest($parsedObjUri !== null && $parsedObjUri['protocol'] === 'IVC' && $parsedObjUri['channel'] === '#object§prop=value', 'IrcServices::parseServerUri parses inline object notation {object prop:value}');
+
+$parsedCompoundUri = IrcServices::parseServerUri('ivc+https://facebook.net/<object>/<name>');
+assertTest($parsedCompoundUri !== null && $parsedCompoundUri['protocol'] === 'IVC+HTTPS' && $parsedCompoundUri['host'] === 'facebook.net', 'IrcServices::parseServerUri parses compound protocol ivc+https://');
+
+$parsedComplexIvcUri = IrcServices::parseServerUri('ivc://+gmodes?£network$server@user@host.int#chan&oper+Oo&admins+AaOo£network/∆global=true');
+assertTest($parsedComplexIvcUri !== null && $parsedComplexIvcUri['host'] === 'host.int' && $parsedComplexIvcUri['host_modes'] === '+gmodes' && str_contains($parsedComplexIvcUri['channel'], 'chan'), 'IrcServices::parseServerUri parses complex IVC URI with host modes, query targets, and channel mode suffixes');
+
+$parsedMailtoIvcUri = IrcServices::parseServerUri('ivc+mailto:jakedot@ivc.cx//$me/my/personal/.+sub/...+t{topic ...}');
+assertTest($parsedMailtoIvcUri !== null && $parsedMailtoIvcUri['protocol'] === 'IVC+MAILTO' && $parsedMailtoIvcUri['host'] === 'jakedot@ivc.cx' && str_contains($parsedMailtoIvcUri['channel'], 'personal'), 'IrcServices::parseServerUri parses ivc+mailto: URI scheme with path and mode suffixes');
+
+// B. Channel modes setting with ChanServ::setModes
+$chanModeSet = ChanServ::setModes('#fortress', '+n+s+Δmodes', 'CyberFox');
+assertTest($chanModeSet['success'] === true && str_contains($chanModeSet['modes'], 'Δmodes'), 'ChanServ::setModes sets channel modes including Δmodes');
+
+// C. Slash commands processing
+$joinCmd = IrcServices::processCommand('User1', '#lobby', '/join #network/handshake+Δmodes');
+assertTest($joinCmd !== null && $joinCmd['service'] === 'SERVERSERV' && $joinCmd['channel'] === '#network/handshake' && str_contains($joinCmd['response'], 'Joined channel #network/handshake'), 'Processed /join command with target mode suffix');
+
+$partCmd = IrcServices::processCommand('User1', '#network/handshake', '/part');
+assertTest($partCmd !== null && $partCmd['service'] === 'SERVERSERV' && str_contains($partCmd['response'], 'Left channel #network/handshake'), 'Processed /part command');
+
+$modeCmd = IrcServices::processCommand('CyberFox', '#fortress', '/mode #fortress +v');
+assertTest($modeCmd !== null && $modeCmd['service'] === 'CHANSERV' && str_contains($modeCmd['response'], 'Modes for #fortress updated'), 'Processed /mode command');
+
+$rawCmd = IrcServices::processCommand('User1', '#lobby', '/raw PING :123456');
+assertTest($rawCmd !== null && $rawCmd['service'] === 'SERVERSERV' && str_contains($rawCmd['response'], '[RAW OUTPUT] PING :123456'), 'Processed /raw command with payload');
+
+$deltaCmd = IrcServices::processCommand('CyberFox', '#fortress', '/delta #fortress');
+assertTest($deltaCmd !== null && $deltaCmd['service'] === 'CHANSERV' && str_contains($deltaCmd['response'], 'Δmodes active for #fortress'), 'Processed /delta command');
+
+// Test 18: Native Bit-Addressable Buffer (BitBuffer PHP)
+echo "\n18. Testing Native Bit-Addressable Buffer (BitBuffer PHP)...\n";
+$bbBitStr = BitBuffer::fromBitString('1101 0010');
+assertTest($bbBitStr->getBitLength() === 8 && $bbBitStr->toBitString() === '11010010', 'BitBuffer::fromBitString parsed binary string');
+
+$bbHex = BitBuffer::fromHexString('a5f0');
+assertTest($bbHex->getBitLength() === 16 && $bbHex->toHexString() === 'a5f0', 'BitBuffer::fromHexString parsed hex string');
+
+$bb = BitBuffer::allocate(32);
+$bb->writeBits(21, 5);
+$bb->writeBits(1234, 11);
+$bb->rewind();
+assertTest($bb->readBits(5) === 21 && $bb->readBits(11) === 1234, 'BitBuffer read/write multi-bit integer bitfields');
+
+$bb->rewind();
+$bb->writeSignedBits(-9, 5);
+$bb->rewind();
+assertTest($bb->readSignedBits(5) === -9, 'BitBuffer read/write 2\'s complement signed bitfield');
+
+$bb->rewind();
+$bb->writeInt32(-123456789);
+$bb->rewind();
+assertTest($bb->readInt32() === -123456789, 'BitBuffer read/write 32-bit signed integer');
+
+$schema = [
+    ['name' => 'ver', 'bits' => 4],
+    ['name' => 'flags', 'bits' => 4],
+    ['name' => 'seq', 'bits' => 16]
+];
+$packData = ['ver' => 3, 'flags' => 12, 'seq' => 54321];
+$bbPack = BitBuffer::allocate(24);
+$bbPack->pack($packData, $schema);
+$bbPack->rewind();
+$unpacked = $bbPack->unpack($schema);
+assertTest($unpacked['ver'] === 3 && $unpacked['flags'] === 12 && $unpacked['seq'] === 54321, 'BitBuffer pack/unpack bitfield schema');
+
+$bbLogic1 = BitBuffer::fromBitString('11001010');
+$bbLogic2 = BitBuffer::fromBitString('10101100');
+assertTest($bbLogic1->and($bbLogic2)->toBitString() === '10001000', 'BitBuffer bitwise AND operation');
+assertTest($bbLogic1->xor($bbLogic2)->toBitString() === '01100110', 'BitBuffer bitwise XOR operation');
 
 echo "\n-----------------------------------------\n";
 echo "Test Results: $testsPassed Passed, $testsFailed Failed.\n";

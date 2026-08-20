@@ -6,7 +6,7 @@ namespace Fortress\IRC;
 
 /**
  * IRC Service Command Dispatcher & Parser
- * Handles interaction with NAMESERV, CHANSERV, MOTDSERV, MEMOSERV, HOSTSERV, SERVICESERV,
+ * Handles interaction with NAMESERV, CHANSERV, PAYSERV, MOTDSERV, MEMOSERV, HOSTSERV, SERVICESERV,
  * THEMESERV, and Foreign Services operating under different hosts via IRC-style slash commands or direct messages.
  */
 class IrcServices
@@ -15,13 +15,115 @@ class IrcServices
      * Parse server URI supporting https://, ivc://, and irc:// protocols.
      *
      * @param string $uri
-     * @return array{protocol: string, host: string, port: int, channel: string, uri: string}|null
+     * @return array{protocol: string, host: string, port: int, channel: string, modes: string, uri: string}|null
      */
     public static function parseServerUri(string $uri): ?array
     {
         $uri = trim($uri);
-        if (!preg_match('/^(https|ivc|irc):\/\//i', $uri)) {
+
+        // Check for inline object notation {object prop:value}
+        if (str_starts_with($uri, '{') && str_ends_with($uri, '}')) {
+            $inner = trim(substr($uri, 1, -1));
+            $parts = preg_split('/\s+/', $inner, 2);
+            $objName = $parts[0] ?? 'object';
+            $propStr = $parts[1] ?? '';
+            $propVal = 'true';
+            $propKey = 'prop';
+
+            if (($colonPos = strpos($propStr, ':')) !== false) {
+                $propKey = substr($propStr, 0, $colonPos);
+                $propVal = substr($propStr, $colonPos + 1);
+            } elseif ($propStr !== '') {
+                $propKey = $propStr;
+            }
+
+            return [
+                'protocol' => 'IVC',
+                'host'     => '$me',
+                'port'     => 8080,
+                'channel'  => '#' . $objName . '§' . $propKey . '=' . $propVal,
+                'modes'    => '',
+                'uri'      => "ivc://\$me/" . $objName . "§" . $propKey . "=" . $propVal,
+                'sub_object' => '§' . $propKey . '=' . $propVal,
+                'object_notation' => $uri
+            ];
+        }
+
+        if (!preg_match('/^(https|ivc(?:\+[a-zA-Z0-9_-]+)?(?:-[a-zA-Z0-9_-]+)?|irc|mailto|ivc\+mailto):\/\//i', $uri) && !str_starts_with($uri, 'ivc+mailto:')) {
             return null;
+        }
+
+        // Special handling for ivc+mailto:user@domain//path URIs
+        if (str_starts_with(strtolower($uri), 'ivc+mailto:')) {
+            $rawRest = substr($uri, strlen('ivc+mailto:'));
+            $slashPos = strpos($rawRest, '//');
+            if ($slashPos !== false) {
+                $emailHost = substr($rawRest, 0, $slashPos);
+                $pathRest = substr($rawRest, $slashPos + 2);
+            } else {
+                $emailHost = $rawRest;
+                $pathRest = '';
+            }
+
+            $extractedModes = '';
+            if (($plusPos = strpos($pathRest, '+')) !== false) {
+                $extractedModes = substr($pathRest, $plusPos + 1);
+                $pathRest = substr($pathRest, 0, $plusPos);
+            }
+
+            $chanClean = trim($pathRest, '/');
+            $channel = !empty($chanClean) ? '#' . $chanClean : '#lobby';
+            $channel = \Fortress\Security\Sanitizer::sanitizeRoomId($channel);
+
+            return [
+                'protocol' => 'IVC+MAILTO',
+                'host'     => $emailHost,
+                'port'     => 8080,
+                'channel'  => $channel,
+                'modes'    => $extractedModes,
+                'uri'      => $uri
+            ];
+        }
+
+        // Special handling for URIs where host begins with mode flags like +gmodes (e.g. ivc://+gmodes?query#chan)
+        if (preg_match('/^([a-zA-Z0-9\+-]+):\/\/(\+[a-zA-Z0-9_-]+)?([^:\/\?#]+)?(?::(\d+))?([^?#]*)?(?:\?([^#]*))?(?:#(.*))?$/i', $uri, $m)) {
+            $scheme = strtolower($m[1]);
+            $hostMode = $m[2] ?? '';
+            $rawHost = $m[3] ?? '';
+            $port = !empty($m[4]) ? (int)$m[4] : (str_starts_with($scheme, 'ivc') ? 8080 : 443);
+            $path = $m[5] ?? '';
+            $query = $m[6] ?? '';
+            $fragment = $m[7] ?? '';
+
+            $effectiveHost = $rawHost !== '' ? strtolower($rawHost) : ($query !== '' ? 'localhost' : 'localhost');
+            if (str_contains($effectiveHost, '@')) {
+                $atParts = explode('@', $effectiveHost);
+                $effectiveHost = strtolower(array_pop($atParts));
+            } elseif (!empty($query) && str_contains($query, '@')) {
+                $atParts = explode('@', $query);
+                $effectiveHost = strtolower(array_pop($atParts));
+            }
+
+            $chanRaw = $fragment !== '' ? $fragment : $path;
+            $extractedModes = '';
+            if (($plusPos = strpos($chanRaw, '+')) !== false) {
+                $extractedModes = substr($chanRaw, $plusPos + 1);
+                $chanRaw = substr($chanRaw, 0, $plusPos);
+            }
+
+            $chanRaw = trim($chanRaw, '/');
+            $channel = !empty($chanRaw) ? (str_starts_with($chanRaw, '#') || str_starts_with($chanRaw, '&') ? $chanRaw : '#' . $chanRaw) : '#lobby';
+            $channel = \Fortress\Security\Sanitizer::sanitizeRoomId($channel);
+
+            return [
+                'protocol' => strtoupper($scheme),
+                'host'     => $effectiveHost,
+                'port'     => $port,
+                'channel'  => $channel,
+                'modes'    => $extractedModes,
+                'uri'      => $uri,
+                'host_modes' => $hostMode
+            ];
         }
 
         $parsed = parse_url($uri);
@@ -37,16 +139,41 @@ class IrcServices
             'ivc'   => 8080,
             'irc'   => 6667,
         ];
+        if (str_starts_with($scheme, 'ivc-')) {
+            $defaultPorts[$scheme] = 8080;
+        }
         $port = isset($parsed['port']) ? (int)$parsed['port'] : ($defaultPorts[$scheme] ?? 443);
 
         $channel = '#lobby';
+        $extractedModes = '';
+
+        $processPrefix = function (string $input): string {
+            $first = mb_substr($input, 0, 1);
+            if (in_array($first, ['#', '&', '@', '£', '$'], true)) {
+                return $input;
+            }
+            return '#' . $input;
+        };
+
         if (!empty($parsed['fragment'])) {
             $chanRaw = $parsed['fragment'];
-            $channel = str_starts_with($chanRaw, '#') ? $chanRaw : '#' . $chanRaw;
+            $plusPos = strpos($chanRaw, '+');
+            if ($plusPos !== false) {
+                $extractedModes = substr($chanRaw, $plusPos + 1);
+                $chanRaw = substr($chanRaw, 0, $plusPos);
+            }
+            if ($chanRaw !== '') {
+                $channel = $processPrefix($chanRaw);
+            }
         } elseif (!empty($parsed['path']) && $parsed['path'] !== '/') {
             $pathClean = ltrim($parsed['path'], '/');
+            $plusPos = strpos($pathClean, '+');
+            if ($plusPos !== false) {
+                $extractedModes = substr($pathClean, $plusPos + 1);
+                $pathClean = substr($pathClean, 0, $plusPos);
+            }
             if ($pathClean !== '') {
-                $channel = str_starts_with($pathClean, '#') ? $pathClean : '#' . $pathClean;
+                $channel = $processPrefix($pathClean);
             }
         }
 
@@ -57,6 +184,7 @@ class IrcServices
             'host'     => $host,
             'port'     => $port,
             'channel'  => $channel,
+            'modes'    => $extractedModes,
             'uri'      => $uri
         ];
     }
@@ -80,9 +208,6 @@ class IrcServices
         $first = strtolower($parts[0] ?? '');
 
         // Check for BOTSERV integration (External bot routing based on username)
-        $msgWithoutPrefix = '';
-        $targetBotNick = null;
-
         if ($first === '/msg' || $first === '/privmsg') {
             $targetNick = $parts[1] ?? '';
             if (!empty($targetNick) && ($service = BotServ::resolveBotService($channel, $targetNick))) {
@@ -131,6 +256,34 @@ class IrcServices
                 ];
             }
 
+            $targetObj = $parsed['channel'];
+            $reqModes = $parsed['modes'] ?? '';
+
+            if ($reqModes !== '') {
+                $prefix = mb_substr($targetObj, 0, 1);
+
+                // If the user is trying to join a channel (# or &) with specified modes, verify permissions.
+                if (($prefix === '#' || $prefix === '&') && str_contains($reqModes, 'o')) {
+                    if (!ChanServ::isRegistered($targetObj)) {
+                        return [
+                            'is_service_command' => true,
+                            'service' => 'SERVERSERV',
+                            'response' => "SERVERSERV: Permission denied. Channel {$targetObj} is not registered.",
+                            'channel' => $channel
+                        ];
+                    }
+
+                    if (!ChanServ::isOp($targetObj, $senderNick)) {
+                        return [
+                            'is_service_command' => true,
+                            'service' => 'SERVERSERV',
+                            'response' => "SERVERSERV: Permission denied. You must be an OP on {$targetObj} to connect with +{$reqModes} modes.",
+                            'channel' => $channel
+                        ];
+                    }
+                }
+            }
+
             return [
                 'is_service_command' => true,
                 'service' => 'SERVERSERV',
@@ -162,6 +315,10 @@ class IrcServices
 
             if ($targetService === ChanServ::SERVICE_NAME) {
                 return self::handleChanServCommand($senderNick, $channel, $cmd, $args);
+            }
+
+            if ($targetService === PayServ::SERVICE_NAME || $targetService === 'SUBSERV') {
+                return self::handlePayServCommand($senderNick, $channel, $cmd, $args);
             }
 
             if ($targetService === MotdServ::SERVICE_NAME) {
@@ -214,6 +371,12 @@ class IrcServices
             return self::handleChanServCommand($senderNick, $channel, $cmd, $args);
         }
 
+        if ($first === '/payserv' || $first === '/subserv') {
+            $cmd = strtoupper($parts[1] ?? '');
+            $args = array_slice($parts, 2);
+            return self::handlePayServCommand($senderNick, $channel, $cmd, $args);
+        }
+
         if ($first === '/motdserv') {
             $cmd = strtoupper($parts[1] ?? '');
             $args = array_slice($parts, 2);
@@ -256,6 +419,36 @@ class IrcServices
             return self::handleTextServCommand($senderNick, $channel, $cmd, $args);
         }
 
+        // 2. Chat-based Subscription & Payment Shortcuts (/subscribe & /pay)
+        if ($first === '/subscribe' || $first === '/pay') {
+            $level = strtolower($parts[1] ?? 'user');
+            $target = $parts[2] ?? '';
+            $planId = $parts[3] ?? null;
+
+            if ($level === 'plans' || $level === 'list') {
+                $res = PayServ::listPlans();
+            } else {
+                if (empty($target)) {
+                    if ($level === 'channel') {
+                        $target = $channel;
+                    } elseif ($level === 'server') {
+                        $target = 'IVC-IRC Network';
+                    } else {
+                        $target = $senderNick;
+                    }
+                }
+                $res = PayServ::subscribe($senderNick, $level, $target, $planId);
+            }
+
+            return [
+                'is_service_command' => true,
+                'service' => PayServ::SERVICE_NAME,
+                'response' => $res['message'],
+                'channel' => $channel
+            ];
+        }
+
+        // 3. Theme Command
         if ($first === '/cabpfaserv') {
             $cmd = strtoupper($parts[1] ?? '');
             $args = array_slice($parts, 2);
@@ -283,7 +476,7 @@ class IrcServices
             ];
         }
 
-        // 3. Convenience Slash Commands
+        // 4. Convenience Slash Commands
         if ($first === '/memo') {
             $sub = strtoupper($parts[1] ?? 'LIST');
             if ($sub === 'SEND') {
@@ -342,6 +535,91 @@ class IrcServices
                 'service' => MotdServ::SERVICE_NAME,
                 'response' => $res['message'],
                 'channel' => $channel
+            ];
+        }
+
+        if ($first === '/join') {
+            $target = $parts[1] ?? '';
+            if (empty($target)) {
+                return [
+                    'is_service_command' => true,
+                    'service' => 'SERVERSERV',
+                    'response' => 'Usage: /join <#channel|target>',
+                    'channel' => $channel
+                ];
+            }
+
+            $parsedTarget = ChanServ::parseTargetAndModes($target);
+            $targetChan = ChanServ::normalizeChannelName($parsedTarget['base_target']);
+            $modeInfoStr = $parsedTarget['modes'] !== '' ? " with modes ({$parsedTarget['modes']})" : '';
+
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "Joined channel {$targetChan}{$modeInfoStr}.",
+                'channel' => $targetChan
+            ];
+        }
+
+        if ($first === '/part' || $first === '/leave') {
+            $target = $parts[1] ?? $channel;
+            $targetChan = ChanServ::normalizeChannelName($target);
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "Left channel {$targetChan}.",
+                'channel' => $targetChan
+            ];
+        }
+
+        if ($first === '/mode' || $first === '/modes') {
+            $target = $parts[1] ?? $channel;
+            $modeStr = $parts[2] ?? '';
+
+            $parsed = ChanServ::parseTargetAndModes($target);
+            $targetChan = ChanServ::normalizeChannelName($parsed['base_target']);
+
+            if (empty($modeStr) && $parsed['modes'] !== '') {
+                $modeStr = $parsed['modes'];
+            }
+
+            if (empty($modeStr)) {
+                $info = ChanServ::getInfo($targetChan);
+                $resp = $info['success'] ? $info['message'] : "Modes for {$targetChan}: none set.";
+            } else {
+                $res = ChanServ::setModes($targetChan, $modeStr, $senderNick);
+                $resp = $res['message'];
+            }
+
+            return [
+                'is_service_command' => true,
+                'service' => ChanServ::SERVICE_NAME,
+                'response' => $resp,
+                'channel' => $targetChan
+            ];
+        }
+
+        if ($first === '/raw') {
+            $rawPayload = trim(substr($text, strlen($parts[0])));
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "[RAW OUTPUT] " . ($rawPayload !== '' ? $rawPayload : "Raw mode active for {$channel}"),
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/delta' || $first === '/deltamodes') {
+            $target = $parts[1] ?? $channel;
+            $parsed = ChanServ::parseTargetAndModes($target);
+            $targetChan = ChanServ::normalizeChannelName($parsed['base_target']);
+            $res = ChanServ::setModes($targetChan, '+Δmodes', $senderNick);
+
+            return [
+                'is_service_command' => true,
+                'service' => ChanServ::SERVICE_NAME,
+                'response' => "Δmodes active for {$targetChan}: {$res['modes']}",
+                'channel' => $targetChan
             ];
         }
 
@@ -445,6 +723,44 @@ class IrcServices
             ];
         }
 
+        if ($first === '/dcc') {
+            $sub = strtoupper($parts[1] ?? 'HELP');
+            if ($sub === 'SEND') {
+                $filename = $parts[2] ?? 'file.dat';
+                $filesize = isset($parts[3]) ? (int)$parts[3] : 0;
+                $sizeStr = $filesize > 0 ? " (" . self::formatFileSize($filesize) . ")" : "";
+                $resp = "DCC SEND: Direct WebRTC transfer offer initiated for '{$filename}'{$sizeStr}.";
+            } elseif ($sub === 'CLOUD' || $sub === 'DRIVE' || $sub === 'MEGA') {
+                $service = $sub === 'CLOUD' ? ($parts[2] ?? 'Cloud') : $sub;
+                $urlIndex = $sub === 'CLOUD' ? 3 : 2;
+                $fileIndex = $sub === 'CLOUD' ? 4 : 3;
+                $sizeIndex = $sub === 'CLOUD' ? 5 : 4;
+
+                $url = $parts[$urlIndex] ?? ($sub !== 'CLOUD' ? ($parts[2] ?? '') : '');
+                $filename = $parts[$fileIndex] ?? ($sub !== 'CLOUD' ? ($parts[3] ?? 'cloud-file') : 'cloud-file');
+                $filesize = isset($parts[$sizeIndex]) ? (int)$parts[$sizeIndex] : 0;
+
+                if (empty($url)) {
+                    $resp = "DCC CLOUD: Usage: /dcc cloud <service> <url> <filename> [filesize]";
+                } else {
+                    $sizeStr = $filesize > 0 ? " (" . self::formatFileSize($filesize) . ")" : "";
+                    $resp = "DCC CLOUD SHARE [{$service}]: '{$filename}'{$sizeStr} -> {$url}";
+                }
+            } else {
+                $resp = "DCC File Sharing Service:\n" .
+                        "• /dcc send <filename> [filesize] — Offer direct WebRTC P2P file transfer\n" .
+                        "• /dcc cloud <GoogleDrive|Mega|Dropbox> <url> <filename> [filesize] — Share multi-gigabyte cloud storage link\n" .
+                        "• Click 📁 DCC Share button in chat for interactive file selection UI";
+            }
+
+            return [
+                'is_service_command' => true,
+                'service' => 'DCCSERV',
+                'response' => $resp,
+                'channel' => $channel
+            ];
+        }
+
         if ($first === '/supersilent') {
             $msgText = trim(substr($text, strlen($parts[0])));
             if ($msgText === '') {
@@ -474,11 +790,22 @@ class IrcServices
 
         if ($first === '/help') {
             $helpMsg = "Available IRC Commands:\n" .
+                       "• /subscribe [user|channel|server] [target] [plan] — Chat-based Stripe checkout subscription\n" .
+                       "• /pay [user|channel|server] [target] — Generate instant Stripe payment link\n" .
+                       "• /msg PAYSERV PLANS — View all Stripe subscription plans\n" .
+                       "• /msg PAYSERV SUBSCRIBE <user|channel|server> [target] — Subscribe level from chat\n" .
                        "• /connect <URI> — Connect to server via URI (supports https://, ivc://, irc://)\n" .
                        "• /disconnect [server|URI] — Disconnect from active or specified server\n" .
+                       "• /join <#channel|target> — Join channel or target object\n" .
+                       "• /part [channel] / /leave — Leave current or specified channel\n" .
+                       "• /mode [target] [flags] — View/set modes (+n, +N, +S, +s, +k, +v, +o, +a, +m, +t, -t, +raw, +Δmodes)\n" .
+                       "• /delta [target] — Toggle/enable Δmodes configuration for target\n" .
+                       "• /raw [payload] — Toggle or send raw protocol data\n" .
                        "• /msg NAMESERV REGISTER <pass> [email] — Register your nickname\n" .
                        "• /msg NAMESERV IDENTIFY <pass> — Identify with your password\n" .
+                       "• /msg NAMESERV SUBSCRIBE [tier] — Subscribe nickname to User Pro\n" .
                        "• /msg CHANSERV REGISTER <#channel> [passkey] — Register a channel\n" .
+                       "• /msg CHANSERV SUBSCRIBE <#channel> [tier] — Subscribe channel to Channel Pro\n" .
                        "• /msg CHANSERV OP <#channel> <nick> — Grant channel OP status\n" .
                        "• /msg MEMOSERV SEND <nick> <msg> — Send memo to offline/online user\n" .
                        "• /msg MEMOSERV READ [num] / LIST — Read or list your memos\n" .
@@ -491,6 +818,7 @@ class IrcServices
                        "• /topic <new_topic> — Change channel topic\n" .
                        "• /theme [list|dark|light|halloween|console|christmas|custom] — Switch or manage themes\n" .
                        "• /supersilent <message> — Post a message to super room only without propagating to subrooms\n" .
+                       "• /dcc [send|cloud|help] — Direct WebRTC or multi-gigabyte cloud file sharing\n" .
                        "• /settings [SET <key> <value>] — View or update serverwide settings in MySQL\n" .
                        "• /cabpfaserv <command> — Computer Aided Best Practice Favorite Algorithm Service";
 
@@ -503,6 +831,63 @@ class IrcServices
         }
 
         return null;
+    }
+
+    public static function formatFileSize(int $bytes): string
+    {
+        if ($bytes >= 1073741824) {
+            return number_format($bytes / 1073741824, 2) . ' GB';
+        }
+        if ($bytes >= 1048576) {
+            return number_format($bytes / 1048576, 2) . ' MB';
+        }
+        if ($bytes >= 1024) {
+            return number_format($bytes / 1024, 2) . ' KB';
+        }
+        return $bytes . ' B';
+    }
+
+    private static function handlePayServCommand(string $senderNick, string $channel, string $cmd, array $args): array
+    {
+        switch ($cmd) {
+            case 'PLANS':
+            case 'TIERS':
+            case 'LIST':
+                $res = PayServ::listPlans();
+                break;
+
+            case 'SUBSCRIBE':
+            case 'PAY':
+                $level = $args[0] ?? 'user';
+                $target = $args[1] ?? '';
+                $planId = $args[2] ?? null;
+                $res = PayServ::subscribe($senderNick, $level, $target, $planId);
+                break;
+
+            case 'STATUS':
+            case 'INFO':
+                $level = $args[0] ?? 'user';
+                $target = $args[1] ?? $senderNick;
+                $res = PayServ::getStatus($level, $target);
+                break;
+
+            case 'CANCEL':
+                $level = $args[0] ?? 'user';
+                $target = $args[1] ?? $senderNick;
+                $res = PayServ::cancel($senderNick, $level, $target);
+                break;
+
+            default:
+                $res = PayServ::listPlans();
+                break;
+        }
+
+        return [
+            'is_service_command' => true,
+            'service' => PayServ::SERVICE_NAME,
+            'response' => $res['message'],
+            'channel' => $channel
+        ];
     }
 
     private static function handleNameServCommand(string $senderNick, string $channel, string $cmd, array $args): array
@@ -519,13 +904,18 @@ class IrcServices
                 $res = NameServ::identify($senderNick, $pass);
                 break;
 
+            case 'SUBSCRIBE':
+                $tier = $args[0] ?? 'nick_pro';
+                $res = NameServ::subscribe($senderNick, $tier);
+                break;
+
             case 'INFO':
                 $target = $args[0] ?? $senderNick;
                 $res = NameServ::getInfo($target);
                 break;
 
             default:
-                $res = ['message' => "NAMESERV: Unknown command '{$cmd}'. Use REGISTER, IDENTIFY, or INFO."];
+                $res = ['message' => "NAMESERV: Unknown command '{$cmd}'. Use REGISTER, IDENTIFY, SUBSCRIBE, or INFO."];
                 break;
         }
 
@@ -558,6 +948,12 @@ class IrcServices
                 $chan = !empty($args[0]) ? $args[0] : $channel;
                 $passkey = $args[1] ?? null;
                 $res = ChanServ::register($chan, $senderNick, $passkey);
+                break;
+
+            case 'SUBSCRIBE':
+                $chan = !empty($args[0]) && str_starts_with($args[0], '#') ? $args[0] : $channel;
+                $tier = !empty($args[0]) && !str_starts_with($args[0], '#') ? $args[0] : ($args[1] ?? 'channel_pro');
+                $res = ChanServ::subscribe($chan, $senderNick, $tier);
                 break;
 
             case 'OP':
@@ -608,7 +1004,7 @@ class IrcServices
                 break;
 
             default:
-                $res = ['message' => "CHANSERV: Unknown command '{$cmd}'. Use REGISTER, OP, DEOP, VOICE, DEVOICE, MODE, TOPIC, or INFO."];
+                $res = ['message' => "CHANSERV: Unknown command '{$cmd}'. Use REGISTER, SUBSCRIBE, OP, DEOP, VOICE, DEVOICE, MODE, TOPIC, or INFO."];
                 break;
         }
 

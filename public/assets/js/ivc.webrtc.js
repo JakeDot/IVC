@@ -397,9 +397,13 @@ async function handleIncomingSignal(channelId, signal) {
             } else if (signal.room && signal.room !== channelId) {
                 senderName = `[${signal.room}] ${senderName}`;
             }
+            let chatText = signal.message || signal.text;
+            if (typeof decompressTextMessage === 'function') {
+                chatText = decompressTextMessage(chatText);
+            }
             addMessageToTab(channelId, {
                 sender: senderName,
-                text: signal.message || signal.text,
+                text: chatText,
                 type: msgType
             });
             break;
@@ -1082,20 +1086,23 @@ async function handleChatSubmit() {
         }
     }
 
-    // Broadcast message to all peer DataChannels in room
+    // Bit-compress message for WebRTC transmission
+    const compressedPayload = (typeof compressTextMessage === 'function') ? compressTextMessage(text) : text;
+
+    // Broadcast bit-compressed message to all peer DataChannels in room
     Object.values(tab.dataChannels).forEach(dc => {
         if (dc && dc.readyState === 'open') {
-            dc.send(text);
+            dc.send(compressedPayload);
         }
     });
 
-    // Always transmit via signaling fallback so messages propagate in RAM
+    // Transmit bit-compressed payload via signaling fallback
     sendSignal(activeTabId, {
         type: 'chat',
         room: activeTabId,
         client: myClientId,
         nickname: myNickname,
-        message: text
+        message: compressedPayload
     });
 
     addMessageToTab(activeTabId, {
@@ -1110,9 +1117,17 @@ function setupDataChannel(channelId, peerId, channel) {
     if (!tab) return;
 
     channel.onmessage = async (event) => {
+        let rawMessage = event.data;
+        if (typeof decompressTextMessage === 'function') {
+            rawMessage = decompressTextMessage(rawMessage);
+        }
+
         if (typeof event.data === 'string' && event.data.trim().startsWith('{')) {
             try {
                 const parsed = JSON.parse(event.data);
+                if (parsed.__bc) {
+                    // Handled by decompressTextMessage above
+                } else
                 if (parsed.type === 'file-request' && parsed.fileId) {
                     const localFile = localSharedFilesMap[parsed.fileId];
                     if (localFile && localFile.blob) {
@@ -1171,7 +1186,7 @@ function setupDataChannel(channelId, peerId, channel) {
         const nick = tab.peerNicks[peerId] || peerId;
         addMessageToTab(channelId, {
             sender: nick,
-            text: event.data,
+            text: rawMessage,
             type: 'peer'
         });
     };

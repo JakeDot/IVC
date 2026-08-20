@@ -527,6 +527,9 @@ assertTest($uriHttps !== null && $uriHttps['protocol'] === 'HTTPS' && $uriHttps[
 $uriIvc = IrcServices::parseServerUri('ivc://node1.network.org:8080/general');
 assertTest($uriIvc !== null && $uriIvc['protocol'] === 'IVC' && $uriIvc['host'] === 'node1.network.org' && $uriIvc['port'] === 8080 && $uriIvc['channel'] === '#general', 'Parsed ivc:// URI with port and channel correctly');
 
+$uriIvcComplex = IrcServices::parseServerUri('ivc://$me$opers+ov£admins+anv');
+assertTest($uriIvcComplex !== null && $uriIvcComplex['protocol'] === 'IVC' && $uriIvcComplex['host'] === '$me$opers+ov£admins+anv', 'Parsed complex ivc:// symbolic URI correctly');
+
 $uriIrc = IrcServices::parseServerUri('irc://irc.fortress.net:6667/#dev');
 assertTest($uriIrc !== null && $uriIrc['protocol'] === 'IRC' && $uriIrc['host'] === 'irc.fortress.net' && $uriIrc['port'] === 6667 && $uriIrc['channel'] === '#dev', 'Parsed irc:// URI correctly');
 

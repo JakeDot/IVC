@@ -1105,6 +1105,42 @@ async function handleChatSubmit() {
     });
 }
 
+async function sendIrcCommand(channel, text) {
+    try {
+        const res = await fetch('/api/irc.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': window.FORTRESS_CSRF_TOKEN || ''
+            },
+            body: JSON.stringify({
+                sender: myNickname,
+                channel: channel,
+                text: text,
+                broadcast: false
+            })
+        });
+        return await res.json();
+    } catch (err) {
+        console.error('Error sending IRC command:', err);
+        return null;
+    }
+}
+
+async function performIrcServiceCommands(channel, password, roomKey, isCreate) {
+    if (password) {
+        const regRes = await sendIrcCommand('#lobby', `/msg NAMESERV REGISTER ${password}`);
+        if (regRes && regRes.status === 'error' && regRes.response.includes('already registered')) {
+            await sendIrcCommand('#lobby', `/msg NAMESERV IDENTIFY ${password}`);
+        }
+    }
+    if (isCreate) {
+        await sendIrcCommand(channel, '/msg CHANSERV REGISTER');
+        if (roomKey) {
+            await sendIrcCommand(channel, `/mode ${channel} +k ${roomKey}`);
+        }
+    }
+}
 function setupDataChannel(channelId, peerId, channel) {
     const tab = openTabs[channelId];
     if (!tab) return;

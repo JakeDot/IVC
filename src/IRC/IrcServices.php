@@ -12,10 +12,295 @@ namespace Fortress\IRC;
 class IrcServices
 {
     /**
+     * Parse subobjects (§prop property and ∆event event objects) and their modes (+mo-des) from a target or path.
+     *
+     * @param string $input
+     * @return array{base_target: string, subobjects: array<int, array{symbol: string, type: string, name: string, value: string, modes: string, mode_flags: array}>, props: array<string, array{value: string, modes: string, mode_flags: array}>, events: array<string, array{value: string, modes: string, mode_flags: array}>}
+     */
+    public static function parseSubobjects(string $input): array
+    {
+        $input = trim($input);
+        if ($input === '') {
+            return [
+                'base_target' => '',
+                'subobjects' => [],
+                'props' => [],
+                'events' => []
+            ];
+        }
+
+        $posSec = mb_strpos($input, '§');
+        $posDelta = mb_strpos($input, '∆');
+
+        $firstSubPos = null;
+        if ($posSec !== false && $posDelta !== false) {
+            $firstSubPos = min($posSec, $posDelta);
+        } elseif ($posSec !== false) {
+            $firstSubPos = $posSec;
+        } elseif ($posDelta !== false) {
+            $firstSubPos = $posDelta;
+        }
+
+        if ($firstSubPos === null) {
+            return [
+                'base_target' => $input,
+                'subobjects' => [],
+                'props' => [],
+                'events' => []
+            ];
+        }
+
+        $baseTarget = mb_substr($input, 0, $firstSubPos);
+        $subStr = mb_substr($input, $firstSubPos);
+
+        $tokens = preg_split('/([§∆])/u', $subStr, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
+
+        $subobjects = [];
+        $props = [];
+        $events = [];
+
+        for ($i = 0; $i < count($tokens); $i += 2) {
+            $symbol = $tokens[$i] ?? '';
+            $segment = $tokens[$i + 1] ?? '';
+
+            if ($symbol !== '§' && $symbol !== '∆') {
+                continue;
+            }
+
+            $type = ($symbol === '§') ? 'property' : 'event';
+            $name = '';
+            $value = 'true';
+            $modes = '';
+
+            if (preg_match('/^([a-zA-Z0-9_\-\.\/]+)(?:\+([a-zA-Z0-9_]+))?=(.*?)([\+\-][a-zA-Z0-9_\-\+]+)?$/u', $segment, $m)) {
+                $name = $m[1];
+                $modes = ($m[2] ?? '') !== '' ? '+' . $m[2] : ($m[4] ?? '');
+                $value = $m[3];
+            } elseif (preg_match('/^([a-zA-Z0-9_\-\.\/]+)=(.*?)([\+\-][a-zA-Z0-9_\-\+]+)?$/u', $segment, $m)) {
+                $name = $m[1];
+                $value = $m[2];
+                $modes = $m[3] ?? '';
+            } elseif (preg_match('/^([a-zA-Z0-9_\-\.\/]+)([\+\-][a-zA-Z0-9_\-\+]+)?$/u', $segment, $m)) {
+                $name = $m[1];
+                $modes = $m[2] ?? '';
+                $value = 'true';
+            } else {
+                $name = $segment;
+            }
+
+            $modeFlags = ChanServ::parseModeFlags($modes);
+
+            $subItem = [
+                'symbol' => $symbol,
+                'type' => $type,
+                'name' => $name,
+                'value' => $value,
+                'modes' => $modes,
+                'mode_flags' => $modeFlags
+            ];
+
+            $subobjects[] = $subItem;
+
+            $dictItem = [
+                'value' => $value,
+                'modes' => $modes,
+                'mode_flags' => $modeFlags
+            ];
+
+            if ($type === 'property') {
+                $props[$name] = $dictItem;
+            } else {
+                $events[$name] = $dictItem;
+            }
+        }
+
+        return [
+            'base_target' => $baseTarget,
+            'subobjects' => $subobjects,
+            'props' => $props,
+            'events' => $events
+        ];
+    }
+
+    /**
+     * Format an object dictionary or map into an ivc://$me/object§prop=value URI.
+     *
+     * @param mixed $objData
+     * @param string $host
+     * @return string
+     */
+    public static function formatObjectUri(mixed $objData, string $host = '$me'): string
+    {
+        if (is_string($objData)) {
+            $objData = trim($objData);
+            if (str_starts_with($objData, 'ivc://')) {
+                return $objData;
+            }
+            if (str_contains($objData, ' ') || str_contains($objData, ':')) {
+                $objData = preg_replace('/^\{|\}$/', '', $objData);
+                $parts = preg_split('/\s+/', $objData, 2);
+                $objName = $parts[0];
+                $kv = $parts[1] ?? '';
+                if ($kv !== '') {
+                    $kvParts = explode(':', $kv, 2);
+                    $propName = trim($kvParts[0]);
+                    $propVal = trim($kvParts[1] ?? 'true');
+                    return "ivc://{$host}/{$objName}§{$propName}={$propVal}";
+                }
+                return "ivc://{$host}/{$objName}";
+            }
+            return "ivc://{$host}/{$objData}";
+        }
+
+        if (!is_array($objData)) {
+            return "ivc://{$host}/object";
+        }
+
+        $baseObject = $objData['object'] ?? $objData['name'] ?? null;
+
+        if ($baseObject === null) {
+            $keys = array_keys($objData);
+            if (count($keys) === 1 && is_array($objData[$keys[0]])) {
+                $baseObject = $keys[0];
+                $props = $objData[$keys[0]];
+            } else {
+                $baseObject = 'object';
+                $props = $objData;
+            }
+        } else {
+            $props = $objData;
+        }
+
+        $subStr = '';
+        $reservedKeys = ['object', 'name', 'host', 'protocol', 'scheme', 'subobjects', 'props', 'events', 'uri', 'asObject'];
+
+        foreach ($props as $k => $v) {
+            if (in_array((string)$k, $reservedKeys, true)) {
+                continue;
+            }
+
+            $symbol = '§';
+            $keyName = (string)$k;
+
+            if (str_starts_with($keyName, '§')) {
+                $symbol = '§';
+                $keyName = mb_substr($keyName, 1);
+            } elseif (str_starts_with($keyName, '∆')) {
+                $symbol = '∆';
+                $keyName = mb_substr($keyName, 1);
+            }
+
+            $valStr = 'true';
+            $modeStr = '';
+
+            if (is_array($v)) {
+                $valStr = (string)($v['value'] ?? 'true');
+                $modeStr = (string)($v['modes'] ?? '');
+            } else {
+                $valStr = (string)$v;
+            }
+
+            $subStr .= "{$symbol}{$keyName}={$valStr}{$modeStr}";
+        }
+
+        return "ivc://{$host}/{$baseObject}{$subStr}";
+    }
+
+    /**
+     * Parse an ivc://$me/object§prop=value URI into an object map and structure.
+     *
+     * @param string $uri
+     * @return array
+     */
+    public static function parseObjectFromUri(string $uri): array
+    {
+        $parsedServer = self::parseServerUri($uri);
+        if (!$parsedServer) {
+            $subParsed = self::parseSubobjects($uri);
+            $baseObj = ltrim($subParsed['base_target'], '#');
+            $asObject = ['object' => $baseObj];
+            foreach ($subParsed['props'] as $k => $item) {
+                $asObject[$k] = $item['value'];
+            }
+            foreach ($subParsed['events'] as $k => $item) {
+                $asObject["∆{$k}"] = $item['value'];
+            }
+            return [
+                'scheme' => 'ivc',
+                'host' => '$me',
+                'object' => $baseObj,
+                'uri' => $uri,
+                'subobjects' => $subParsed['subobjects'],
+                'props' => $subParsed['props'],
+                'events' => $subParsed['events'],
+                'asObject' => $asObject
+            ];
+        }
+
+        $baseObj = ltrim($parsedServer['channel'], '#');
+        $asObject = ['object' => $baseObj];
+
+        foreach ($parsedServer['props'] as $k => $item) {
+            $asObject[$k] = $item['value'];
+        }
+        foreach ($parsedServer['events'] as $k => $item) {
+            $asObject["∆{$k}"] = $item['value'];
+        }
+
+        return [
+            'scheme' => strtolower($parsedServer['protocol']),
+            'host' => $parsedServer['host'],
+            'object' => $baseObj,
+            'uri' => $uri,
+            'subobjects' => $parsedServer['subobjects'],
+            'props' => $parsedServer['props'],
+            'events' => $parsedServer['events'],
+            'asObject' => $asObject
+        ];
+    }
+
+    /**
+     * Set or toggle modes on a subobject.
+     *
+     * @param array $subobject
+     * @param string $modeChange
+     * @return array
+     */
+    public static function setSubobjectMode(array $subobject, string $modeChange): array
+    {
+        $currentModes = $subobject['modes'] ?? '';
+        $add = true;
+        $chars = mb_str_split($modeChange);
+
+        for ($i = 0; $i < count($chars); $i++) {
+            $char = $chars[$i];
+            if ($char === '+') {
+                $add = true;
+            } elseif ($char === '-') {
+                $add = false;
+            } elseif (preg_match('/[a-zA-Z]/u', $char)) {
+                if ($add && !str_contains($currentModes, $char)) {
+                    $currentModes .= $char;
+                } elseif (!$add && str_contains($currentModes, $char)) {
+                    $currentModes = str_replace($char, '', $currentModes);
+                }
+            }
+        }
+
+        $cleanModes = str_replace('+', '', $currentModes);
+        $currentModes = !empty($cleanModes) ? '+' . $cleanModes : '';
+
+        $subobject['modes'] = $currentModes;
+        $subobject['mode_flags'] = ChanServ::parseModeFlags($currentModes);
+
+        return $subobject;
+    }
+
+    /**
      * Parse server URI supporting https://, ivc://, and irc:// protocols.
      *
      * @param string $uri
-     * @return array{protocol: string, host: string, port: int, channel: string, modes: string, uri: string}|null
+     * @return array{protocol: string, host: string, port: int, channel: string, modes: string, uri: string, subobjects: array, props: array, events: array}|null
      */
     public static function parseServerUri(string $uri): ?array
     {
@@ -53,8 +338,17 @@ class IrcServices
             return '#' . $input;
         };
 
+        $rawPathOrFragment = '';
         if (!empty($parsed['fragment'])) {
-            $chanRaw = $parsed['fragment'];
+            $rawPathOrFragment = $parsed['fragment'];
+        } elseif (!empty($parsed['path']) && $parsed['path'] !== '/') {
+            $rawPathOrFragment = ltrim($parsed['path'], '/');
+        }
+
+        $subParsed = self::parseSubobjects($rawPathOrFragment);
+        $chanRaw = $subParsed['base_target'];
+
+        if ($chanRaw !== '') {
             $plusPos = strpos($chanRaw, '+');
             if ($plusPos !== false) {
                 $extractedModes = substr($chanRaw, $plusPos + 1);
@@ -62,16 +356,6 @@ class IrcServices
             }
             if ($chanRaw !== '') {
                 $channel = $processPrefix($chanRaw);
-            }
-        } elseif (!empty($parsed['path']) && $parsed['path'] !== '/') {
-            $pathClean = ltrim($parsed['path'], '/');
-            $plusPos = strpos($pathClean, '+');
-            if ($plusPos !== false) {
-                $extractedModes = substr($pathClean, $plusPos + 1);
-                $pathClean = substr($pathClean, 0, $plusPos);
-            }
-            if ($pathClean !== '') {
-                $channel = $processPrefix($pathClean);
             }
         }
 
@@ -83,7 +367,10 @@ class IrcServices
             'port'     => $port,
             'channel'  => $channel,
             'modes'    => $extractedModes,
-            'uri'      => $uri
+            'uri'      => $uri,
+            'subobjects' => $subParsed['subobjects'],
+            'props'    => $subParsed['props'],
+            'events'   => $subParsed['events']
         ];
     }
 

@@ -210,6 +210,8 @@ class ChanServ
             'o' => str_contains($modeStr, 'o'),
             'a' => str_contains($modeStr, 'a'),
             'm' => str_contains($modeStr, 'm'),
+            'e' => str_contains($modeStr, 'e'),
+            'd' => str_contains($modeStr, 'd'),
             't' => str_contains($modeStr, 't') && !str_contains($modeStr, '-t'),
             'no_t' => str_contains($modeStr, '-t'),
             'raw' => str_contains($modeStr, 'raw'),
@@ -228,15 +230,17 @@ class ChanServ
     public static function parseTargetAndModes(string $target): array
     {
         $target = trim($target);
-        $baseTarget = $target;
+        $subParsed = IrcServices::parseSubobjects($target);
+
+        $baseTarget = $subParsed['base_target'];
         $modes = '';
 
-        if (($pos = strpos($target, '+')) !== false) {
-            $baseTarget = substr($target, 0, $pos);
-            $modes = substr($target, $pos);
-        } elseif (($pos = strpos($target, '-')) !== false) {
-            $baseTarget = substr($target, 0, $pos);
-            $modes = substr($target, $pos);
+        if (($pos = strpos($baseTarget, '+')) !== false) {
+            $modes = substr($baseTarget, $pos);
+            $baseTarget = substr($baseTarget, 0, $pos);
+        } elseif (($pos = strpos($baseTarget, '-')) !== false) {
+            $modes = substr($baseTarget, $pos);
+            $baseTarget = substr($baseTarget, 0, $pos);
         }
 
         $flags = self::parseModeFlags($modes);
@@ -245,7 +249,10 @@ class ChanServ
             'base_target' => $baseTarget,
             'raw_target' => $target,
             'modes' => $modes,
-            'mode_flags' => $flags
+            'mode_flags' => $flags,
+            'subobjects' => $subParsed['subobjects'],
+            'props' => $subParsed['props'],
+            'events' => $subParsed['events']
         ];
     }
 

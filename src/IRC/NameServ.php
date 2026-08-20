@@ -20,7 +20,6 @@ class NameServ
      */
     public static function register(string $nickname, string $password, ?string $email = null): array
     {
-        return UserNick::register($nickname, $password, $email);
         $nickname = trim($nickname);
         if (empty($nickname) || empty($password)) {
             return ['success' => false, 'message' => 'NAMESERV: Nickname and password are required.'];
@@ -51,7 +50,16 @@ class NameServ
      */
     public static function identify(string $nickname, string $password): array
     {
-        return UserNick::identify($nickname, $password);
+        $nickname = trim($nickname);
+        $userNick = UserNickRepository::findByNickname($nickname);
+
+        if ($userNick === null || !$userNick->verifyPassword($password)) {
+            return ['success' => false, 'message' => 'NAMESERV: Password verification failed. Access denied.'];
+        }
+
+        UserNickRepository::updateIdentification($userNick->getNickname(), true, time());
+
+        return ['success' => true, 'message' => "NAMESERV: Password accepted. Nickname '{$nickname}' identified."];
     }
 
     /**

@@ -96,6 +96,7 @@ class IrcServices
             'port'     => $port,
             'channel'  => $channel,
             'modes'    => $allModes,
+            'modes'    => $extractedModes,
             'uri'      => $uri
         ];
     }

@@ -19,7 +19,7 @@ final class Sanitizer
             return '#room-' . bin2hex(random_bytes(4));
         }
 
-        $clean = preg_replace('/[^a-zA-Z0-9\-_\/]/', '', $trimmed);
+        $clean = preg_replace('/[^a-zA-Z0-9\-_\/&]/', '', $trimmed);
         if ($clean === null) {
             return '#room-' . bin2hex(random_bytes(4));
         }
@@ -33,6 +33,9 @@ final class Sanitizer
         }
 
         $clean = substr($clean, 0, 63);
+        if (str_starts_with($clean, '&')) {
+            return '&' . ltrim($clean, '#&');
+        }
         return '#' . ltrim($clean, '#&');
     }
 

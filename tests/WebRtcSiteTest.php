@@ -528,7 +528,13 @@ $uriIvc = IrcServices::parseServerUri('ivc://node1.network.org:8080/general');
 assertTest($uriIvc !== null && $uriIvc['protocol'] === 'IVC' && $uriIvc['host'] === 'node1.network.org' && $uriIvc['port'] === 8080 && $uriIvc['channel'] === '#general', 'Parsed ivc:// URI with port and channel correctly');
 
 $uriIvcComplex = IrcServices::parseServerUri('ivc://$me$opers+ov£admins+anv/#hi+vm');
-assertTest($uriIvcComplex !== null && $uriIvcComplex['protocol'] === 'IVC' && $uriIvcComplex['host'] === '$me$opers+ov£admins+anv' && $uriIvcComplex['channel'] === '#hivm', 'Parsed complex ivc:// symbolic URI correctly with channel modes');
+assertTest($uriIvcComplex !== null && $uriIvcComplex['protocol'] === 'IVC' && $uriIvcComplex['host'] === '$me$opers+ov£admins+anv' && $uriIvcComplex['channel'] === '#hi', 'Parsed complex ivc:// symbolic URI correctly with channel modes stripped');
+
+$uriLocalOper = IrcServices::parseServerUri('ivc://local.host/&oper+on');
+assertTest($uriLocalOper !== null && $uriLocalOper['protocol'] === 'IVC' && $uriLocalOper['host'] === 'local.host' && $uriLocalOper['channel'] === '&oper', 'Parsed complex ivc:// URI joining local &oper channel with +on modes stripped');
+
+$uriChanModes = IrcServices::parseServerUri('ivc://local.host/chan+ovm');
+assertTest($uriChanModes !== null && $uriChanModes['protocol'] === 'IVC' && $uriChanModes['host'] === 'local.host' && $uriChanModes['channel'] === '#chan', 'Parsed complex ivc:// URI appending # to chan and stripping +ovm modes');
 
 $uriIrc = IrcServices::parseServerUri('irc://irc.fortress.net:6667/#dev');
 assertTest($uriIrc !== null && $uriIrc['protocol'] === 'IRC' && $uriIrc['host'] === 'irc.fortress.net' && $uriIrc['port'] === 6667 && $uriIrc['channel'] === '#dev', 'Parsed irc:// URI correctly');

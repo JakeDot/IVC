@@ -45,11 +45,21 @@ class IrcServices
         $channel = '#lobby';
         if (!empty($parsed['fragment'])) {
             $chanRaw = $parsed['fragment'];
-            $channel = str_starts_with($chanRaw, '#') ? $chanRaw : '#' . $chanRaw;
+            $plusPos = strpos($chanRaw, '+');
+            if ($plusPos !== false) {
+                $chanRaw = substr($chanRaw, 0, $plusPos);
+            }
+            if ($chanRaw !== '') {
+                $channel = (str_starts_with($chanRaw, '#') || str_starts_with($chanRaw, '&')) ? $chanRaw : '#' . $chanRaw;
+            }
         } elseif (!empty($parsed['path']) && $parsed['path'] !== '/') {
             $pathClean = ltrim($parsed['path'], '/');
+            $plusPos = strpos($pathClean, '+');
+            if ($plusPos !== false) {
+                $pathClean = substr($pathClean, 0, $plusPos);
+            }
             if ($pathClean !== '') {
-                $channel = str_starts_with($pathClean, '#') ? $pathClean : '#' . $pathClean;
+                $channel = (str_starts_with($pathClean, '#') || str_starts_with($pathClean, '&')) ? $pathClean : '#' . $pathClean;
             }
         }
 

@@ -30,7 +30,17 @@ class IrcServices
         }
 
         $scheme = strtolower($parsed['scheme'] ?? 'https');
-        $host = strtolower($parsed['host']);
+        $hostRaw = $parsed['host'];
+
+        // Strip +modes from the host component
+        $hostModes = '';
+        if (str_contains($hostRaw, '+')) {
+            $parts = explode('+', $hostRaw);
+            $hostRaw = $parts[0];
+            array_shift($parts); // Remove the base host
+            $hostModes = implode('+', $parts); // Keep remaining string if it had multiple +'s
+        }
+        $host = strtolower($hostRaw);
 
         $defaultPorts = [
             'https' => 443,
@@ -77,11 +87,15 @@ class IrcServices
 
         $channel = \Fortress\Security\Sanitizer::sanitizeRoomId($channel);
 
+        // Combine host modes and channel modes
+        $allModes = trim($hostModes . $extractedModes, '+');
+
         return [
             'protocol' => strtoupper($scheme),
             'host'     => $host,
             'port'     => $port,
             'channel'  => $channel,
+            'modes'    => $allModes,
             'modes'    => $extractedModes,
             'uri'      => $uri
         ];
@@ -93,13 +107,22 @@ class IrcServices
      * @param string $senderNick
      * @param string $channel
      * @param string $text
-     * @return array{is_service_command: true, service: string, response: string, channel: string, skip_bot_broadcast?: bool}|null
+     * @return array{is_service_command: true, service: string, response: string, channel: string, appstatus?: string, skip_bot_broadcast?: bool}|null
      */
     public static function processCommand(string $senderNick, string $channel, string $text): ?array
     {
         $text = trim($text);
         if ($text === '') {
             return null;
+        }
+
+        // Calculate AppStatus block for injection into native clients
+        $appModes = $senderNick;
+        $chanInfo = ChanServ::getInfo($channel);
+        if ($chanInfo['success']) {
+            $modes = $chanInfo['data']['modes'] ?? '';
+            $opStatus = ChanServ::isOp($channel, $senderNick) ? '+o' : '';
+            $appModes .= "{subs [{$channel}{$modes}{$opStatus}]}";
         }
 
         $parts = preg_split('/\s+/', $text);
@@ -115,7 +138,8 @@ class IrcServices
                     'is_service_command' => true,
                     'service' => $targetNick,
                     'response' => $res['message'],
-                    'channel' => $channel
+                    'channel' => $channel,
+                    'appstatus' => $appModes
                 ];
             }
         } elseif (str_ends_with($first, ':')) {
@@ -127,7 +151,8 @@ class IrcServices
                     'is_service_command' => true,
                     'service' => $targetNick,
                     'response' => $res['message'],
-                    'channel' => $channel
+                    'channel' => $channel,
+                    'appstatus' => $appModes
                 ];
             }
         }
@@ -186,7 +211,8 @@ class IrcServices
                 'is_service_command' => true,
                 'service' => 'SERVERSERV',
                 'response' => "SERVERSERV: Connected to server '{$parsed['host']}:{$parsed['port']}' via {$parsed['protocol']} (Channel: {$parsed['channel']}).",
-                'channel' => $parsed['channel']
+                'channel' => $parsed['channel'],
+                'appstatus' => $appModes
             ];
         }
 
@@ -197,7 +223,8 @@ class IrcServices
                 'is_service_command' => true,
                 'service' => 'SERVERSERV',
                 'response' => "SERVERSERV: Disconnected from server{$targetStr}.",
-                'channel' => $channel
+                'channel' => $channel,
+                'appstatus' => $appModes
             ];
         }
 

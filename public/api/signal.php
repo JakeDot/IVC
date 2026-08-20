@@ -185,15 +185,19 @@ if ($method === 'POST' || $method === 'PUT') {
     if (!empty($chatMessage) && is_string($chatMessage)) {
         $svcResult = IrcServices::processCommand($senderNick, $roomId, $chatMessage);
         if ($svcResult !== null) {
+            // Include appstatus if evaluated by the command processor
+            $appStatus = $svcResult['appstatus'] ?? '';
+            $botMsg = $appStatus !== '' ? "Status:+modes:{$appStatus}\n" . $svcResult['response'] : $svcResult['response'];
+
             // Broadcast IRC Bot Response to room
             RoomManager::broadcastSignal($roomId, 'SYSTEM_BOT', [
                 'type' => 'chat',
                 'sender' => $svcResult['service'],
-                'message' => $svcResult['response'],
+                'message' => $botMsg,
                 'is_bot' => true
             ], false);
 
-            echo json_encode(['status' => 'sent', 'is_service' => true, 'response' => $svcResult['response']], JSON_THROW_ON_ERROR);
+            echo json_encode(['status' => 'sent', 'is_service' => true, 'response' => $botMsg], JSON_THROW_ON_ERROR);
             exit;
         }
     }

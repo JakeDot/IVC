@@ -21,6 +21,9 @@ final class SecurityHeaders
             return;
         }
 
+        // Custom IVC Protocol Status Header: X-IVC-Status:<httpstatus>+modes:<appstatus>
+        // Use an X- header to avoid breaking the FastCGI HTTP Status Line (RFC 7230)
+        $statusStr = "X-IVC-Status: {$httpStatus}";
         // Custom IVC Protocol Status Header: Status:<httpstatus>+modes:<appstatus>
         $statusStr = "Status: {$httpStatus}";
         if ($appModes !== '') {

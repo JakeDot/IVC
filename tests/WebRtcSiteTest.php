@@ -588,6 +588,9 @@ assertTest($parsedCompoundUri !== null && $parsedCompoundUri['protocol'] === 'IV
 $parsedComplexIvcUri = IrcServices::parseServerUri('ivc://+gmodes?£network$server@user@host.int#chan&oper+Oo&admins+AaOo£network/∆global=true');
 assertTest($parsedComplexIvcUri !== null && $parsedComplexIvcUri['host'] === 'host.int' && $parsedComplexIvcUri['host_modes'] === '+gmodes' && str_contains($parsedComplexIvcUri['channel'], 'chan'), 'IrcServices::parseServerUri parses complex IVC URI with host modes, query targets, and channel mode suffixes');
 
+$parsedMailtoIvcUri = IrcServices::parseServerUri('ivc+mailto:jakedot@ivc.cx//$me/my/personal/.+sub/...+t{topic ...}');
+assertTest($parsedMailtoIvcUri !== null && $parsedMailtoIvcUri['protocol'] === 'IVC+MAILTO' && $parsedMailtoIvcUri['host'] === 'jakedot@ivc.cx' && str_contains($parsedMailtoIvcUri['channel'], 'personal'), 'IrcServices::parseServerUri parses ivc+mailto: URI scheme with path and mode suffixes');
+
 // B. Channel modes setting with ChanServ::setModes
 $chanModeSet = ChanServ::setModes('#fortress', '+n+s+Δmodes', 'CyberFox');
 assertTest($chanModeSet['success'] === true && str_contains($chanModeSet['modes'], 'Δmodes'), 'ChanServ::setModes sets channel modes including Δmodes');

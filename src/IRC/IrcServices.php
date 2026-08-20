@@ -49,8 +49,40 @@ class IrcServices
             ];
         }
 
-        if (!preg_match('/^(https|ivc(?:\+[a-zA-Z0-9_-]+)?(?:-[a-zA-Z0-9_-]+)?|irc):\/\//i', $uri)) {
+        if (!preg_match('/^(https|ivc(?:\+[a-zA-Z0-9_-]+)?(?:-[a-zA-Z0-9_-]+)?|irc|mailto|ivc\+mailto):\/\//i', $uri) && !str_starts_with($uri, 'ivc+mailto:')) {
             return null;
+        }
+
+        // Special handling for ivc+mailto:user@domain//path URIs
+        if (str_starts_with(strtolower($uri), 'ivc+mailto:')) {
+            $rawRest = substr($uri, strlen('ivc+mailto:'));
+            $slashPos = strpos($rawRest, '//');
+            if ($slashPos !== false) {
+                $emailHost = substr($rawRest, 0, $slashPos);
+                $pathRest = substr($rawRest, $slashPos + 2);
+            } else {
+                $emailHost = $rawRest;
+                $pathRest = '';
+            }
+
+            $extractedModes = '';
+            if (($plusPos = strpos($pathRest, '+')) !== false) {
+                $extractedModes = substr($pathRest, $plusPos + 1);
+                $pathRest = substr($pathRest, 0, $plusPos);
+            }
+
+            $chanClean = trim($pathRest, '/');
+            $channel = !empty($chanClean) ? '#' . $chanClean : '#lobby';
+            $channel = \Fortress\Security\Sanitizer::sanitizeRoomId($channel);
+
+            return [
+                'protocol' => 'IVC+MAILTO',
+                'host'     => $emailHost,
+                'port'     => 8080,
+                'channel'  => $channel,
+                'modes'    => $extractedModes,
+                'uri'      => $uri
+            ];
         }
 
         // Special handling for URIs where host begins with mode flags like +gmodes (e.g. ivc://+gmodes?query#chan)

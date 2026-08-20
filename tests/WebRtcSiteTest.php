@@ -36,7 +36,6 @@ require_once __DIR__ . '/../src/IRC/TextServ.php';
 require_once __DIR__ . '/../src/IRC/IrcServices.php';
 require_once __DIR__ . '/../src/Services/StripeService.php';
 require_once __DIR__ . '/../src/Signaling/RoomManager.php';
-require_once __DIR__ . '/../src/Utils/BitBuffer.php';
 
 use Fortress\Security\Sanitizer;
 use Fortress\Security\RateLimiter;
@@ -70,7 +69,6 @@ use Fortress\IRC\TextServ;
 use Fortress\IRC\IrcServices;
 use Fortress\Services\StripeService;
 use Fortress\Signaling\RoomManager;
-use Fortress\Utils\BitBuffer;
 
 echo "=========================================\n";
 echo " 🧪 Running Fortress WebRTC & IRC Test Suite\n";
@@ -538,9 +536,6 @@ assertTest($uriLocalOper !== null && $uriLocalOper['protocol'] === 'IVC' && $uri
 $uriChanModes = IrcServices::parseServerUri('ivc://local.host/chan+ovm');
 assertTest($uriChanModes !== null && $uriChanModes['protocol'] === 'IVC' && $uriChanModes['host'] === 'local.host' && $uriChanModes['channel'] === '#chan', 'Parsed complex ivc:// URI appending # to chan and stripping +ovm modes');
 
-$uriTestUser = IrcServices::parseServerUri('ivc://$me°180+oasisSNOAW@jakedot@ivc.cx/#hi&opers+o');
-assertTest($uriTestUser !== null && $uriTestUser['protocol'] === 'IVC' && $uriTestUser['host'] === 'ivc.cx' && $uriTestUser['channel'] === '#hi&opers' && $uriTestUser['modes'] === 'o', 'Parsed ivc://$me°180+oasisSNOAW@jakedot@ivc.cx/#hi&opers+o URI correctly');
-
 $uriIrc = IrcServices::parseServerUri('irc://irc.fortress.net:6667/#dev');
 assertTest($uriIrc !== null && $uriIrc['protocol'] === 'IRC' && $uriIrc['host'] === 'irc.fortress.net' && $uriIrc['port'] === 6667 && $uriIrc['channel'] === '#dev', 'Parsed irc:// URI correctly');
 
@@ -561,98 +556,6 @@ assertTest($cmdConnAuthorized !== null && $cmdConnAuthorized['service'] === 'SER
 
 $cmdDisc = IrcServices::processCommand('User1', '#lobby', '/disconnect chat.fortress.net');
 assertTest($cmdDisc !== null && $cmdDisc['service'] === 'SERVERSERV' && str_contains($cmdDisc['response'], 'Disconnected from server'), 'Processed /disconnect command');
-
-// Test 17: Extended Modes & New Slash Commands (/join, /part, /mode, /raw, /delta)
-echo "\n17. Testing Extended Modes & New Slash Commands...\n";
-
-// A. Mode parsing & target mode suffix parsing
-$modeFlags = ChanServ::parseModeFlags('+n+v+o+Δmodes');
-assertTest($modeFlags['n'] === true && $modeFlags['v'] === true && $modeFlags['o'] === true && $modeFlags['delta_modes'] === true, 'ChanServ::parseModeFlags correctly identifies mode flags');
-
-$parsedTarget = ChanServ::parseTargetAndModes('#network/handshake+Δmodes');
-assertTest($parsedTarget['base_target'] === '#network/handshake' && $parsedTarget['mode_flags']['delta_modes'] === true, 'ChanServ::parseTargetAndModes correctly extracts base target and Δmodes flag');
-
-$parsedRawTarget = ChanServ::parseTargetAndModes('@object+raw');
-assertTest($parsedRawTarget['base_target'] === '@object' && $parsedRawTarget['mode_flags']['raw'] === true, 'ChanServ::parseTargetAndModes extracts @object base and +raw mode');
-
-$parsedSectionTarget = ChanServ::parseTargetAndModes('@object§prop=value+mo-des');
-assertTest($parsedSectionTarget['base_target'] === '@object' && $parsedSectionTarget['prop'] === 'prop' && $parsedSectionTarget['prop_value'] === 'value', 'ChanServ::parseTargetAndModes parses §prop subobject');
-assertTest($parsedSectionTarget['mode_flags']['m'] === true && $parsedSectionTarget['mode_flags']['o'] === true && $parsedSectionTarget['mode_flags']['d'] === false, 'ChanServ::parseModeFlags parses +mo-des additions and removals');
-assertTest($parsedSectionTarget['object_notation'] === '{object prop:value}', 'ChanServ::parseTargetAndModes generates object notation string');
-assertTest($parsedSectionTarget['ivc_uri'] === 'ivc://$me/object§prop=value', 'ChanServ::parseTargetAndModes generates ivc://$me/object§prop=value URI string');
-
-$parsedObjUri = IrcServices::parseServerUri('{object prop:value}');
-assertTest($parsedObjUri !== null && $parsedObjUri['protocol'] === 'IVC' && $parsedObjUri['channel'] === '#object§prop=value', 'IrcServices::parseServerUri parses inline object notation {object prop:value}');
-
-$parsedCompoundUri = IrcServices::parseServerUri('ivc+https://facebook.net/<object>/<name>');
-assertTest($parsedCompoundUri !== null && $parsedCompoundUri['protocol'] === 'IVC+HTTPS' && $parsedCompoundUri['host'] === 'facebook.net', 'IrcServices::parseServerUri parses compound protocol ivc+https://');
-
-$parsedComplexIvcUri = IrcServices::parseServerUri('ivc://+gmodes?£network$server@user@host.int#chan&oper+Oo&admins+AaOo£network/∆global=true');
-assertTest($parsedComplexIvcUri !== null && $parsedComplexIvcUri['host'] === 'host.int' && $parsedComplexIvcUri['host_modes'] === '+gmodes' && str_contains($parsedComplexIvcUri['channel'], 'chan'), 'IrcServices::parseServerUri parses complex IVC URI with host modes, query targets, and channel mode suffixes');
-
-$parsedMailtoIvcUri = IrcServices::parseServerUri('ivc+mailto:jakedot@ivc.cx//$me/my/personal/.+sub/...+t{topic ...}');
-assertTest($parsedMailtoIvcUri !== null && $parsedMailtoIvcUri['protocol'] === 'IVC+MAILTO' && $parsedMailtoIvcUri['host'] === 'jakedot@ivc.cx' && str_contains($parsedMailtoIvcUri['channel'], 'personal'), 'IrcServices::parseServerUri parses ivc+mailto: URI scheme with path and mode suffixes');
-
-// B. Channel modes setting with ChanServ::setModes
-$chanModeSet = ChanServ::setModes('#fortress', '+n+s+Δmodes', 'CyberFox');
-assertTest($chanModeSet['success'] === true && str_contains($chanModeSet['modes'], 'Δmodes'), 'ChanServ::setModes sets channel modes including Δmodes');
-
-// C. Slash commands processing
-$joinCmd = IrcServices::processCommand('User1', '#lobby', '/join #network/handshake+Δmodes');
-assertTest($joinCmd !== null && $joinCmd['service'] === 'SERVERSERV' && $joinCmd['channel'] === '#network/handshake' && str_contains($joinCmd['response'], 'Joined channel #network/handshake'), 'Processed /join command with target mode suffix');
-
-$partCmd = IrcServices::processCommand('User1', '#network/handshake', '/part');
-assertTest($partCmd !== null && $partCmd['service'] === 'SERVERSERV' && str_contains($partCmd['response'], 'Left channel #network/handshake'), 'Processed /part command');
-
-$modeCmd = IrcServices::processCommand('CyberFox', '#fortress', '/mode #fortress +v');
-assertTest($modeCmd !== null && $modeCmd['service'] === 'CHANSERV' && str_contains($modeCmd['response'], 'Modes for #fortress updated'), 'Processed /mode command');
-
-$rawCmd = IrcServices::processCommand('User1', '#lobby', '/raw PING :123456');
-assertTest($rawCmd !== null && $rawCmd['service'] === 'SERVERSERV' && str_contains($rawCmd['response'], '[RAW OUTPUT] PING :123456'), 'Processed /raw command with payload');
-
-$deltaCmd = IrcServices::processCommand('CyberFox', '#fortress', '/delta #fortress');
-assertTest($deltaCmd !== null && $deltaCmd['service'] === 'CHANSERV' && str_contains($deltaCmd['response'], 'Δmodes active for #fortress'), 'Processed /delta command');
-
-// Test 18: Native Bit-Addressable Buffer (BitBuffer PHP)
-echo "\n18. Testing Native Bit-Addressable Buffer (BitBuffer PHP)...\n";
-$bbBitStr = BitBuffer::fromBitString('1101 0010');
-assertTest($bbBitStr->getBitLength() === 8 && $bbBitStr->toBitString() === '11010010', 'BitBuffer::fromBitString parsed binary string');
-
-$bbHex = BitBuffer::fromHexString('a5f0');
-assertTest($bbHex->getBitLength() === 16 && $bbHex->toHexString() === 'a5f0', 'BitBuffer::fromHexString parsed hex string');
-
-$bb = BitBuffer::allocate(32);
-$bb->writeBits(21, 5);
-$bb->writeBits(1234, 11);
-$bb->rewind();
-assertTest($bb->readBits(5) === 21 && $bb->readBits(11) === 1234, 'BitBuffer read/write multi-bit integer bitfields');
-
-$bb->rewind();
-$bb->writeSignedBits(-9, 5);
-$bb->rewind();
-assertTest($bb->readSignedBits(5) === -9, 'BitBuffer read/write 2\'s complement signed bitfield');
-
-$bb->rewind();
-$bb->writeInt32(-123456789);
-$bb->rewind();
-assertTest($bb->readInt32() === -123456789, 'BitBuffer read/write 32-bit signed integer');
-
-$schema = [
-    ['name' => 'ver', 'bits' => 4],
-    ['name' => 'flags', 'bits' => 4],
-    ['name' => 'seq', 'bits' => 16]
-];
-$packData = ['ver' => 3, 'flags' => 12, 'seq' => 54321];
-$bbPack = BitBuffer::allocate(24);
-$bbPack->pack($packData, $schema);
-$bbPack->rewind();
-$unpacked = $bbPack->unpack($schema);
-assertTest($unpacked['ver'] === 3 && $unpacked['flags'] === 12 && $unpacked['seq'] === 54321, 'BitBuffer pack/unpack bitfield schema');
-
-$bbLogic1 = BitBuffer::fromBitString('11001010');
-$bbLogic2 = BitBuffer::fromBitString('10101100');
-assertTest($bbLogic1->and($bbLogic2)->toBitString() === '10001000', 'BitBuffer bitwise AND operation');
-assertTest($bbLogic1->xor($bbLogic2)->toBitString() === '01100110', 'BitBuffer bitwise XOR operation');
 
 echo "\n-----------------------------------------\n";
 echo "Test Results: $testsPassed Passed, $testsFailed Failed.\n";

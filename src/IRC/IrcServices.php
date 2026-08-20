@@ -20,107 +20,8 @@ class IrcServices
     public static function parseServerUri(string $uri): ?array
     {
         $uri = trim($uri);
-
-        // Check for inline object notation {object prop:value}
-        if (str_starts_with($uri, '{') && str_ends_with($uri, '}')) {
-            $inner = trim(substr($uri, 1, -1));
-            $parts = preg_split('/\s+/', $inner, 2);
-            $objName = $parts[0] ?? 'object';
-            $propStr = $parts[1] ?? '';
-            $propVal = 'true';
-            $propKey = 'prop';
-
-            if (($colonPos = strpos($propStr, ':')) !== false) {
-                $propKey = substr($propStr, 0, $colonPos);
-                $propVal = substr($propStr, $colonPos + 1);
-            } elseif ($propStr !== '') {
-                $propKey = $propStr;
-            }
-
-            return [
-                'protocol' => 'IVC',
-                'host'     => '$me',
-                'port'     => 8080,
-                'channel'  => '#' . $objName . '§' . $propKey . '=' . $propVal,
-                'modes'    => '',
-                'uri'      => "ivc://\$me/" . $objName . "§" . $propKey . "=" . $propVal,
-                'sub_object' => '§' . $propKey . '=' . $propVal,
-                'object_notation' => $uri
-            ];
-        }
-
-        if (!preg_match('/^(https|ivc(?:\+[a-zA-Z0-9_-]+)?(?:-[a-zA-Z0-9_-]+)?|irc|mailto|ivc\+mailto):\/\//i', $uri) && !str_starts_with($uri, 'ivc+mailto:')) {
+        if (!preg_match('/^(https|ivc(?:-[a-zA-Z0-9_-]+)?|irc):\/\//i', $uri)) {
             return null;
-        }
-
-        // Special handling for ivc+mailto:user@domain//path URIs
-        if (str_starts_with(strtolower($uri), 'ivc+mailto:')) {
-            $rawRest = substr($uri, strlen('ivc+mailto:'));
-            $slashPos = strpos($rawRest, '//');
-            if ($slashPos !== false) {
-                $emailHost = substr($rawRest, 0, $slashPos);
-                $pathRest = substr($rawRest, $slashPos + 2);
-            } else {
-                $emailHost = $rawRest;
-                $pathRest = '';
-            }
-
-            $extractedModes = '';
-            if (($plusPos = strpos($pathRest, '+')) !== false) {
-                $extractedModes = substr($pathRest, $plusPos + 1);
-                $pathRest = substr($pathRest, 0, $plusPos);
-            }
-
-            $chanClean = trim($pathRest, '/');
-            $channel = !empty($chanClean) ? '#' . $chanClean : '#lobby';
-            $channel = \Fortress\Security\Sanitizer::sanitizeRoomId($channel);
-
-            return [
-                'protocol' => 'IVC+MAILTO',
-                'host'     => $emailHost,
-                'port'     => 8080,
-                'channel'  => $channel,
-                'modes'    => $extractedModes,
-                'uri'      => $uri
-            ];
-        }
-
-        // Special handling for URIs where host begins with mode flags like +gmodes (e.g. ivc://+gmodes?query#chan)
-        if (preg_match('/^([a-zA-Z0-9\+-]+):\/\/(\+[a-zA-Z0-9_-]+)?([^:\/\?#]+)?(?::(\d+))?([^?#]*)?(?:\?([^#]*))?(?:#(.*))?$/i', $uri, $m)) {
-            $scheme = strtolower($m[1]);
-            $hostMode = $m[2] ?? '';
-            $rawHost = $m[3] ?? '';
-            $port = !empty($m[4]) ? (int)$m[4] : (str_starts_with($scheme, 'ivc') ? 8080 : 443);
-            $path = $m[5] ?? '';
-            $query = $m[6] ?? '';
-            $fragment = $m[7] ?? '';
-
-            $effectiveHost = $rawHost !== '' ? strtolower($rawHost) : ($query !== '' ? 'localhost' : 'localhost');
-            if (!empty($query) && str_contains($query, '@')) {
-                $atParts = explode('@', $query);
-                $effectiveHost = strtolower(array_pop($atParts));
-            }
-
-            $chanRaw = $fragment !== '' ? $fragment : $path;
-            $extractedModes = '';
-            if (($plusPos = strpos($chanRaw, '+')) !== false) {
-                $extractedModes = substr($chanRaw, $plusPos + 1);
-                $chanRaw = substr($chanRaw, 0, $plusPos);
-            }
-
-            $chanRaw = trim($chanRaw, '/');
-            $channel = !empty($chanRaw) ? (str_starts_with($chanRaw, '#') || str_starts_with($chanRaw, '&') ? $chanRaw : '#' . $chanRaw) : '#lobby';
-            $channel = \Fortress\Security\Sanitizer::sanitizeRoomId($channel);
-
-            return [
-                'protocol' => strtoupper($scheme),
-                'host'     => $effectiveHost,
-                'port'     => $port,
-                'channel'  => $channel,
-                'modes'    => $extractedModes,
-                'uri'      => $uri,
-                'host_modes' => $hostMode
-            ];
         }
 
         $parsed = parse_url($uri);
@@ -535,91 +436,6 @@ class IrcServices
             ];
         }
 
-        if ($first === '/join') {
-            $target = $parts[1] ?? '';
-            if (empty($target)) {
-                return [
-                    'is_service_command' => true,
-                    'service' => 'SERVERSERV',
-                    'response' => 'Usage: /join <#channel|target>',
-                    'channel' => $channel
-                ];
-            }
-
-            $parsedTarget = ChanServ::parseTargetAndModes($target);
-            $targetChan = ChanServ::normalizeChannelName($parsedTarget['base_target']);
-            $modeInfoStr = $parsedTarget['modes'] !== '' ? " with modes ({$parsedTarget['modes']})" : '';
-
-            return [
-                'is_service_command' => true,
-                'service' => 'SERVERSERV',
-                'response' => "Joined channel {$targetChan}{$modeInfoStr}.",
-                'channel' => $targetChan
-            ];
-        }
-
-        if ($first === '/part' || $first === '/leave') {
-            $target = $parts[1] ?? $channel;
-            $targetChan = ChanServ::normalizeChannelName($target);
-            return [
-                'is_service_command' => true,
-                'service' => 'SERVERSERV',
-                'response' => "Left channel {$targetChan}.",
-                'channel' => $targetChan
-            ];
-        }
-
-        if ($first === '/mode' || $first === '/modes') {
-            $target = $parts[1] ?? $channel;
-            $modeStr = $parts[2] ?? '';
-
-            $parsed = ChanServ::parseTargetAndModes($target);
-            $targetChan = ChanServ::normalizeChannelName($parsed['base_target']);
-
-            if (empty($modeStr) && $parsed['modes'] !== '') {
-                $modeStr = $parsed['modes'];
-            }
-
-            if (empty($modeStr)) {
-                $info = ChanServ::getInfo($targetChan);
-                $resp = $info['success'] ? $info['message'] : "Modes for {$targetChan}: none set.";
-            } else {
-                $res = ChanServ::setModes($targetChan, $modeStr, $senderNick);
-                $resp = $res['message'];
-            }
-
-            return [
-                'is_service_command' => true,
-                'service' => ChanServ::SERVICE_NAME,
-                'response' => $resp,
-                'channel' => $targetChan
-            ];
-        }
-
-        if ($first === '/raw') {
-            $rawPayload = trim(substr($text, strlen($parts[0])));
-            return [
-                'is_service_command' => true,
-                'service' => 'SERVERSERV',
-                'response' => "[RAW OUTPUT] " . ($rawPayload !== '' ? $rawPayload : "Raw mode active for {$channel}"),
-                'channel' => $channel
-            ];
-        }
-
-        if ($first === '/delta' || $first === '/deltamodes') {
-            $target = $parts[1] ?? $channel;
-            $parsed = ChanServ::parseTargetAndModes($target);
-            $targetChan = ChanServ::normalizeChannelName($parsed['base_target']);
-            $res = ChanServ::setModes($targetChan, '+Δmodes', $senderNick);
-
-            return [
-                'is_service_command' => true,
-                'service' => ChanServ::SERVICE_NAME,
-                'response' => "Δmodes active for {$targetChan}: {$res['modes']}",
-                'channel' => $targetChan
-            ];
-        }
-
         if ($first === '/op') {
             $target = $parts[1] ?? '';
             $chan = (!empty($parts[2]) ? $parts[2] : $channel);
@@ -755,11 +571,6 @@ class IrcServices
                        "• /msg PAYSERV SUBSCRIBE <user|channel|server> [target] — Subscribe level from chat\n" .
                        "• /connect <URI> — Connect to server via URI (supports https://, ivc://, irc://)\n" .
                        "• /disconnect [server|URI] — Disconnect from active or specified server\n" .
-                       "• /join <#channel|target> — Join channel or target object\n" .
-                       "• /part [channel] / /leave — Leave current or specified channel\n" .
-                       "• /mode [target] [flags] — View/set modes (+n, +N, +S, +s, +k, +v, +o, +a, +m, +t, -t, +raw, +Δmodes)\n" .
-                       "• /delta [target] — Toggle/enable Δmodes configuration for target\n" .
-                       "• /raw [payload] — Toggle or send raw protocol data\n" .
                        "• /msg NAMESERV REGISTER <pass> [email] — Register your nickname\n" .
                        "• /msg NAMESERV IDENTIFY <pass> — Identify with your password\n" .
                        "• /msg NAMESERV SUBSCRIBE [tier] — Subscribe nickname to User Pro\n" .

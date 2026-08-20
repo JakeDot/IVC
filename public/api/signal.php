@@ -28,16 +28,15 @@ use Fortress\Security\Sanitizer;
 use Fortress\Security\RateLimiter;
 use Fortress\Security\TokenManager;
 use Fortress\IRC\IrcServices;
+use Fortress\IRC\ChanServ;
 use Fortress\Signaling\RoomManager;
-
-// Enforce Fortress IT Security Headers
-SecurityHeaders::apply();
 
 header('Content-Type: application/json');
 
 // Rate limiting check based on session ID or anonymized IP hash
 $clientKey = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
 if (!RateLimiter::check($clientKey, 120, 60)) {
+    SecurityHeaders::apply(429);
     http_response_code(429);
     echo json_encode(['error' => 'Rate limit exceeded. Please wait.'], JSON_THROW_ON_ERROR);
     exit;
@@ -52,10 +51,22 @@ if ($method === 'GET') {
     $mode = $_GET['mode'] ?? 'poll';
 
     if (empty($roomId) || empty($clientId)) {
+        SecurityHeaders::apply(400);
         http_response_code(400);
         echo json_encode(['error' => 'Room ID and Client ID required'], JSON_THROW_ON_ERROR);
         exit;
     }
+
+    // Calculate app modes if applicable to the sender/channel context
+    $appModes = $clientId;
+    $chanInfo = ChanServ::getInfo($roomId);
+    if ($chanInfo['success']) {
+        $modes = $chanInfo['data']['modes'] ?? '';
+        $opStatus = ChanServ::isOp($roomId, $clientId) ? '+o' : '';
+        $appModes .= "{subs [{$roomId}{$modes}{$opStatus}]}";
+    }
+
+    SecurityHeaders::apply(200, $appModes);
 
     if ($mode === 'sse') {
         // SSE (Server-Sent Events) realtime streaming mode
@@ -103,9 +114,10 @@ if ($method === 'GET') {
     exit;
 }
 
-if ($method === 'POST') {
+if ($method === 'POST' || $method === 'PUT') {
     $rawPayload = file_get_contents('php://input');
     if ($rawPayload === false) {
+        SecurityHeaders::apply(400);
         http_response_code(400);
         echo json_encode(['error' => 'Invalid request payload'], JSON_THROW_ON_ERROR);
         exit;
@@ -113,6 +125,7 @@ if ($method === 'POST') {
 
     $payload = Sanitizer::validateSignalPayload($rawPayload);
     if ($payload === null) {
+        SecurityHeaders::apply(400);
         http_response_code(400);
         echo json_encode(['error' => 'Invalid or malformed signal payload'], JSON_THROW_ON_ERROR);
         exit;
@@ -122,10 +135,22 @@ if ($method === 'POST') {
     $clientId = Sanitizer::sanitizeClientId($payload['client'] ?? $_GET['client'] ?? '');
 
     if (empty($roomId) || empty($clientId)) {
+        SecurityHeaders::apply(400);
         http_response_code(400);
         echo json_encode(['error' => 'Room ID and Client ID required'], JSON_THROW_ON_ERROR);
         exit;
     }
+
+    // Calculate app modes if applicable to the sender/channel context
+    $appModes = $clientId;
+    $chanInfo = ChanServ::getInfo($roomId);
+    if ($chanInfo['success']) {
+        $modes = $chanInfo['data']['modes'] ?? '';
+        $opStatus = ChanServ::isOp($roomId, $clientId) ? '+o' : '';
+        $appModes .= "{subs [{$roomId}{$modes}{$opStatus}]}";
+    }
+
+    SecurityHeaders::apply(200, $appModes);
 
     $action = $payload['type'] ?? '';
 
@@ -133,6 +158,21 @@ if ($method === 'POST') {
         RoomManager::leaveRoom($roomId, $clientId);
         echo json_encode(['status' => 'left'], JSON_THROW_ON_ERROR);
         exit;
+    }
+
+    // Check if the target is a non-channel object (e.g. user, network, server) for PUT memos
+    $prefix = mb_substr($roomId, 0, 1);
+    if ($method === 'PUT' && in_array($prefix, ['@', '£', '$'], true)) {
+        $chatMessage = $payload['message'] ?? $payload['text'] ?? '';
+        $senderNick = $payload['nickname'] ?? $clientId;
+
+        if (!empty($chatMessage)) {
+            require_once __DIR__ . '/../../src/IRC/MemoServ.php';
+            $target = ltrim($roomId, '@£$');
+            \Fortress\IRC\MemoServ::send($senderNick, $target, "[PUT Notice] " . $chatMessage);
+            echo json_encode(['status' => 'sent', 'is_memo' => true, 'message' => "Notice posted to non-channel object {$roomId}."], JSON_THROW_ON_ERROR);
+            exit;
+        }
     }
 
     // Join & broadcast signal (offer, answer, ice-candidate, chat, etc)
@@ -164,5 +204,6 @@ if ($method === 'POST') {
     exit;
 }
 
+SecurityHeaders::apply(405);
 http_response_code(405);
 echo json_encode(['error' => 'Method Not Allowed'], JSON_THROW_ON_ERROR);

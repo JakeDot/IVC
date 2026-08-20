@@ -36,6 +36,7 @@ require_once __DIR__ . '/../src/IRC/TextServ.php';
 require_once __DIR__ . '/../src/IRC/IrcServices.php';
 require_once __DIR__ . '/../src/Services/StripeService.php';
 require_once __DIR__ . '/../src/Signaling/RoomManager.php';
+require_once __DIR__ . '/../src/Utils/BitBuffer.php';
 
 use Fortress\Security\Sanitizer;
 use Fortress\Security\RateLimiter;
@@ -69,6 +70,7 @@ use Fortress\IRC\TextServ;
 use Fortress\IRC\IrcServices;
 use Fortress\Services\StripeService;
 use Fortress\Signaling\RoomManager;
+use Fortress\Utils\BitBuffer;
 
 echo "=========================================\n";
 echo " 🧪 Running Fortress WebRTC & IRC Test Suite\n";
@@ -610,6 +612,47 @@ assertTest($rawCmd !== null && $rawCmd['service'] === 'SERVERSERV' && str_contai
 
 $deltaCmd = IrcServices::processCommand('CyberFox', '#fortress', '/delta #fortress');
 assertTest($deltaCmd !== null && $deltaCmd['service'] === 'CHANSERV' && str_contains($deltaCmd['response'], 'Δmodes active for #fortress'), 'Processed /delta command');
+
+// Test 18: Native Bit-Addressable Buffer (BitBuffer PHP)
+echo "\n18. Testing Native Bit-Addressable Buffer (BitBuffer PHP)...\n";
+$bbBitStr = BitBuffer::fromBitString('1101 0010');
+assertTest($bbBitStr->getBitLength() === 8 && $bbBitStr->toBitString() === '11010010', 'BitBuffer::fromBitString parsed binary string');
+
+$bbHex = BitBuffer::fromHexString('a5f0');
+assertTest($bbHex->getBitLength() === 16 && $bbHex->toHexString() === 'a5f0', 'BitBuffer::fromHexString parsed hex string');
+
+$bb = BitBuffer::allocate(32);
+$bb->writeBits(21, 5);
+$bb->writeBits(1234, 11);
+$bb->rewind();
+assertTest($bb->readBits(5) === 21 && $bb->readBits(11) === 1234, 'BitBuffer read/write multi-bit integer bitfields');
+
+$bb->rewind();
+$bb->writeSignedBits(-9, 5);
+$bb->rewind();
+assertTest($bb->readSignedBits(5) === -9, 'BitBuffer read/write 2\'s complement signed bitfield');
+
+$bb->rewind();
+$bb->writeInt32(-123456789);
+$bb->rewind();
+assertTest($bb->readInt32() === -123456789, 'BitBuffer read/write 32-bit signed integer');
+
+$schema = [
+    ['name' => 'ver', 'bits' => 4],
+    ['name' => 'flags', 'bits' => 4],
+    ['name' => 'seq', 'bits' => 16]
+];
+$packData = ['ver' => 3, 'flags' => 12, 'seq' => 54321];
+$bbPack = BitBuffer::allocate(24);
+$bbPack->pack($packData, $schema);
+$bbPack->rewind();
+$unpacked = $bbPack->unpack($schema);
+assertTest($unpacked['ver'] === 3 && $unpacked['flags'] === 12 && $unpacked['seq'] === 54321, 'BitBuffer pack/unpack bitfield schema');
+
+$bbLogic1 = BitBuffer::fromBitString('11001010');
+$bbLogic2 = BitBuffer::fromBitString('10101100');
+assertTest($bbLogic1->and($bbLogic2)->toBitString() === '10001000', 'BitBuffer bitwise AND operation');
+assertTest($bbLogic1->xor($bbLogic2)->toBitString() === '01100110', 'BitBuffer bitwise XOR operation');
 
 echo "\n-----------------------------------------\n";
 echo "Test Results: $testsPassed Passed, $testsFailed Failed.\n";

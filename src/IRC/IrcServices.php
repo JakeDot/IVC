@@ -15,7 +15,7 @@ class IrcServices
      * Parse server URI supporting https://, ivc://, and irc:// protocols.
      *
      * @param string $uri
-     * @return array{protocol: string, host: string, port: int, channel: string, uri: string}|null
+     * @return array{protocol: string, host: string, port: int, channel: string, modes: string, uri: string}|null
      */
     public static function parseServerUri(string $uri): ?array
     {
@@ -43,13 +43,35 @@ class IrcServices
         $port = isset($parsed['port']) ? (int)$parsed['port'] : ($defaultPorts[$scheme] ?? 443);
 
         $channel = '#lobby';
+        $extractedModes = '';
+
+        $processPrefix = function (string $input): string {
+            $first = mb_substr($input, 0, 1);
+            if (in_array($first, ['#', '&', '@', '£', '$'], true)) {
+                return $input;
+            }
+            return '#' . $input;
+        };
+
         if (!empty($parsed['fragment'])) {
             $chanRaw = $parsed['fragment'];
-            $channel = str_starts_with($chanRaw, '#') ? $chanRaw : '#' . $chanRaw;
+            $plusPos = strpos($chanRaw, '+');
+            if ($plusPos !== false) {
+                $extractedModes = substr($chanRaw, $plusPos + 1);
+                $chanRaw = substr($chanRaw, 0, $plusPos);
+            }
+            if ($chanRaw !== '') {
+                $channel = $processPrefix($chanRaw);
+            }
         } elseif (!empty($parsed['path']) && $parsed['path'] !== '/') {
             $pathClean = ltrim($parsed['path'], '/');
+            $plusPos = strpos($pathClean, '+');
+            if ($plusPos !== false) {
+                $extractedModes = substr($pathClean, $plusPos + 1);
+                $pathClean = substr($pathClean, 0, $plusPos);
+            }
             if ($pathClean !== '') {
-                $channel = str_starts_with($pathClean, '#') ? $pathClean : '#' . $pathClean;
+                $channel = $processPrefix($pathClean);
             }
         }
 
@@ -60,6 +82,7 @@ class IrcServices
             'host'     => $host,
             'port'     => $port,
             'channel'  => $channel,
+            'modes'    => $extractedModes,
             'uri'      => $uri
         ];
     }
@@ -129,6 +152,34 @@ class IrcServices
                     'response' => 'SERVERSERV: Invalid URI format. Supported protocols are https://, ivc://, and irc:// (e.g. https://server.com/#channel)',
                     'channel' => $channel
                 ];
+            }
+
+            $targetObj = $parsed['channel'];
+            $reqModes = $parsed['modes'] ?? '';
+
+            if ($reqModes !== '') {
+                $prefix = mb_substr($targetObj, 0, 1);
+
+                // If the user is trying to join a channel (# or &) with specified modes, verify permissions.
+                if (($prefix === '#' || $prefix === '&') && str_contains($reqModes, 'o')) {
+                    if (!ChanServ::isRegistered($targetObj)) {
+                        return [
+                            'is_service_command' => true,
+                            'service' => 'SERVERSERV',
+                            'response' => "SERVERSERV: Permission denied. Channel {$targetObj} is not registered.",
+                            'channel' => $channel
+                        ];
+                    }
+
+                    if (!ChanServ::isOp($targetObj, $senderNick)) {
+                        return [
+                            'is_service_command' => true,
+                            'service' => 'SERVERSERV',
+                            'response' => "SERVERSERV: Permission denied. You must be an OP on {$targetObj} to connect with +{$reqModes} modes.",
+                            'channel' => $channel
+                        ];
+                    }
+                }
             }
 
             return [
@@ -385,6 +436,91 @@ class IrcServices
             ];
         }
 
+        if ($first === '/join') {
+            $target = $parts[1] ?? '';
+            if (empty($target)) {
+                return [
+                    'is_service_command' => true,
+                    'service' => 'SERVERSERV',
+                    'response' => 'Usage: /join <#channel|target>',
+                    'channel' => $channel
+                ];
+            }
+
+            $parsedTarget = ChanServ::parseTargetAndModes($target);
+            $targetChan = ChanServ::normalizeChannelName($parsedTarget['base_target']);
+            $modeInfoStr = $parsedTarget['modes'] !== '' ? " with modes ({$parsedTarget['modes']})" : '';
+
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "Joined channel {$targetChan}{$modeInfoStr}.",
+                'channel' => $targetChan
+            ];
+        }
+
+        if ($first === '/part' || $first === '/leave') {
+            $target = $parts[1] ?? $channel;
+            $targetChan = ChanServ::normalizeChannelName($target);
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "Left channel {$targetChan}.",
+                'channel' => $targetChan
+            ];
+        }
+
+        if ($first === '/mode' || $first === '/modes') {
+            $target = $parts[1] ?? $channel;
+            $modeStr = $parts[2] ?? '';
+
+            $parsed = ChanServ::parseTargetAndModes($target);
+            $targetChan = ChanServ::normalizeChannelName($parsed['base_target']);
+
+            if (empty($modeStr) && $parsed['modes'] !== '') {
+                $modeStr = $parsed['modes'];
+            }
+
+            if (empty($modeStr)) {
+                $info = ChanServ::getInfo($targetChan);
+                $resp = $info['success'] ? $info['message'] : "Modes for {$targetChan}: none set.";
+            } else {
+                $res = ChanServ::setModes($targetChan, $modeStr, $senderNick);
+                $resp = $res['message'];
+            }
+
+            return [
+                'is_service_command' => true,
+                'service' => ChanServ::SERVICE_NAME,
+                'response' => $resp,
+                'channel' => $targetChan
+            ];
+        }
+
+        if ($first === '/raw') {
+            $rawPayload = trim(substr($text, strlen($parts[0])));
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "[RAW OUTPUT] " . ($rawPayload !== '' ? $rawPayload : "Raw mode active for {$channel}"),
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/delta' || $first === '/deltamodes') {
+            $target = $parts[1] ?? $channel;
+            $parsed = ChanServ::parseTargetAndModes($target);
+            $targetChan = ChanServ::normalizeChannelName($parsed['base_target']);
+            $res = ChanServ::setModes($targetChan, '+Δmodes', $senderNick);
+
+            return [
+                'is_service_command' => true,
+                'service' => ChanServ::SERVICE_NAME,
+                'response' => "Δmodes active for {$targetChan}: {$res['modes']}",
+                'channel' => $targetChan
+            ];
+        }
+
         if ($first === '/op') {
             $target = $parts[1] ?? '';
             $chan = (!empty($parts[2]) ? $parts[2] : $channel);
@@ -520,6 +656,11 @@ class IrcServices
                        "• /msg PAYSERV SUBSCRIBE <user|channel|server> [target] — Subscribe level from chat\n" .
                        "• /connect <URI> — Connect to server via URI (supports https://, ivc://, irc://)\n" .
                        "• /disconnect [server|URI] — Disconnect from active or specified server\n" .
+                       "• /join <#channel|target> — Join channel or target object\n" .
+                       "• /part [channel] / /leave — Leave current or specified channel\n" .
+                       "• /mode [target] [flags] — View/set modes (+n, +N, +S, +s, +k, +v, +o, +a, +m, +t, -t, +raw, +Δmodes)\n" .
+                       "• /delta [target] — Toggle/enable Δmodes configuration for target\n" .
+                       "• /raw [payload] — Toggle or send raw protocol data\n" .
                        "• /msg NAMESERV REGISTER <pass> [email] — Register your nickname\n" .
                        "• /msg NAMESERV IDENTIFY <pass> — Identify with your password\n" .
                        "• /msg NAMESERV SUBSCRIBE [tier] — Subscribe nickname to User Pro\n" .

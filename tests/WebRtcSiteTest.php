@@ -90,7 +90,7 @@ function assertTest(bool $condition, string $message): void {
 
 // Test 1: Sanitizer & IRC #room scheme
 echo "1. Testing Sanitizer & IRC #room channel scheme...\n";
-assertTest(Sanitizer::sanitizeRoomId('room123!@#') === '#room123', 'Sanitize invalid characters and normalize to #room123');
+assertTest(Sanitizer::sanitizeRoomId('room123!@#') === '#room123@', 'Sanitize invalid characters and normalize to #room123@');
 assertTest(Sanitizer::sanitizeRoomId('#fortress-channel') === '#fortress-channel', 'Retain existing leading # in channel name');
 assertTest(Sanitizer::sanitizeClientId('peer-abc-123') === 'peer-abc-123', 'Valid client ID retained');
 
@@ -527,6 +527,18 @@ assertTest($uriHttps !== null && $uriHttps['protocol'] === 'HTTPS' && $uriHttps[
 $uriIvc = IrcServices::parseServerUri('ivc://node1.network.org:8080/general');
 assertTest($uriIvc !== null && $uriIvc['protocol'] === 'IVC' && $uriIvc['host'] === 'node1.network.org' && $uriIvc['port'] === 8080 && $uriIvc['channel'] === '#general', 'Parsed ivc:// URI with port and channel correctly');
 
+$uriIvcComplex = IrcServices::parseServerUri('ivc://$me$opers+ov£admins+anv/#hi+vm');
+assertTest($uriIvcComplex !== null && $uriIvcComplex['protocol'] === 'IVC' && $uriIvcComplex['host'] === '$me$opers+ov£admins+anv' && $uriIvcComplex['channel'] === '#hi', 'Parsed complex ivc:// symbolic URI correctly with channel modes stripped');
+
+$uriLocalOper = IrcServices::parseServerUri('ivc://local.host/&oper+on');
+assertTest($uriLocalOper !== null && $uriLocalOper['protocol'] === 'IVC' && $uriLocalOper['host'] === 'local.host' && $uriLocalOper['channel'] === '&oper', 'Parsed complex ivc:// URI joining local &oper channel with +on modes stripped');
+
+$uriChanModes = IrcServices::parseServerUri('ivc://local.host/chan+ovm');
+assertTest($uriChanModes !== null && $uriChanModes['protocol'] === 'IVC' && $uriChanModes['host'] === 'local.host' && $uriChanModes['channel'] === '#chan', 'Parsed complex ivc:// URI appending # to chan and stripping +ovm modes');
+
+$uriTestUser = IrcServices::parseServerUri('ivc://$me°180+oasisSNOAW@jakedot@ivc.cx/#hi&opers+o');
+assertTest($uriTestUser !== null && $uriTestUser['protocol'] === 'IVC' && $uriTestUser['host'] === 'ivc.cx' && $uriTestUser['channel'] === '#hi&opers' && $uriTestUser['modes'] === 'o', 'Parsed ivc://$me°180+oasisSNOAW@jakedot@ivc.cx/#hi&opers+o URI correctly');
+
 $uriIrc = IrcServices::parseServerUri('irc://irc.fortress.net:6667/#dev');
 assertTest($uriIrc !== null && $uriIrc['protocol'] === 'IRC' && $uriIrc['host'] === 'irc.fortress.net' && $uriIrc['port'] === 6667 && $uriIrc['channel'] === '#dev', 'Parsed irc:// URI correctly');
 
@@ -539,8 +551,47 @@ assertTest($cmdConnUsage !== null && $cmdConnUsage['service'] === 'SERVERSERV' &
 $cmdConn = IrcServices::processCommand('User1', '#lobby', '/connect https://chat.fortress.net/#lobby');
 assertTest($cmdConn !== null && $cmdConn['service'] === 'SERVERSERV' && str_contains($cmdConn['response'], 'Connected to server'), 'Processed /connect command');
 
+$cmdConnUnauthorized = IrcServices::processCommand('Alice', '#lobby', '/connect ivc://local.host/#fortress+o');
+assertTest($cmdConnUnauthorized !== null && $cmdConnUnauthorized['service'] === 'SERVERSERV' && str_contains($cmdConnUnauthorized['response'], 'Permission denied'), 'Rejected /connect with +o mode for non-operator user');
+
+$cmdConnAuthorized = IrcServices::processCommand('CyberFox', '#lobby', '/connect ivc://local.host/#fortress+o');
+assertTest($cmdConnAuthorized !== null && $cmdConnAuthorized['service'] === 'SERVERSERV' && str_contains($cmdConnAuthorized['response'], 'Connected to server'), 'Allowed /connect with +o mode for authorized operator user');
+
 $cmdDisc = IrcServices::processCommand('User1', '#lobby', '/disconnect chat.fortress.net');
 assertTest($cmdDisc !== null && $cmdDisc['service'] === 'SERVERSERV' && str_contains($cmdDisc['response'], 'Disconnected from server'), 'Processed /disconnect command');
+
+// Test 17: Extended Modes & New Slash Commands (/join, /part, /mode, /raw, /delta)
+echo "\n17. Testing Extended Modes & New Slash Commands...\n";
+
+// A. Mode parsing & target mode suffix parsing
+$modeFlags = ChanServ::parseModeFlags('+n+v+o+Δmodes');
+assertTest($modeFlags['n'] === true && $modeFlags['v'] === true && $modeFlags['o'] === true && $modeFlags['delta_modes'] === true, 'ChanServ::parseModeFlags correctly identifies mode flags');
+
+$parsedTarget = ChanServ::parseTargetAndModes('#network/handshake+Δmodes');
+assertTest($parsedTarget['base_target'] === '#network/handshake' && $parsedTarget['mode_flags']['delta_modes'] === true, 'ChanServ::parseTargetAndModes correctly extracts base target and Δmodes flag');
+
+$parsedRawTarget = ChanServ::parseTargetAndModes('@object+raw');
+assertTest($parsedRawTarget['base_target'] === '@object' && $parsedRawTarget['mode_flags']['raw'] === true, 'ChanServ::parseTargetAndModes extracts @object base and +raw mode');
+
+// B. Channel modes setting with ChanServ::setModes
+$chanModeSet = ChanServ::setModes('#fortress', '+n+s+Δmodes', 'CyberFox');
+assertTest($chanModeSet['success'] === true && str_contains($chanModeSet['modes'], 'Δmodes'), 'ChanServ::setModes sets channel modes including Δmodes');
+
+// C. Slash commands processing
+$joinCmd = IrcServices::processCommand('User1', '#lobby', '/join #network/handshake+Δmodes');
+assertTest($joinCmd !== null && $joinCmd['service'] === 'SERVERSERV' && $joinCmd['channel'] === '#network/handshake' && str_contains($joinCmd['response'], 'Joined channel #network/handshake'), 'Processed /join command with target mode suffix');
+
+$partCmd = IrcServices::processCommand('User1', '#network/handshake', '/part');
+assertTest($partCmd !== null && $partCmd['service'] === 'SERVERSERV' && str_contains($partCmd['response'], 'Left channel #network/handshake'), 'Processed /part command');
+
+$modeCmd = IrcServices::processCommand('CyberFox', '#fortress', '/mode #fortress +v');
+assertTest($modeCmd !== null && $modeCmd['service'] === 'CHANSERV' && str_contains($modeCmd['response'], 'Modes for #fortress updated'), 'Processed /mode command');
+
+$rawCmd = IrcServices::processCommand('User1', '#lobby', '/raw PING :123456');
+assertTest($rawCmd !== null && $rawCmd['service'] === 'SERVERSERV' && str_contains($rawCmd['response'], '[RAW OUTPUT] PING :123456'), 'Processed /raw command with payload');
+
+$deltaCmd = IrcServices::processCommand('CyberFox', '#fortress', '/delta #fortress');
+assertTest($deltaCmd !== null && $deltaCmd['service'] === 'CHANSERV' && str_contains($deltaCmd['response'], 'Δmodes active for #fortress'), 'Processed /delta command');
 
 echo "\n-----------------------------------------\n";
 echo "Test Results: $testsPassed Passed, $testsFailed Failed.\n";

@@ -683,6 +683,16 @@ assertTest($chanSubTarget['base_target'] === 'object' && isset($chanSubTarget['p
 $servSubUri = IrcServices::parseServerUri('ivc://$me/object§prop=value+m');
 assertTest($servSubUri !== null && $servSubUri['channel'] === '#object' && isset($servSubUri['props']['prop']), 'IrcServices::parseServerUri parsed subobjects on ivc:// URI');
 
+// F. ∆trace subobject detailed tracing data stream for parent object
+$traceGen = IrcServices::generateTraceStream('serverNode', ['status' => 'connected', 'peer_count' => 5]);
+assertTest($traceGen['parent_object'] === 'serverNode' && str_starts_with($traceGen['trace_id'], 'tr-') && $traceGen['data_stream']['peer_count'] === 5, 'IrcServices::generateTraceStream created trace stream structure');
+
+$attachedTraceUri = IrcServices::attachTraceSubobject('serverNode', 'tr-998877:active');
+assertTest($attachedTraceUri === 'ivc://$me/serverNode∆trace=tr-998877:active', 'IrcServices::attachTraceSubobject attached ∆trace subobject to parent URI');
+
+$extractedTraceData = IrcServices::getTraceDataStream($attachedTraceUri);
+assertTest($extractedTraceData !== null && $extractedTraceData['parent_object'] === 'serverNode' && $extractedTraceData['subobject'] === 'trace' && $extractedTraceData['raw_value'] === 'tr-998877:active', 'IrcServices::getTraceDataStream extracted ∆trace subobject from parent object URI');
+
 echo "\n-----------------------------------------\n";
 echo "Test Results: $testsPassed Passed, $testsFailed Failed.\n";
 echo "-----------------------------------------\n\n";

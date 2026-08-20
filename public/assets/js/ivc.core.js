@@ -257,6 +257,100 @@ function applySubobjectModes(subobj, modeChange) {
     return subobj;
 }
 
+function generateTraceStream(parentObject, extraData = {}) {
+    const timestamp = Date.now() / 1000;
+    const traceId = 'tr-' + Math.random().toString(36).substring(2, 14);
+
+    return {
+        trace_id: traceId,
+        parent_object: parentObject,
+        timestamp,
+        formatted_time: new Date(timestamp * 1000).toISOString(),
+        status: extraData.status || 'active',
+        data_stream: Object.assign({
+            event: 'trace_init',
+            parent: parentObject,
+            origin: '$me',
+            state: 'monitored'
+        }, extraData)
+    };
+}
+
+function attachTraceSubobject(objData, tracePayload = null, host = '$me') {
+    if (tracePayload === null) {
+        const parentName = typeof objData === 'string' ? objData : (objData.object || 'object');
+        const traceData = generateTraceStream(parentName);
+        tracePayload = `${traceData.trace_id}:active`;
+    } else if (typeof tracePayload === 'object' && tracePayload !== null) {
+        tracePayload = JSON.stringify(tracePayload);
+    }
+
+    let targetObj = {};
+    if (typeof objData === 'string') {
+        const parsed = parseObjectFromUri(objData);
+        targetObj = parsed.asObject || {};
+    } else if (typeof objData === 'object' && objData !== null) {
+        targetObj = Object.assign({}, objData);
+    } else {
+        targetObj = { object: 'object' };
+    }
+
+    targetObj['∆trace'] = String(tracePayload);
+    return formatObjectUri(targetObj, host);
+}
+
+function getTraceDataStream(objUriOrData) {
+    let events = {};
+    let parentObject = 'object';
+
+    if (typeof objUriOrData === 'string') {
+        const parsed = parseObjectFromUri(objUriOrData);
+        events = parsed.events || {};
+        parentObject = parsed.object || 'object';
+    } else if (typeof objUriOrData === 'object' && objUriOrData !== null) {
+        if (objUriOrData.events) {
+            events = objUriOrData.events;
+            parentObject = objUriOrData.object || 'object';
+        } else {
+            const parsed = parseObjectFromUri(formatObjectUri(objUriOrData));
+            events = parsed.events || {};
+            parentObject = parsed.object || (objUriOrData.object || 'object');
+        }
+    } else {
+        return null;
+    }
+
+    if (!events.trace) {
+        return null;
+    }
+
+    const traceItem = events.trace;
+    const rawTraceVal = traceItem.value || '';
+
+    let decodedPayload = null;
+    if (rawTraceVal.startsWith('{') || rawTraceVal.startsWith('[')) {
+        try {
+            decodedPayload = JSON.parse(rawTraceVal);
+        } catch (e) {
+            decodedPayload = null;
+        }
+    }
+
+    return {
+        parent_object: parentObject,
+        symbol: '∆',
+        subobject: 'trace',
+        raw_value: rawTraceVal,
+        modes: traceItem.modes || '',
+        mode_flags: traceItem.modeFlags || {},
+        stream_details: decodedPayload || {
+            trace_payload: rawTraceVal,
+            parent: parentObject,
+            active: true
+        }
+    };
+}
+
 function parseServerUri(uri) {
     if (!uri) return null;
     uri = uri.trim();

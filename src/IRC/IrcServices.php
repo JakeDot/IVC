@@ -15,7 +15,7 @@ class IrcServices
      * Parse server URI supporting https://, ivc://, and irc:// protocols.
      *
      * @param string $uri
-     * @return array{protocol: string, host: string, port: int, channel: string, uri: string}|null
+     * @return array{protocol: string, host: string, port: int, channel: string, modes: string, uri: string}|null
      */
     public static function parseServerUri(string $uri): ?array
     {
@@ -43,13 +43,35 @@ class IrcServices
         $port = isset($parsed['port']) ? (int)$parsed['port'] : ($defaultPorts[$scheme] ?? 443);
 
         $channel = '#lobby';
+        $extractedModes = '';
+
+        $processPrefix = function (string $input): string {
+            $first = mb_substr($input, 0, 1);
+            if (in_array($first, ['#', '&', '@', '£', '$'], true)) {
+                return $input;
+            }
+            return '#' . $input;
+        };
+
         if (!empty($parsed['fragment'])) {
             $chanRaw = $parsed['fragment'];
-            $channel = str_starts_with($chanRaw, '#') ? $chanRaw : '#' . $chanRaw;
+            $plusPos = strpos($chanRaw, '+');
+            if ($plusPos !== false) {
+                $extractedModes = substr($chanRaw, $plusPos + 1);
+                $chanRaw = substr($chanRaw, 0, $plusPos);
+            }
+            if ($chanRaw !== '') {
+                $channel = $processPrefix($chanRaw);
+            }
         } elseif (!empty($parsed['path']) && $parsed['path'] !== '/') {
             $pathClean = ltrim($parsed['path'], '/');
+            $plusPos = strpos($pathClean, '+');
+            if ($plusPos !== false) {
+                $extractedModes = substr($pathClean, $plusPos + 1);
+                $pathClean = substr($pathClean, 0, $plusPos);
+            }
             if ($pathClean !== '') {
-                $channel = str_starts_with($pathClean, '#') ? $pathClean : '#' . $pathClean;
+                $channel = $processPrefix($pathClean);
             }
         }
 
@@ -60,6 +82,7 @@ class IrcServices
             'host'     => $host,
             'port'     => $port,
             'channel'  => $channel,
+            'modes'    => $extractedModes,
             'uri'      => $uri
         ];
     }
@@ -129,6 +152,34 @@ class IrcServices
                     'response' => 'SERVERSERV: Invalid URI format. Supported protocols are https://, ivc://, and irc:// (e.g. https://server.com/#channel)',
                     'channel' => $channel
                 ];
+            }
+
+            $targetObj = $parsed['channel'];
+            $reqModes = $parsed['modes'] ?? '';
+
+            if ($reqModes !== '') {
+                $prefix = mb_substr($targetObj, 0, 1);
+
+                // If the user is trying to join a channel (# or &) with specified modes, verify permissions.
+                if (($prefix === '#' || $prefix === '&') && str_contains($reqModes, 'o')) {
+                    if (!ChanServ::isRegistered($targetObj)) {
+                        return [
+                            'is_service_command' => true,
+                            'service' => 'SERVERSERV',
+                            'response' => "SERVERSERV: Permission denied. Channel {$targetObj} is not registered.",
+                            'channel' => $channel
+                        ];
+                    }
+
+                    if (!ChanServ::isOp($targetObj, $senderNick)) {
+                        return [
+                            'is_service_command' => true,
+                            'service' => 'SERVERSERV',
+                            'response' => "SERVERSERV: Permission denied. You must be an OP on {$targetObj} to connect with +{$reqModes} modes.",
+                            'channel' => $channel
+                        ];
+                    }
+                }
             }
 
             return [

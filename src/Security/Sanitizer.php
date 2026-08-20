@@ -19,7 +19,7 @@ final class Sanitizer
             return '#room-' . bin2hex(random_bytes(4));
         }
 
-        $clean = preg_replace('/[^a-zA-Z0-9\-_\/&@£$§=]/u', '', $trimmed);
+        $clean = preg_replace('/[^a-zA-Z0-9\-_\/]/', '', $trimmed);
         if ($clean === null) {
             return '#room-' . bin2hex(random_bytes(4));
         }
@@ -28,18 +28,12 @@ final class Sanitizer
         $clean = preg_replace('/\/+/', '/', $clean);
         $clean = trim((string)$clean, '/');
 
-        if (mb_strlen($clean) < 2) {
+        if (strlen($clean) < 2) {
             return '#room-' . bin2hex(random_bytes(4));
         }
 
-        $clean = mb_substr($clean, 0, 63);
-
-        $firstChar = mb_substr($clean, 0, 1);
-        if (in_array($firstChar, ['&', '@', '£', '$'], true)) {
-            return $firstChar . ltrim(mb_substr($clean, 1), '#&@£$');
-        }
-
-        return '#' . ltrim($clean, '#&@£$');
+        $clean = substr($clean, 0, 63);
+        return '#' . ltrim($clean, '#&');
     }
 
     /**
@@ -78,7 +72,7 @@ final class Sanitizer
         }
 
         $type = filter_var($data['type'], FILTER_SANITIZE_SPECIAL_CHARS);
-        $allowedTypes = ['join', 'leave', 'offer', 'answer', 'ice-candidate', 'ping', 'chat', 'command', 'file-shared', 'file-request', 'file-response'];
+        $allowedTypes = ['join', 'leave', 'offer', 'answer', 'ice-candidate', 'ping', 'chat', 'command', 'dcc_signal', 'dcc'];
 
         if (!in_array($type, $allowedTypes, true)) {
             return null;

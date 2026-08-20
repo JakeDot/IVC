@@ -96,10 +96,7 @@ class IrcServices
             $fragment = $m[7] ?? '';
 
             $effectiveHost = $rawHost !== '' ? strtolower($rawHost) : ($query !== '' ? 'localhost' : 'localhost');
-            if (str_contains($effectiveHost, '@')) {
-                $atParts = explode('@', $effectiveHost);
-                $effectiveHost = strtolower(array_pop($atParts));
-            } elseif (!empty($query) && str_contains($query, '@')) {
+            if (!empty($query) && str_contains($query, '@')) {
                 $atParts = explode('@', $query);
                 $effectiveHost = strtolower(array_pop($atParts));
             }

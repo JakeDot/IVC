@@ -114,20 +114,26 @@ class ChanServ
             $chanModel = ChannelRepository::findByChannelName($channel);
             if ($chanModel) {
                 $currentModes = $chanModel->getModes();
+                $hasDeltaModes = str_contains($modes, 'Δmodes') || str_contains($modes, '∆modes') || str_contains($modes, 'deltamodes');
+                $cleanModes = str_replace(['Δmodes', '∆modes', 'deltamodes'], '', $modes);
                 $add = true;
-                for ($i = 0; $i < strlen($modes); $i++) {
-                    $char = $modes[$i];
+                $mbChars = preg_split('//u', $cleanModes, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+                for ($i = 0; $i < count($mbChars); $i++) {
+                    $char = $mbChars[$i];
                     if ($char === '+') {
                         $add = true;
                     } elseif ($char === '-') {
                         $add = false;
-                    } elseif (preg_match('/[a-zA-Z]/', $char)) {
+                    } else {
                         if ($add && !str_contains($currentModes, $char)) {
                             $currentModes .= $char;
                         } elseif (!$add && str_contains($currentModes, $char)) {
                             $currentModes = str_replace($char, '', $currentModes);
                         }
                     }
+                }
+                if ($hasDeltaModes && !str_contains($currentModes, 'Δmodes')) {
+                    $currentModes .= 'Δmodes';
                 }
                 // Ensure there is a + at the start if not empty, otherwise default to +t
                 if (!empty($currentModes) && !str_starts_with($currentModes, '+')) {

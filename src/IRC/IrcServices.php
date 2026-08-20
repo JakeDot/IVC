@@ -17,6 +17,46 @@ class IrcServices
      * @param string $input
      * @return array{base_target: string, subobjects: array<int, array{symbol: string, type: string, name: string, value: string, modes: string, mode_flags: array}>, props: array<string, array{value: string, modes: string, mode_flags: array}>, events: array<string, array{value: string, modes: string, mode_flags: array}>}
      */
+    /**
+     * Parse query string into parameters array and search keys list.
+     *
+     * @param string $queryStr
+     * @param array $queryParams
+     * @param array $searchKeys
+     * @return void
+     */
+    public static function parseQueryString(string $queryStr, array &$queryParams, array &$searchKeys): void
+    {
+        $queryStr = trim($queryStr);
+        if ($queryStr === '') {
+            return;
+        }
+
+        $pairs = explode('&', $queryStr);
+        foreach ($pairs as $pair) {
+            if ($pair === '') {
+                continue;
+            }
+            $kv = explode('=', $pair, 2);
+            $key = urldecode(trim($kv[0]));
+            $val = isset($kv[1]) ? urldecode(trim($kv[1])) : 'true';
+
+            if (!isset($queryParams[$key])) {
+                $queryParams[$key] = $val;
+            } else {
+                if (!is_array($queryParams[$key])) {
+                    $queryParams[$key] = [$queryParams[$key], $val];
+                } else {
+                    $queryParams[$key][] = $val;
+                }
+            }
+
+            if ($key === 'search') {
+                $searchKeys[] = $val;
+            }
+        }
+    }
+
     public static function parseSubobjects(string $input): array
     {
         $input = trim($input);
@@ -25,8 +65,22 @@ class IrcServices
                 'base_target' => '',
                 'subobjects' => [],
                 'props' => [],
-                'events' => []
+                'events' => [],
+                'query' => '',
+                'query_params' => [],
+                'search' => []
             ];
+        }
+
+        $queryStr = '';
+        $queryParams = [];
+        $searchKeys = [];
+
+        $qPos = strpos($input, '?');
+        if ($qPos !== false) {
+            $queryStr = substr($input, $qPos + 1);
+            $input = substr($input, 0, $qPos);
+            self::parseQueryString($queryStr, $queryParams, $searchKeys);
         }
 
         $posSec = mb_strpos($input, '§');
@@ -46,7 +100,10 @@ class IrcServices
                 'base_target' => $input,
                 'subobjects' => [],
                 'props' => [],
-                'events' => []
+                'events' => [],
+                'query' => $queryStr,
+                'query_params' => $queryParams,
+                'search' => $searchKeys
             ];
         }
 
@@ -118,7 +175,10 @@ class IrcServices
             'base_target' => $baseTarget,
             'subobjects' => $subobjects,
             'props' => $props,
-            'events' => $events
+            'events' => $events,
+            'query' => $queryStr,
+            'query_params' => $queryParams,
+            'search' => $searchKeys
         ];
     }
 
@@ -172,7 +232,8 @@ class IrcServices
         }
 
         $subStr = '';
-        $reservedKeys = ['object', 'name', 'host', 'protocol', 'scheme', 'subobjects', 'props', 'events', 'uri', 'asObject'];
+        $queryPart = '';
+        $reservedKeys = ['object', 'name', 'host', 'protocol', 'scheme', 'subobjects', 'props', 'events', 'uri', 'asObject', 'query', 'query_params', 'search'];
 
         foreach ($props as $k => $v) {
             if (in_array((string)$k, $reservedKeys, true)) {
@@ -203,7 +264,29 @@ class IrcServices
             $subStr .= "{$symbol}{$keyName}={$valStr}{$modeStr}";
         }
 
-        return "ivc://{$host}/{$baseObject}{$subStr}";
+        if (!empty($props['search']) && is_array($props['search'])) {
+            $qPairs = [];
+            foreach ($props['search'] as $sKey) {
+                $qPairs[] = 'search=' . urlencode((string)$sKey);
+            }
+            $queryPart = '?' . implode('&', $qPairs);
+        } elseif (!empty($props['query_params']) && is_array($props['query_params'])) {
+            $qPairs = [];
+            foreach ($props['query_params'] as $qk => $qv) {
+                if (is_array($qv)) {
+                    foreach ($qv as $subV) {
+                        $qPairs[] = urlencode((string)$qk) . '=' . urlencode((string)$subV);
+                    }
+                } else {
+                    $qPairs[] = urlencode((string)$qk) . '=' . urlencode((string)$qv);
+                }
+            }
+            $queryPart = '?' . implode('&', $qPairs);
+        } elseif (!empty($props['query']) && is_string($props['query'])) {
+            $queryPart = '?' . ltrim($props['query'], '?');
+        }
+
+        return "ivc://{$host}/{$baseObject}{$subStr}{$queryPart}";
     }
 
     /**
@@ -225,6 +308,12 @@ class IrcServices
             foreach ($subParsed['events'] as $k => $item) {
                 $asObject["∆{$k}"] = $item['value'];
             }
+            if (!empty($subParsed['search'])) {
+                $asObject['search'] = $subParsed['search'];
+            }
+            if (!empty($subParsed['query_params'])) {
+                $asObject['query_params'] = $subParsed['query_params'];
+            }
             return [
                 'scheme' => 'ivc',
                 'host' => '$me',
@@ -233,6 +322,9 @@ class IrcServices
                 'subobjects' => $subParsed['subobjects'],
                 'props' => $subParsed['props'],
                 'events' => $subParsed['events'],
+                'query' => $subParsed['query'] ?? '',
+                'query_params' => $subParsed['query_params'] ?? [],
+                'search' => $subParsed['search'] ?? [],
                 'asObject' => $asObject
             ];
         }
@@ -246,6 +338,12 @@ class IrcServices
         foreach ($parsedServer['events'] as $k => $item) {
             $asObject["∆{$k}"] = $item['value'];
         }
+        if (!empty($parsedServer['search'])) {
+            $asObject['search'] = $parsedServer['search'];
+        }
+        if (!empty($parsedServer['query_params'])) {
+            $asObject['query_params'] = $parsedServer['query_params'];
+        }
 
         return [
             'scheme' => strtolower($parsedServer['protocol']),
@@ -255,6 +353,9 @@ class IrcServices
             'subobjects' => $parsedServer['subobjects'],
             'props' => $parsedServer['props'],
             'events' => $parsedServer['events'],
+            'query' => $parsedServer['query'] ?? '',
+            'query_params' => $parsedServer['query_params'] ?? [],
+            'search' => $parsedServer['search'] ?? [],
             'asObject' => $asObject
         ];
     }
@@ -426,15 +527,8 @@ class IrcServices
         $scheme = strtolower($parsed['scheme'] ?? 'https');
         $hostRaw = $parsed['host'];
 
-        // Strip +modes from the host component
-        $hostModes = '';
-        if (str_contains($hostRaw, '+')) {
-            $parts = explode('+', $hostRaw);
-            $hostRaw = $parts[0];
-            array_shift($parts); // Remove the base host
-            $hostModes = implode('+', $parts); // Keep remaining string if it had multiple +'s
-        }
         $host = strtolower($hostRaw);
+        $hostModes = '';
 
         $defaultPorts = [
             'https' => 443,
@@ -483,17 +577,28 @@ class IrcServices
         // Combine host modes and channel modes
         $allModes = trim($hostModes . $extractedModes, '+');
 
+        $queryStr = $subParsed['query'] ?? '';
+        $queryParams = $subParsed['query_params'] ?? [];
+        $searchKeys = $subParsed['search'] ?? [];
+
+        if (empty($queryStr) && !empty($parsed['query'])) {
+            $queryStr = $parsed['query'];
+            self::parseQueryString($queryStr, $queryParams, $searchKeys);
+        }
+
         return [
             'protocol' => strtoupper($scheme),
             'host'     => $host,
             'port'     => $port,
             'channel'  => $channel,
             'modes'    => $allModes,
-            'modes'    => $extractedModes,
             'uri'      => $uri,
             'subobjects' => $subParsed['subobjects'],
             'props'    => $subParsed['props'],
-            'events'   => $subParsed['events']
+            'events'   => $subParsed['events'],
+            'query'    => $queryStr,
+            'query_params' => $queryParams,
+            'search'   => $searchKeys
         ];
     }
 
@@ -609,6 +714,70 @@ class IrcServices
                 'response' => "SERVERSERV: Connected to server '{$parsed['host']}:{$parsed['port']}' via {$parsed['protocol']} (Channel: {$parsed['channel']}).",
                 'channel' => $parsed['channel'],
                 'appstatus' => $appModes
+            ];
+        }
+
+        if ($first === '/join') {
+            $target = $parts[1] ?? '';
+            if (empty($target)) {
+                return [
+                    'is_service_command' => true,
+                    'service' => 'SERVERSERV',
+                    'response' => 'SERVERSERV: Usage: /join <#channel>',
+                    'channel' => $channel
+                ];
+            }
+            $parsedTarget = ChanServ::parseTargetAndModes($target);
+            $cleanChan = \Fortress\Security\Sanitizer::sanitizeRoomId($parsedTarget['base_target']);
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "SERVERSERV: Joined channel {$cleanChan}.",
+                'channel' => $cleanChan,
+                'appstatus' => $appModes
+            ];
+        }
+
+        if ($first === '/part') {
+            $target = $parts[1] ?? $channel;
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "SERVERSERV: Left channel {$target}.",
+                'channel' => $channel,
+                'appstatus' => $appModes
+            ];
+        }
+
+        if ($first === '/mode') {
+            $target = $parts[1] ?? $channel;
+            $modes = $parts[2] ?? '';
+            $res = ChanServ::setModes($target, $modes, $senderNick);
+            return [
+                'is_service_command' => true,
+                'service' => ChanServ::SERVICE_NAME,
+                'response' => $res['message'],
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/raw') {
+            $rawPayload = trim(substr($text, strlen($parts[0])));
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "[RAW OUTPUT] {$rawPayload}",
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/delta') {
+            $target = $parts[1] ?? $channel;
+            return [
+                'is_service_command' => true,
+                'service' => ChanServ::SERVICE_NAME,
+                'response' => "CHANSERV: Δmodes active for {$target}.",
+                'channel' => $channel
             ];
         }
 

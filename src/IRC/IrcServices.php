@@ -297,6 +297,115 @@ class IrcServices
     }
 
     /**
+     * Generate a detailed tracing data stream for a parent object.
+     *
+     * @param string $parentObject
+     * @param array $extraData
+     * @return array
+     */
+    public static function generateTraceStream(string $parentObject, array $extraData = []): array
+    {
+        $timestamp = microtime(true);
+        $traceId = 'tr-' . substr(md5($parentObject . (string)$timestamp . bin2hex(random_bytes(4))), 0, 12);
+
+        return [
+            'trace_id' => $traceId,
+            'parent_object' => $parentObject,
+            'timestamp' => $timestamp,
+            'formatted_time' => date('Y-m-d H:i:s', (int)$timestamp),
+            'status' => $extraData['status'] ?? 'active',
+            'data_stream' => array_merge([
+                'event' => 'trace_init',
+                'parent' => $parentObject,
+                'origin' => '$me',
+                'state' => 'monitored'
+            ], $extraData)
+        ];
+    }
+
+    /**
+     * Attach a ∆trace subobject to a parent object or URI.
+     *
+     * @param mixed $objData
+     * @param mixed $tracePayload
+     * @param string $host
+     * @return string
+     */
+    public static function attachTraceSubobject(mixed $objData, mixed $tracePayload = null, string $host = '$me'): string
+    {
+        if ($tracePayload === null) {
+            $parentName = is_string($objData) ? $objData : ($objData['object'] ?? 'object');
+            $traceData = self::generateTraceStream($parentName);
+            $tracePayload = $traceData['trace_id'] . ':active';
+        } elseif (is_array($tracePayload)) {
+            $tracePayload = json_encode($tracePayload);
+        }
+
+        if (is_string($objData)) {
+            $parsed = self::parseObjectFromUri($objData);
+            $objData = $parsed['asObject'];
+        } elseif (!is_array($objData)) {
+            $objData = ['object' => 'object'];
+        }
+
+        $objData['∆trace'] = (string)$tracePayload;
+
+        return self::formatObjectUri($objData, $host);
+    }
+
+    /**
+     * Get detailed tracing data stream for a parent object from URI, object array, or subobjects structure.
+     *
+     * @param mixed $objUriOrData
+     * @return array|null
+     */
+    public static function getTraceDataStream(mixed $objUriOrData): ?array
+    {
+        if (is_string($objUriOrData)) {
+            $parsed = self::parseObjectFromUri($objUriOrData);
+            $events = $parsed['events'] ?? [];
+            $parentObject = $parsed['object'] ?? 'object';
+        } elseif (is_array($objUriOrData)) {
+            if (isset($objUriOrData['events'])) {
+                $events = $objUriOrData['events'];
+                $parentObject = $objUriOrData['object'] ?? 'object';
+            } else {
+                $parsed = self::parseObjectFromUri(self::formatObjectUri($objUriOrData));
+                $events = $parsed['events'] ?? [];
+                $parentObject = $parsed['object'] ?? ($objUriOrData['object'] ?? 'object');
+            }
+        } else {
+            return null;
+        }
+
+        if (!isset($events['trace'])) {
+            return null;
+        }
+
+        $traceItem = $events['trace'];
+        $rawTraceVal = $traceItem['value'] ?? '';
+
+        $decodedPayload = null;
+        if (str_starts_with($rawTraceVal, '{') || str_starts_with($rawTraceVal, '[')) {
+            $decodedPayload = json_decode($rawTraceVal, true);
+        }
+
+        return [
+            'parent_object' => $parentObject,
+            'symbol' => '∆',
+            'subobject' => 'trace',
+            'raw_value' => $rawTraceVal,
+            'modes' => $traceItem['modes'] ?? '',
+            'mode_flags' => $traceItem['mode_flags'] ?? [],
+            'stream_details' => $decodedPayload ?? [
+                'trace_payload' => $rawTraceVal,
+                'parent' => $parentObject,
+                'active' => true
+            ]
+        ];
+    }
+
+    /**
      * Parse server URI supporting https://, ivc://, and irc:// protocols.
      *
      * @param string $uri

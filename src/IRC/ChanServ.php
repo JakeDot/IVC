@@ -139,14 +139,35 @@ class ChanServ
             $chanModel = ChannelRepository::findByChannelName($channel);
             if ($chanModel) {
                 $currentModes = $chanModel->getModes();
+
+                // Check for +Δmodes / +deltamodes / +raw special modes
+                if (str_contains($modes, 'Δmodes') || str_contains($modes, 'deltamodes')) {
+                    if (!str_contains($currentModes, 'Δmodes')) {
+                        $currentModes .= 'Δmodes';
+                    }
+                }
+                if (str_contains($modes, '-Δmodes') || str_contains($modes, '-deltamodes')) {
+                    $currentModes = str_replace('Δmodes', '', $currentModes);
+                }
+
+                if (str_contains($modes, '+raw')) {
+                    if (!str_contains($currentModes, 'raw')) {
+                        $currentModes .= 'raw';
+                    }
+                }
+                if (str_contains($modes, '-raw')) {
+                    $currentModes = str_replace('raw', '', $currentModes);
+                }
+
                 $add = true;
-                for ($i = 0; $i < strlen($modes); $i++) {
-                    $char = $modes[$i];
+                $chars = mb_str_split($modes);
+                for ($i = 0; $i < count($chars); $i++) {
+                    $char = $chars[$i];
                     if ($char === '+') {
                         $add = true;
                     } elseif ($char === '-') {
                         $add = false;
-                    } elseif (preg_match('/[a-zA-Z]/', $char)) {
+                    } elseif (preg_match('/[a-zA-Z]/u', $char)) {
                         if ($add && !str_contains($currentModes, $char)) {
                             $currentModes .= $char;
                         } elseif (!$add && str_contains($currentModes, $char)) {
@@ -154,15 +175,14 @@ class ChanServ
                         }
                     }
                 }
-                // Ensure there is a + at the start if not empty, otherwise default to +t
-                if (!empty($currentModes) && !str_starts_with($currentModes, '+')) {
-                    $currentModes = '+' . $currentModes;
+
+                // Clean up + prefix formatting
+                $cleanModes = str_replace('+', '', $currentModes);
+                if (!empty($cleanModes)) {
+                    $currentModes = '+' . $cleanModes;
+                } else {
+                    $currentModes = '';
                 }
-
-                $currentModes = str_replace('+', '', $currentModes);
-                $currentModes = '+' . $currentModes;
-
-                if ($currentModes === '+') $currentModes = '';
 
                 ChannelRepository::updateModes($channel, $currentModes);
                 $modes = $currentModes;
@@ -170,6 +190,63 @@ class ChanServ
         }
 
         return ['success' => true, 'message' => "CHANSERV: Modes for {$channel} updated to {$modes}.", 'modes' => $modes];
+    }
+
+    /**
+     * Parse mode string into structured mode flags array
+     *
+     * @param string $modeStr
+     * @return array{n: bool, N: bool, S: bool, s: bool, k: bool, v: bool, o: bool, a: bool, m: bool, t: bool, no_t: bool, raw: bool, delta_modes: bool}
+     */
+    public static function parseModeFlags(string $modeStr): array
+    {
+        $flags = [
+            'n' => str_contains($modeStr, 'n'),
+            'N' => str_contains($modeStr, 'N'),
+            'S' => str_contains($modeStr, 'S'),
+            's' => str_contains($modeStr, 's'),
+            'k' => str_contains($modeStr, 'k'),
+            'v' => str_contains($modeStr, 'v'),
+            'o' => str_contains($modeStr, 'o'),
+            'a' => str_contains($modeStr, 'a'),
+            'm' => str_contains($modeStr, 'm'),
+            't' => str_contains($modeStr, 't') && !str_contains($modeStr, '-t'),
+            'no_t' => str_contains($modeStr, '-t'),
+            'raw' => str_contains($modeStr, 'raw'),
+            'delta_modes' => str_contains($modeStr, 'Δmodes') || str_contains($modeStr, 'deltamodes') || str_contains($modeStr, 'Δ'),
+        ];
+
+        return $flags;
+    }
+
+    /**
+     * Parse target and attached mode suffixes (e.g. #channel+Δmodes, @object+bookmarks, #room+v+t)
+     *
+     * @param string $target
+     * @return array{base_target: string, raw_target: string, modes: string, mode_flags: array}
+     */
+    public static function parseTargetAndModes(string $target): array
+    {
+        $target = trim($target);
+        $baseTarget = $target;
+        $modes = '';
+
+        if (($pos = strpos($target, '+')) !== false) {
+            $baseTarget = substr($target, 0, $pos);
+            $modes = substr($target, $pos);
+        } elseif (($pos = strpos($target, '-')) !== false) {
+            $baseTarget = substr($target, 0, $pos);
+            $modes = substr($target, $pos);
+        }
+
+        $flags = self::parseModeFlags($modes);
+
+        return [
+            'base_target' => $baseTarget,
+            'raw_target' => $target,
+            'modes' => $modes,
+            'mode_flags' => $flags
+        ];
     }
 
     /**

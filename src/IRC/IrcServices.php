@@ -436,6 +436,91 @@ class IrcServices
             ];
         }
 
+        if ($first === '/join') {
+            $target = $parts[1] ?? '';
+            if (empty($target)) {
+                return [
+                    'is_service_command' => true,
+                    'service' => 'SERVERSERV',
+                    'response' => 'Usage: /join <#channel|target>',
+                    'channel' => $channel
+                ];
+            }
+
+            $parsedTarget = ChanServ::parseTargetAndModes($target);
+            $targetChan = ChanServ::normalizeChannelName($parsedTarget['base_target']);
+            $modeInfoStr = $parsedTarget['modes'] !== '' ? " with modes ({$parsedTarget['modes']})" : '';
+
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "Joined channel {$targetChan}{$modeInfoStr}.",
+                'channel' => $targetChan
+            ];
+        }
+
+        if ($first === '/part' || $first === '/leave') {
+            $target = $parts[1] ?? $channel;
+            $targetChan = ChanServ::normalizeChannelName($target);
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "Left channel {$targetChan}.",
+                'channel' => $targetChan
+            ];
+        }
+
+        if ($first === '/mode' || $first === '/modes') {
+            $target = $parts[1] ?? $channel;
+            $modeStr = $parts[2] ?? '';
+
+            $parsed = ChanServ::parseTargetAndModes($target);
+            $targetChan = ChanServ::normalizeChannelName($parsed['base_target']);
+
+            if (empty($modeStr) && $parsed['modes'] !== '') {
+                $modeStr = $parsed['modes'];
+            }
+
+            if (empty($modeStr)) {
+                $info = ChanServ::getInfo($targetChan);
+                $resp = $info['success'] ? $info['message'] : "Modes for {$targetChan}: none set.";
+            } else {
+                $res = ChanServ::setModes($targetChan, $modeStr, $senderNick);
+                $resp = $res['message'];
+            }
+
+            return [
+                'is_service_command' => true,
+                'service' => ChanServ::SERVICE_NAME,
+                'response' => $resp,
+                'channel' => $targetChan
+            ];
+        }
+
+        if ($first === '/raw') {
+            $rawPayload = trim(substr($text, strlen($parts[0])));
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "[RAW OUTPUT] " . ($rawPayload !== '' ? $rawPayload : "Raw mode active for {$channel}"),
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/delta' || $first === '/deltamodes') {
+            $target = $parts[1] ?? $channel;
+            $parsed = ChanServ::parseTargetAndModes($target);
+            $targetChan = ChanServ::normalizeChannelName($parsed['base_target']);
+            $res = ChanServ::setModes($targetChan, '+Δmodes', $senderNick);
+
+            return [
+                'is_service_command' => true,
+                'service' => ChanServ::SERVICE_NAME,
+                'response' => "Δmodes active for {$targetChan}: {$res['modes']}",
+                'channel' => $targetChan
+            ];
+        }
+
         if ($first === '/op') {
             $target = $parts[1] ?? '';
             $chan = (!empty($parts[2]) ? $parts[2] : $channel);
@@ -571,6 +656,11 @@ class IrcServices
                        "• /msg PAYSERV SUBSCRIBE <user|channel|server> [target] — Subscribe level from chat\n" .
                        "• /connect <URI> — Connect to server via URI (supports https://, ivc://, irc://)\n" .
                        "• /disconnect [server|URI] — Disconnect from active or specified server\n" .
+                       "• /join <#channel|target> — Join channel or target object\n" .
+                       "• /part [channel] / /leave — Leave current or specified channel\n" .
+                       "• /mode [target] [flags] — View/set modes (+n, +N, +S, +s, +k, +v, +o, +a, +m, +t, -t, +raw, +Δmodes)\n" .
+                       "• /delta [target] — Toggle/enable Δmodes configuration for target\n" .
+                       "• /raw [payload] — Toggle or send raw protocol data\n" .
                        "• /msg NAMESERV REGISTER <pass> [email] — Register your nickname\n" .
                        "• /msg NAMESERV IDENTIFY <pass> — Identify with your password\n" .
                        "• /msg NAMESERV SUBSCRIBE [tier] — Subscribe nickname to User Pro\n" .

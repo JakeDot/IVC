@@ -53,6 +53,44 @@ class IrcServices
             return null;
         }
 
+        // Special handling for URIs where host begins with mode flags like +gmodes (e.g. ivc://+gmodes?query#chan)
+        if (preg_match('/^([a-zA-Z0-9\+-]+):\/\/(\+[a-zA-Z0-9_-]+)?([^:\/\?#]+)?(?::(\d+))?([^?#]*)?(?:\?([^#]*))?(?:#(.*))?$/i', $uri, $m)) {
+            $scheme = strtolower($m[1]);
+            $hostMode = $m[2] ?? '';
+            $rawHost = $m[3] ?? '';
+            $port = !empty($m[4]) ? (int)$m[4] : (str_starts_with($scheme, 'ivc') ? 8080 : 443);
+            $path = $m[5] ?? '';
+            $query = $m[6] ?? '';
+            $fragment = $m[7] ?? '';
+
+            $effectiveHost = $rawHost !== '' ? strtolower($rawHost) : ($query !== '' ? 'localhost' : 'localhost');
+            if (!empty($query) && str_contains($query, '@')) {
+                $atParts = explode('@', $query);
+                $effectiveHost = strtolower(array_pop($atParts));
+            }
+
+            $chanRaw = $fragment !== '' ? $fragment : $path;
+            $extractedModes = '';
+            if (($plusPos = strpos($chanRaw, '+')) !== false) {
+                $extractedModes = substr($chanRaw, $plusPos + 1);
+                $chanRaw = substr($chanRaw, 0, $plusPos);
+            }
+
+            $chanRaw = trim($chanRaw, '/');
+            $channel = !empty($chanRaw) ? (str_starts_with($chanRaw, '#') || str_starts_with($chanRaw, '&') ? $chanRaw : '#' . $chanRaw) : '#lobby';
+            $channel = \Fortress\Security\Sanitizer::sanitizeRoomId($channel);
+
+            return [
+                'protocol' => strtoupper($scheme),
+                'host'     => $effectiveHost,
+                'port'     => $port,
+                'channel'  => $channel,
+                'modes'    => $extractedModes,
+                'uri'      => $uri,
+                'host_modes' => $hostMode
+            ];
+        }
+
         $parsed = parse_url($uri);
         if (!$parsed || empty($parsed['host'])) {
             return null;

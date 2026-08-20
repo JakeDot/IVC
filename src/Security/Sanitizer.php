@@ -20,6 +20,7 @@ final class Sanitizer
         }
 
         $clean = preg_replace('/[^a-zA-Z0-9\-_\/&@£$]/u', '', $trimmed);
+        $clean = preg_replace('/[^a-zA-Z0-9\-_\/&@£$§=]/u', '', $trimmed);
         if ($clean === null) {
             return '#room-' . bin2hex(random_bytes(4));
         }

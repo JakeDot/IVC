@@ -15,7 +15,7 @@ class IrcServices
      * Parse server URI supporting https://, ivc://, and irc:// protocols.
      *
      * @param string $uri
-     * @return array{protocol: string, host: string, port: int, channel: string, uri: string}|null
+     * @return array{protocol: string, host: string, port: int, channel: string, modes: string, uri: string}|null
      */
     public static function parseServerUri(string $uri): ?array
     {
@@ -30,7 +30,17 @@ class IrcServices
         }
 
         $scheme = strtolower($parsed['scheme'] ?? 'https');
-        $host = strtolower($parsed['host']);
+        $hostRaw = $parsed['host'];
+
+        // Strip +modes from the host component
+        $hostModes = '';
+        if (str_contains($hostRaw, '+')) {
+            $parts = explode('+', $hostRaw);
+            $hostRaw = $parts[0];
+            array_shift($parts); // Remove the base host
+            $hostModes = implode('+', $parts); // Keep remaining string if it had multiple +'s
+        }
+        $host = strtolower($hostRaw);
 
         $defaultPorts = [
             'https' => 443,
@@ -43,23 +53,49 @@ class IrcServices
         $port = isset($parsed['port']) ? (int)$parsed['port'] : ($defaultPorts[$scheme] ?? 443);
 
         $channel = '#lobby';
+        $extractedModes = '';
+
+        $processPrefix = function (string $input): string {
+            $first = mb_substr($input, 0, 1);
+            if (in_array($first, ['#', '&', '@', '£', '$'], true)) {
+                return $input;
+            }
+            return '#' . $input;
+        };
+
         if (!empty($parsed['fragment'])) {
             $chanRaw = $parsed['fragment'];
-            $channel = str_starts_with($chanRaw, '#') ? $chanRaw : '#' . $chanRaw;
+            $plusPos = strpos($chanRaw, '+');
+            if ($plusPos !== false) {
+                $extractedModes = substr($chanRaw, $plusPos + 1);
+                $chanRaw = substr($chanRaw, 0, $plusPos);
+            }
+            if ($chanRaw !== '') {
+                $channel = $processPrefix($chanRaw);
+            }
         } elseif (!empty($parsed['path']) && $parsed['path'] !== '/') {
             $pathClean = ltrim($parsed['path'], '/');
+            $plusPos = strpos($pathClean, '+');
+            if ($plusPos !== false) {
+                $extractedModes = substr($pathClean, $plusPos + 1);
+                $pathClean = substr($pathClean, 0, $plusPos);
+            }
             if ($pathClean !== '') {
-                $channel = str_starts_with($pathClean, '#') ? $pathClean : '#' . $pathClean;
+                $channel = $processPrefix($pathClean);
             }
         }
 
         $channel = \Fortress\Security\Sanitizer::sanitizeRoomId($channel);
+
+        // Combine host modes and channel modes
+        $allModes = trim($hostModes . $extractedModes, '+');
 
         return [
             'protocol' => strtoupper($scheme),
             'host'     => $host,
             'port'     => $port,
             'channel'  => $channel,
+            'modes'    => $allModes,
             'uri'      => $uri
         ];
     }
@@ -70,13 +106,22 @@ class IrcServices
      * @param string $senderNick
      * @param string $channel
      * @param string $text
-     * @return array{is_service_command: true, service: string, response: string, channel: string, skip_bot_broadcast?: bool}|null
+     * @return array{is_service_command: true, service: string, response: string, channel: string, appstatus?: string, skip_bot_broadcast?: bool}|null
      */
     public static function processCommand(string $senderNick, string $channel, string $text): ?array
     {
         $text = trim($text);
         if ($text === '') {
             return null;
+        }
+
+        // Calculate AppStatus block for injection into native clients
+        $appModes = $senderNick;
+        $chanInfo = ChanServ::getInfo($channel);
+        if ($chanInfo['success']) {
+            $modes = $chanInfo['data']['modes'] ?? '';
+            $opStatus = ChanServ::isOp($channel, $senderNick) ? '+o' : '';
+            $appModes .= "{subs [{$channel}{$modes}{$opStatus}]}";
         }
 
         $parts = preg_split('/\s+/', $text);
@@ -92,7 +137,8 @@ class IrcServices
                     'is_service_command' => true,
                     'service' => $targetNick,
                     'response' => $res['message'],
-                    'channel' => $channel
+                    'channel' => $channel,
+                    'appstatus' => $appModes
                 ];
             }
         } elseif (str_ends_with($first, ':')) {
@@ -104,7 +150,8 @@ class IrcServices
                     'is_service_command' => true,
                     'service' => $targetNick,
                     'response' => $res['message'],
-                    'channel' => $channel
+                    'channel' => $channel,
+                    'appstatus' => $appModes
                 ];
             }
         }
@@ -131,11 +178,40 @@ class IrcServices
                 ];
             }
 
+            $targetObj = $parsed['channel'];
+            $reqModes = $parsed['modes'] ?? '';
+
+            if ($reqModes !== '') {
+                $prefix = mb_substr($targetObj, 0, 1);
+
+                // If the user is trying to join a channel (# or &) with specified modes, verify permissions.
+                if (($prefix === '#' || $prefix === '&') && str_contains($reqModes, 'o')) {
+                    if (!ChanServ::isRegistered($targetObj)) {
+                        return [
+                            'is_service_command' => true,
+                            'service' => 'SERVERSERV',
+                            'response' => "SERVERSERV: Permission denied. Channel {$targetObj} is not registered.",
+                            'channel' => $channel
+                        ];
+                    }
+
+                    if (!ChanServ::isOp($targetObj, $senderNick)) {
+                        return [
+                            'is_service_command' => true,
+                            'service' => 'SERVERSERV',
+                            'response' => "SERVERSERV: Permission denied. You must be an OP on {$targetObj} to connect with +{$reqModes} modes.",
+                            'channel' => $channel
+                        ];
+                    }
+                }
+            }
+
             return [
                 'is_service_command' => true,
                 'service' => 'SERVERSERV',
                 'response' => "SERVERSERV: Connected to server '{$parsed['host']}:{$parsed['port']}' via {$parsed['protocol']} (Channel: {$parsed['channel']}).",
-                'channel' => $parsed['channel']
+                'channel' => $parsed['channel'],
+                'appstatus' => $appModes
             ];
         }
 
@@ -146,7 +222,8 @@ class IrcServices
                 'is_service_command' => true,
                 'service' => 'SERVERSERV',
                 'response' => "SERVERSERV: Disconnected from server{$targetStr}.",
-                'channel' => $channel
+                'channel' => $channel,
+                'appstatus' => $appModes
             ];
         }
 

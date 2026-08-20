@@ -94,6 +94,8 @@ function assertTest(bool $condition, string $message): void {
 echo "1. Testing Sanitizer & IRC #room channel scheme...\n";
 assertTest(Sanitizer::sanitizeRoomId('room123!@#') === '#room123@', 'Sanitize invalid characters and normalize to #room123@');
 assertTest(Sanitizer::sanitizeRoomId('#fortress-channel') === '#fortress-channel', 'Retain existing leading # in channel name');
+assertTest(str_starts_with(Sanitizer::sanitizeRoomId(''), '#room-'), 'Sanitize empty string to generated #room- ID');
+assertTest(str_starts_with(Sanitizer::sanitizeRoomId('   '), '#room-'), 'Sanitize whitespace string to generated #room- ID');
 assertTest(Sanitizer::sanitizeClientId('peer-abc-123') === 'peer-abc-123', 'Valid client ID retained');
 
 $validSignal = json_encode(['type' => 'offer', 'sdp' => ['type' => 'offer', 'sdp' => 'v=0...']]);

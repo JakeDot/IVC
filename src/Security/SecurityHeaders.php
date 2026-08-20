@@ -10,13 +10,26 @@ namespace Fortress\Security;
 final class SecurityHeaders
 {
     /**
-     * Apply strict security HTTP response headers
+     * Apply strict security HTTP response headers and custom protocol Status header
+     *
+     * @param int $httpStatus Standard HTTP status code (default 200)
+     * @param string $appModes Extracted application modes/permissions mapped to user/object
      */
-    public static function apply(): void
+    public static function apply(int $httpStatus = 200, string $appModes = ''): void
     {
         if (headers_sent()) {
             return;
         }
+
+        // Custom IVC Protocol Status Header: X-IVC-Status:<httpstatus>+modes:<appstatus>
+        // Use an X- header to avoid breaking the FastCGI HTTP Status Line (RFC 7230)
+        $statusStr = "X-IVC-Status: {$httpStatus}";
+        // Custom IVC Protocol Status Header: Status:<httpstatus>+modes:<appstatus>
+        $statusStr = "Status: {$httpStatus}";
+        if ($appModes !== '') {
+            $statusStr .= "+modes:{$appModes}";
+        }
+        header($statusStr);
 
         // Prevent caching of any sensitive WebRTC signaling data (Non-Logging / Privacy directive)
         header('Cache-Control: no-store, no-cache, must-revalidate, private, max-age=0');

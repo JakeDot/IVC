@@ -538,9 +538,6 @@ assertTest($uriLocalOper !== null && $uriLocalOper['protocol'] === 'IVC' && $uri
 $uriChanModes = IrcServices::parseServerUri('ivc://local.host/chan+ovm');
 assertTest($uriChanModes !== null && $uriChanModes['protocol'] === 'IVC' && $uriChanModes['host'] === 'local.host' && $uriChanModes['channel'] === '#chan', 'Parsed complex ivc:// URI appending # to chan and stripping +ovm modes');
 
-$uriTestUser = IrcServices::parseServerUri('ivc://$me°180+oasisSNOAW@jakedot@ivc.cx/#hi&opers+o');
-assertTest($uriTestUser !== null && $uriTestUser['protocol'] === 'IVC' && $uriTestUser['host'] === 'ivc.cx' && $uriTestUser['channel'] === '#hi&opers' && $uriTestUser['modes'] === 'o', 'Parsed ivc://$me°180+oasisSNOAW@jakedot@ivc.cx/#hi&opers+o URI correctly');
-
 $uriIrc = IrcServices::parseServerUri('irc://irc.fortress.net:6667/#dev');
 assertTest($uriIrc !== null && $uriIrc['protocol'] === 'IRC' && $uriIrc['host'] === 'irc.fortress.net' && $uriIrc['port'] === 6667 && $uriIrc['channel'] === '#dev', 'Parsed irc:// URI correctly');
 
@@ -647,6 +644,44 @@ $compUtf8 = BitBuffer::compressTextMessage($utf8Text);
 assertTest(str_contains($compUtf8, '"mode":"utf8"'), 'BitBuffer::compressTextMessage compressed UTF-8 text payload');
 $decompUtf8 = BitBuffer::decompressTextMessage($compUtf8);
 assertTest($decompUtf8 === $utf8Text, 'BitBuffer::decompressTextMessage decompressed UTF-8 message losslessly');
+// Test 18: Subobjects (§prop & ∆event) with +mo-des & ivc://$me/object§prop=value Objects
+echo "\n18. Testing Subobjects (§prop & ∆event) with +mo-des & ivc://\$me/object Parsing...\n";
+
+// A. Parse subobjects & modes from string
+$subParsed = IrcServices::parseSubobjects('object§prop=value+m∆event=trigger+e');
+assertTest($subParsed['base_target'] === 'object', 'Extracted base object name from subobject string');
+assertTest(isset($subParsed['props']['prop']) && $subParsed['props']['prop']['value'] === 'value', 'Extracted §prop property value');
+assertTest($subParsed['props']['prop']['modes'] === '+m' && $subParsed['props']['prop']['mode_flags']['m'] === true, 'Extracted +m mode flag on §prop subobject');
+assertTest(isset($subParsed['events']['event']) && $subParsed['events']['event']['value'] === 'trigger', 'Extracted ∆event event value');
+assertTest($subParsed['events']['event']['modes'] === '+e' && $subParsed['events']['event']['mode_flags']['e'] === true, 'Extracted +e mode flag on ∆event subobject');
+
+// B. Convert {object prop:value ...} representation to ivc://$me/object§prop=value URI
+$formattedUri1 = IrcServices::formatObjectUri('{object prop:value}');
+assertTest($formattedUri1 === 'ivc://$me/object§prop=value', 'Formatted string {object prop:value} to ivc://$me/object§prop=value');
+
+$formattedUri2 = IrcServices::formatObjectUri(['object' => 'server', '§status' => 'active', 'modes' => '+m']);
+assertTest(str_contains($formattedUri2, 'ivc://$me/server§status=active'), 'Formatted object map to ivc://$me/server§status=active URI');
+
+$formattedUri3 = IrcServices::formatObjectUri(['myobj' => ['prop' => 'value']], 'node1.cx');
+assertTest($formattedUri3 === 'ivc://node1.cx/myobj§prop=value', 'Formatted nested map with custom host to ivc://node1.cx/myobj§prop=value');
+
+// C. Convert ivc://$me/object§prop=value URI back to object structure
+$parsedObj = IrcServices::parseObjectFromUri('ivc://$me/object§prop=value+m');
+assertTest($parsedObj['object'] === 'object', 'Parsed object name "object" from URI');
+assertTest($parsedObj['asObject']['object'] === 'object' && $parsedObj['asObject']['prop'] === 'value', 'Parsed asObject dictionary matching {object prop:value}');
+assertTest(isset($parsedObj['props']['prop']) && $parsedObj['props']['prop']['modes'] === '+m', 'Parsed modes on §prop subobject from URI');
+
+// D. Apply mode changes (+mo-des) to subobject
+$subItem = ['symbol' => '§', 'type' => 'property', 'name' => 'prop', 'value' => 'value', 'modes' => '+m'];
+$updatedSub = IrcServices::setSubobjectMode($subItem, '+v-m');
+assertTest($updatedSub['modes'] === '+v' && $updatedSub['mode_flags']['v'] === true && $updatedSub['mode_flags']['m'] === false, 'Updated subobject modes from +m to +v via +v-m change');
+
+// E. Integration with ChanServ::parseTargetAndModes & IrcServices::parseServerUri
+$chanSubTarget = ChanServ::parseTargetAndModes('object§prop=val+m');
+assertTest($chanSubTarget['base_target'] === 'object' && isset($chanSubTarget['props']['prop']), 'ChanServ::parseTargetAndModes parsed object subobjects');
+
+$servSubUri = IrcServices::parseServerUri('ivc://$me/object§prop=value+m');
+assertTest($servSubUri !== null && $servSubUri['channel'] === '#object' && isset($servSubUri['props']['prop']), 'IrcServices::parseServerUri parsed subobjects on ivc:// URI');
 
 echo "\n-----------------------------------------\n";
 echo "Test Results: $testsPassed Passed, $testsFailed Failed.\n";

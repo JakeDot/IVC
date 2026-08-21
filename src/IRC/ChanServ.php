@@ -114,14 +114,34 @@ class ChanServ
             $chanModel = ChannelRepository::findByChannelName($channel);
             if ($chanModel) {
                 $currentModes = $chanModel->getModes();
+
+                // Allow specific multibyte/string modes
+                $specialModes = ['Δmodes', 'deltamodes', 'raw'];
+
                 $add = true;
-                for ($i = 0; $i < strlen($modes); $i++) {
-                    $char = $modes[$i];
+
+                // Handle special modes first
+                foreach ($specialModes as $sm) {
+                    if (str_contains($modes, "+$sm")) {
+                        if (!str_contains($currentModes, $sm)) {
+                            $currentModes .= $sm;
+                        }
+                        $modes = str_replace("+$sm", "", $modes);
+                    }
+                    if (str_contains($modes, "-$sm")) {
+                        $currentModes = str_replace($sm, '', $currentModes);
+                        $modes = str_replace("-$sm", "", $modes);
+                    }
+                }
+
+                // Handle single character modes
+                for ($i = 0; $i < mb_strlen($modes); $i++) {
+                    $char = mb_substr($modes, $i, 1);
                     if ($char === '+') {
                         $add = true;
                     } elseif ($char === '-') {
                         $add = false;
-                    } elseif (preg_match('/[a-zA-Z]/', $char)) {
+                    } elseif (preg_match('/[a-zA-ZΔ]/u', $char)) {
                         if ($add && !str_contains($currentModes, $char)) {
                             $currentModes .= $char;
                         } elseif (!$add && str_contains($currentModes, $char)) {

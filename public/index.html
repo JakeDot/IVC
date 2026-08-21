@@ -151,17 +151,17 @@
                         </div>
                     </div>
                     <div class="sidebar-container">
-                        <div class="sidebar-tabs">
-                            <button id="tab-nicks" class="sidebar-tab active">Nicks</button>
-                            <button id="tab-gallery" class="sidebar-tab">Gallery</button>
+                        <div class="sidebar-tabs" role="tablist" aria-label="Sidebar navigation">
+                            <button id="tab-nicks" class="sidebar-tab active" role="tab" aria-selected="true" aria-controls="user-list-sidebar">Nicks</button>
+                            <button id="tab-gallery" class="sidebar-tab" role="tab" aria-selected="false" aria-controls="gallery-sidebar">Gallery</button>
                         </div>
-                        <div id="user-list-sidebar" class="user-list-sidebar">
+                        <div id="user-list-sidebar" class="user-list-sidebar" role="tabpanel" aria-labelledby="tab-nicks">
                             <h4>Nicks in Channel</h4>
                             <ul id="user-list" class="user-list">
                                 <!-- Populated dynamically -->
                             </ul>
                         </div>
-                        <div id="gallery-sidebar" class="gallery-sidebar hidden">
+                        <div id="gallery-sidebar" class="gallery-sidebar hidden" role="tabpanel" aria-labelledby="tab-gallery">
                             <h4>Media Gallery</h4>
                             <div id="media-gallery" class="media-gallery">
                                 <!-- Populated dynamically -->

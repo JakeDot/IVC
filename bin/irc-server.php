@@ -302,7 +302,6 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
             $clientData[$clientId]['user'] = $args;
             if ($clientData[$clientId]['nick'] !== null) {
                 welcomeClient($client, $clientId, $clientData[$clientId]['nick'], $clientData);
-                welcomeClient($client, $clientData[$clientId]['nick']);
             }
             break;
 

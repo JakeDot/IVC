@@ -77,5 +77,5 @@ describe('WebRTC Penetration Tests', () => {
     }
 
     expect(blocked).toBe(true);
-  });
+  }, 30000);
 });

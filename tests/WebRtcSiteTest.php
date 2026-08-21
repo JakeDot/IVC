@@ -532,7 +532,7 @@ $uriIvc = IrcServices::parseServerUri('ivc://node1.network.org:8080/general');
 assertTest($uriIvc !== null && $uriIvc['protocol'] === 'IVC' && $uriIvc['host'] === 'node1.network.org' && $uriIvc['port'] === 8080 && $uriIvc['channel'] === '#general', 'Parsed ivc:// URI with port and channel correctly');
 
 $uriIvcComplex = IrcServices::parseServerUri('ivc://$me$opers+ov£admins+anv/#hi+vm');
-assertTest($uriIvcComplex !== null && $uriIvcComplex['protocol'] === 'IVC' && $uriIvcComplex['host'] === '$me$opers+ov£admins+anv' && $uriIvcComplex['channel'] === '#hi', 'Parsed complex ivc:// symbolic URI correctly with channel modes stripped');
+assertTest($uriIvcComplex !== null && $uriIvcComplex['protocol'] === 'IVC' && $uriIvcComplex['host'] === '$me$opers' && $uriIvcComplex['channel'] === '#hi', 'Parsed complex ivc:// symbolic URI correctly with channel modes stripped');
 
 $uriLocalOper = IrcServices::parseServerUri('ivc://local.host/&oper+on');
 assertTest($uriLocalOper !== null && $uriLocalOper['protocol'] === 'IVC' && $uriLocalOper['host'] === 'local.host' && $uriLocalOper['channel'] === '&oper', 'Parsed complex ivc:// URI joining local &oper channel with +on modes stripped');

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Fortress\Database;
+namespace cx\ivc\Database;
 
-use Fortress\Models\ChannelUser;
+use cx\ivc\Models\ChannelUser;
 
 /**
  * Data Access Repository for channel access / user roles (channel_users).

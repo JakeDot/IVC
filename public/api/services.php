@@ -9,11 +9,11 @@ require_once __DIR__ . '/../../src/Database/Database.php';
 require_once __DIR__ . '/../../src/IRC/ServiceRegistry.php';
 require_once __DIR__ . '/../../src/IRC/ServServ.php';
 
-use Fortress\Security\SecurityHeaders;
-use Fortress\Security\Sanitizer;
-use Fortress\Security\RateLimiter;
-use Fortress\IRC\ServiceRegistry;
-use Fortress\IRC\ServServ;
+use cx\ivc\Security\SecurityHeaders;
+use cx\ivc\Security\Sanitizer;
+use cx\ivc\Security\RateLimiter;
+use cx\ivc\IRC\ServiceRegistry;
+use cx\ivc\IRC\ServServ;
 
 SecurityHeaders::apply();
 

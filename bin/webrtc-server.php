@@ -7,9 +7,9 @@ require_once __DIR__ . '/../src/Security/Sanitizer.php';
 require_once __DIR__ . '/../src/Security/RateLimiter.php';
 require_once __DIR__ . '/../src/Signaling/RoomManager.php';
 
-use Fortress\Security\Sanitizer;
-use Fortress\Security\RateLimiter;
-use Fortress\Signaling\RoomManager;
+use cx\ivc\Security\Sanitizer;
+use cx\ivc\Security\RateLimiter;
+use cx\ivc\Signaling\RoomManager;
 
 echo "=========================================================\n";
 echo " 🏰 Fortress WebRTC Non-Logging Signaling Server (PHP 8.5)\n";

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Fortress\IRC;
+namespace cx\ivc\IRC;
 
 /**
  * MOTDSERV (Message of the Day Service) IRC System Bot

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Fortress\Database;
+namespace cx\ivc\Database;
 
-use Fortress\Models\SharedFile;
+use cx\ivc\Models\SharedFile;
 
 /**
  * Data Access Repository for shared file metadata (shared_files).

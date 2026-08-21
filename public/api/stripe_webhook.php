@@ -18,8 +18,8 @@ require_once __DIR__ . '/../../src/IRC/SettingsManager.php';
 require_once __DIR__ . '/../../src/IRC/MemoServ.php';
 require_once __DIR__ . '/../../src/Services/StripeService.php';
 
-use Fortress\Security\SecurityHeaders;
-use Fortress\Services\StripeService;
+use cx\ivc\Security\SecurityHeaders;
+use cx\ivc\Services\StripeService;
 
 SecurityHeaders::apply();
 header('Content-Type: application/json');

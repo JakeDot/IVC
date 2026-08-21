@@ -27,10 +27,10 @@ require_once __DIR__ . '/../src/IRC/HostServ.php';
 require_once __DIR__ . '/../src/IRC/ServiceRegistry.php';
 require_once __DIR__ . '/../src/IRC/ServServ.php';
 
-use Fortress\Security\Sanitizer;
-use Fortress\Signaling\RoomManager;
-use Fortress\IRC\IrcServices;
-use Fortress\IRC\MotdServ;
+use cx\ivc\Security\Sanitizer;
+use cx\ivc\Signaling\RoomManager;
+use cx\ivc\IRC\IrcServices;
+use cx\ivc\IRC\MotdServ;
 
 echo "=========================================================\n";
 echo " 🏰 Fortress IRC Server (PHP)\n";
@@ -388,9 +388,9 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
 
             if (str_starts_with($target, '#')) {
                 // Check if channel is moderated (+m)
-                $chanModel = \Fortress\Database\ChannelRepository::findByChannelName($target);
+                $chanModel = \cx\ivc\Database\ChannelRepository::findByChannelName($target);
                 if ($chanModel !== null && str_contains($chanModel->getModes(), 'm')) {
-                    if (!\Fortress\Database\ChannelUserRepository::hasVoice($target, $nick)) {
+                    if (!\cx\ivc\Database\ChannelUserRepository::hasVoice($target, $nick)) {
                         fwrite($client, ":server 404 $nick $target :Cannot send to channel (+m)\r\n");
                         return;
                     }
@@ -497,7 +497,7 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
 
             if (count($topicParts) === 1) {
                 // Get topic
-                $info = \Fortress\IRC\ChanServ::getInfo($targetChan);
+                $info = \cx\ivc\IRC\ChanServ::getInfo($targetChan);
                 if (isset($info['data']) && isset($info['data']['topic']) && $info['data']['topic']) {
                     sendToClient($client, $clientId, ":server 332 $nick $targetChan :{$info['data']['topic']}\r\n", $clientData);
                 } else {
@@ -506,7 +506,7 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
             } else {
                 // Set topic
                 $newTopic = trim($topicParts[1], ':');
-                $result = \Fortress\IRC\ChanServ::setTopic($targetChan, $newTopic, $nick);
+                $result = \cx\ivc\IRC\ChanServ::setTopic($targetChan, $newTopic, $nick);
                 // We'll broadcast the change if ChanServ accepted it (or even if it's just ephemeral for now)
                 // For simplicity, we just broadcast it to everyone in the channel right away.
                 broadcastToChannel($channels, $targetChan, ":$nick TOPIC $targetChan :$newTopic\r\n", $clientData);
@@ -544,7 +544,7 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
                 return;
             }
 
-            $info = \Fortress\IRC\NameServ::getInfo($target);
+            $info = \cx\ivc\IRC\NameServ::getInfo($target);
             if ($info['success']) {
                 $user = 'user';
                 foreach ($clientData as $cdata) {
@@ -567,7 +567,7 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
 
             sendToClient($client, $clientId, ":server 321 $nick Channel :Users  Name\r\n", $clientData);
             fwrite($client, ":server 321 $nick Channel :Users  Name\r\n");
-            $chans = \Fortress\IRC\ChanServ::listChannels();
+            $chans = \cx\ivc\IRC\ChanServ::listChannels();
             foreach ($chans as $c) {
                 // Since this is ephemeral, we can also check $channels
                 $count = isset($channels[$c['channel_name']]) ? count($channels[$c['channel_name']]) : 0;
@@ -618,7 +618,7 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
                 $modes = isset($modeParts[1]) ? trim($modeParts[1]) : '';
                 if (empty($modes)) {
                     // Fetch current modes
-                    $info = \Fortress\IRC\ChanServ::getInfo($target);
+                    $info = \cx\ivc\IRC\ChanServ::getInfo($target);
                     if ($info['success'] && isset($info['data']['modes'])) {
                         sendToClient($client, $clientId, ":server 324 $nick $target {$info['data']['modes']}\r\n", $clientData);
                     } else {
@@ -626,7 +626,7 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
                     }
                 } else {
                     // Try to set modes using ChanServ logic
-                    $res = \Fortress\IRC\ChanServ::setModes($target, $modes, $nick);
+                    $res = \cx\ivc\IRC\ChanServ::setModes($target, $modes, $nick);
                     if ($res['success']) {
                         broadcastToChannel($channels, $target, ":$nick MODE $target $modes\r\n", $clientData);
                     } else {

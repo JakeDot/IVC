@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Fortress\Security;
+namespace cx\ivc\Security;
 
 /**
  * Input Sanitization and Validation for WebRTC SDP & ICE Payloads and IRC #room identifiers

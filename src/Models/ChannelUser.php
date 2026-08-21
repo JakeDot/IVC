@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Fortress\Models;
+namespace cx\ivc\Models;
 
 /**
  * Model class representing user role in a channel (channel_users).

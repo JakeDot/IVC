@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Fortress\Database;
+namespace cx\ivc\Database;
 
-use Fortress\Models\Channel;
+use cx\ivc\Models\Channel;
 
 /**
  * Data Access Repository for registered channels (chanserv_channels).

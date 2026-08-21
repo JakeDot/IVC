@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Fortress\Database;
+namespace cx\ivc\Database;
 
-use Fortress\Models\Subscription;
+use cx\ivc\Models\Subscription;
 
 /**
  * Data Access Repository for paid subscriptions (subscriptions table).

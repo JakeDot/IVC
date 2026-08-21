@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Fortress\Database;
+namespace cx\ivc\Database;
 
-use Fortress\Models\UserNick;
+use cx\ivc\Models\UserNick;
 
 /**
  * Data Access Repository for registered nicknames (nameserv_nicks).

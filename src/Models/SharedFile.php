@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Fortress\Models;
+namespace cx\ivc\Models;
 
 /**
  * Model class representing a shared file entity with E2EE encrypted metadata.

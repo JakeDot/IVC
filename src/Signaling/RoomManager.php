@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Fortress\Signaling;
+namespace cx\ivc\Signaling;
 
 /**
  * Ephemeral Memory Room Manager for WebRTC Signaling (Zero Disk Logging / Non-Logging)

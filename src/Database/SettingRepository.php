@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Fortress\Database;
+namespace cx\ivc\Database;
 
-use Fortress\Models\IrcSetting;
+use cx\ivc\Models\IrcSetting;
 
 /**
  * Data Access Repository for serverwide IRC settings (irc_settings).

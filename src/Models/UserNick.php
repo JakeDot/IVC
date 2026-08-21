@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Fortress\Models;
+namespace cx\ivc\Models;
 
 /**
  * Model class representing a registered nickname (nameserv_nicks).
@@ -184,14 +184,14 @@ class UserNick
             return ['success' => false, 'message' => 'NAMESERV: Nickname and password are required.'];
         }
 
-        if (\Fortress\Database\UserNickRepository::exists($nickname)) {
+        if (\cx\ivc\Database\UserNickRepository::exists($nickname)) {
             return ['success' => false, 'message' => "NAMESERV: Nickname '{$nickname}' is already registered."];
         }
 
         $passHash = self::hashPassword($password);
         $userNick = new self($nickname, $passHash, $email, null, null, true);
 
-        if (\Fortress\Database\UserNickRepository::save($userNick)) {
+        if (\cx\ivc\Database\UserNickRepository::save($userNick)) {
             return ['success' => true, 'message' => "NAMESERV: Nickname '{$nickname}' successfully registered and identified."];
         }
 
@@ -201,13 +201,13 @@ class UserNick
     public static function identify(string $nickname, string $password): array
     {
         $nickname = trim($nickname);
-        $userNick = \Fortress\Database\UserNickRepository::findByNickname($nickname);
+        $userNick = \cx\ivc\Database\UserNickRepository::findByNickname($nickname);
 
         if ($userNick === null || !$userNick->verifyPassword($password)) {
             return ['success' => false, 'message' => 'NAMESERV: Password verification failed. Access denied.'];
         }
 
-        \Fortress\Database\UserNickRepository::updateIdentification($userNick->getNickname(), true, time());
+        \cx\ivc\Database\UserNickRepository::updateIdentification($userNick->getNickname(), true, time());
 
         return ['success' => true, 'message' => "NAMESERV: Password accepted. Nickname '{$nickname}' identified."];
     }

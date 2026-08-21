@@ -15,7 +15,7 @@
     "test:coverage": "jest --coverage",
     "lint": "eslint src/**/*.ts",
     "typecheck": "tsc --noEmit",
-    "fortress:init": "node scripts/init-fortress.js",
+    "cxivc:init": "node scripts/init-fortress.js",
     "threat:scan": "node scripts/threat-scan.js",
     "audit:full": "node scripts/full-audit.js",
     "deps:audit": "npm audit",
@@ -24,7 +24,7 @@
   },
   "keywords": [
     "security",
-    "fortress",
+    "cx.ivc",
     "hardening",
     "encryption",
     "compliance",

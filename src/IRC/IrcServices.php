@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Fortress\IRC;
+namespace cx\ivc\IRC;
 
 /**
  * IRC Service Command Dispatcher & Parser
@@ -473,7 +473,7 @@ class IrcServices
             }
         }
 
-        $channel = \Fortress\Security\Sanitizer::sanitizeRoomId($channel);
+        $channel = \cx\ivc\Security\Sanitizer::sanitizeRoomId($channel);
 
         // Combine host modes and channel modes
         $allModes = trim($hostModes . $extractedModes, '+');
@@ -1025,7 +1025,7 @@ class IrcServices
                 ];
             }
 
-            \Fortress\Signaling\RoomManager::broadcastSignal($channel, $senderNick, [
+            \cx\ivc\Signaling\RoomManager::broadcastSignal($channel, $senderNick, [
                 'type' => 'chat',
                 'sender' => $senderNick,
                 'message' => $msgText,

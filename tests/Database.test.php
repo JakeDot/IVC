@@ -1,3 +1,3 @@
 <?php
 require_once 'src/Database/Database.php';
-\Fortress\Database\Database::getConnection();
+\cx\ivc\Database\Database::getConnection();

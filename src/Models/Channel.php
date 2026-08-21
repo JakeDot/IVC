@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Fortress\Models;
+namespace cx\ivc\Models;
 
 /**
  * Model class representing a registered channel (chanserv_channels).
@@ -169,19 +169,19 @@ class Channel
 
     public static function register(string $channel, string $ownerNick, ?string $passkey = null): array
     {
-        $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
+        $channel = \cx\ivc\IRC\ChanServ::normalizeChannelName($channel);
         $ownerNick = trim($ownerNick);
 
         if (empty($channel) || empty($ownerNick)) {
             return ['success' => false, 'message' => 'CHANSERV: Valid channel name and owner nickname are required.'];
         }
 
-        if (\Fortress\Database\ChannelRepository::exists($channel)) {
+        if (\cx\ivc\Database\ChannelRepository::exists($channel)) {
             return ['success' => false, 'message' => "CHANSERV: Channel '{$channel}' is already registered."];
         }
 
         $chanModel = new self($channel, $ownerNick, null, $passkey, '+t', time());
-        $success = \Fortress\Database\ChannelRepository::save($chanModel);
+        $success = \cx\ivc\Database\ChannelRepository::save($chanModel);
 
         if ($success) {
             self::setRole($channel, $ownerNick, 'OP');
@@ -193,7 +193,7 @@ class Channel
 
     public static function op(string $channel, string $targetNick, string $requesterNick = ''): array
     {
-        $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
+        $channel = \cx\ivc\IRC\ChanServ::normalizeChannelName($channel);
         $targetNick = trim($targetNick);
 
         if (!empty($requesterNick) && !self::isOp($channel, $requesterNick)) {
@@ -206,7 +206,7 @@ class Channel
 
     public static function deop(string $channel, string $targetNick, string $requesterNick = ''): array
     {
-        $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
+        $channel = \cx\ivc\IRC\ChanServ::normalizeChannelName($channel);
         $targetNick = trim($targetNick);
 
         if (!empty($requesterNick) && !self::isOp($channel, $requesterNick)) {
@@ -219,14 +219,14 @@ class Channel
 
     public static function setTopicCommand(string $channel, string $topic, string $requesterNick = ''): array
     {
-        $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
+        $channel = \cx\ivc\IRC\ChanServ::normalizeChannelName($channel);
 
         if (!empty($requesterNick) && self::isRegistered($channel) && !self::isOp($channel, $requesterNick)) {
             return ['success' => false, 'message' => "CHANSERV: Permission denied. Only channel operators can set the topic for {$channel}."];
         }
 
         if (self::isRegistered($channel)) {
-            \Fortress\Database\ChannelRepository::updateTopic($channel, $topic);
+            \cx\ivc\Database\ChannelRepository::updateTopic($channel, $topic);
         }
 
         return ['success' => true, 'message' => "CHANSERV: Topic for {$channel} updated to: \"{$topic}\"", 'topic' => $topic];
@@ -234,26 +234,26 @@ class Channel
 
     public static function isRegistered(string $channel): bool
     {
-        $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
-        return \Fortress\Database\ChannelRepository::exists($channel);
+        $channel = \cx\ivc\IRC\ChanServ::normalizeChannelName($channel);
+        return \cx\ivc\Database\ChannelRepository::exists($channel);
     }
 
     public static function setRole(string $channel, string $nickname, string $role): void
     {
-        $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
+        $channel = \cx\ivc\IRC\ChanServ::normalizeChannelName($channel);
         $channelUser = new ChannelUser($channel, $nickname, $role);
-        \Fortress\Database\ChannelUserRepository::saveRole($channelUser);
+        \cx\ivc\Database\ChannelUserRepository::saveRole($channelUser);
     }
 
     public static function isOp(string $channel, string $nickname): bool
     {
-        $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
-        return \Fortress\Database\ChannelUserRepository::isOp($channel, $nickname);
+        $channel = \cx\ivc\IRC\ChanServ::normalizeChannelName($channel);
+        return \cx\ivc\Database\ChannelUserRepository::isOp($channel, $nickname);
     }
 
     public static function getOperators(string $channel): array
     {
-        $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
-        return \Fortress\Database\ChannelUserRepository::getOperators($channel);
+        $channel = \cx\ivc\IRC\ChanServ::normalizeChannelName($channel);
+        return \cx\ivc\Database\ChannelUserRepository::getOperators($channel);
     }
 }

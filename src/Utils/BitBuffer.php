@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Fortress\Utils;
+namespace cx\ivc\Utils;
 
 use InvalidArgumentException;
 use OutOfBoundsException;

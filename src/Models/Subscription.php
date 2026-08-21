@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Fortress\Models;
+namespace cx\ivc\Models;
 
 /**
  * Domain model representing a paid subscription for a nickname or channel.

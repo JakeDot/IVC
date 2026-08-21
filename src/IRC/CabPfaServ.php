@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Fortress\IRC;
+namespace cx\ivc\IRC;
 
 /**
  * CABPFASERV (Computer Aided Best Practice Favorite Algorithm Service)

@@ -24,13 +24,13 @@ require_once __DIR__ . '/../../src/IRC/TextServ.php';
 require_once __DIR__ . '/../../src/IRC/IrcServices.php';
 require_once __DIR__ . '/../../src/Signaling/RoomManager.php';
 
-use Fortress\Security\SecurityHeaders;
-use Fortress\Security\Sanitizer;
-use Fortress\Security\RateLimiter;
-use Fortress\Security\TokenManager;
-use Fortress\IRC\IrcServices;
-use Fortress\IRC\ChanServ;
-use Fortress\Signaling\RoomManager;
+use cx\ivc\Security\SecurityHeaders;
+use cx\ivc\Security\Sanitizer;
+use cx\ivc\Security\RateLimiter;
+use cx\ivc\Security\TokenManager;
+use cx\ivc\IRC\IrcServices;
+use cx\ivc\IRC\ChanServ;
+use cx\ivc\Signaling\RoomManager;
 
 header('Content-Type: application/json');
 
@@ -170,7 +170,7 @@ if ($method === 'POST' || $method === 'PUT') {
         if (!empty($chatMessage)) {
             require_once __DIR__ . '/../../src/IRC/MemoServ.php';
             $target = ltrim($roomId, '@£$');
-            \Fortress\IRC\MemoServ::send($senderNick, $target, "[PUT Notice] " . $chatMessage);
+            \cx\ivc\IRC\MemoServ::send($senderNick, $target, "[PUT Notice] " . $chatMessage);
             echo json_encode(['status' => 'sent', 'is_memo' => true, 'message' => "Notice posted to non-channel object {$roomId}."], JSON_THROW_ON_ERROR);
             exit;
         }

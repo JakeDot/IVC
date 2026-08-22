@@ -720,7 +720,7 @@ const ircServer = net.createServer((socket) => {
                         if (result && result.response) {
                             send(`:${result.service || 'service'}!service@localhost PRIVMSG ${target} :${result.response}`);
                         }
-                    } catch (e) { }
+                    } catch (e) { console.error("Irc command channel error:", e); }
                 } else {
                     // PM to service or user
                     // Broadcast to TCP if target is a real user
@@ -737,7 +737,7 @@ const ircServer = net.createServer((socket) => {
                             const serviceName = result.service || target;
                             send(`:${serviceName}!service@localhost PRIVMSG ${clientState.nick} :${result.response}`);
                         }
-                    } catch (e) { }
+                    } catch (e) { console.error("Irc command PM error:", e); }
                 }
             } else if (cmd === 'WHOIS') {
                 const targetNick = parts[1];

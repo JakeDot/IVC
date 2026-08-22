@@ -2,20 +2,23 @@
 
 declare(strict_types=1);
 
-<<<<<<< HEAD
-namespace Fortress\IRC;
+namespace Fortress\IRC\Serv;
 
-use Fortress\Services\StripeService;
+use Fortress\Database\ChannelRepository;
 use Fortress\Database\SubscriptionRepository;
 use Fortress\Database\UserNickRepository;
-use Fortress\Database\ChannelRepository;
+use Fortress\IRC\IrcObject;
+use Fortress\IRC\NoModeTrait;
+use Fortress\Services\StripeService;
 
 /**
  * PAYSERV IRC System Bot & Payment Service
  * Handles chat-based payments and subscriptions enterable from chat on User, Channel, and Server levels.
  */
-class PayServ
+class PayServ extends IrcObject
 {
+    use NoModeTrait;
+
     public const SERVICE_NAME = 'PAYSERV';
 
     /**
@@ -46,18 +49,14 @@ class PayServ
     public static function subscribe(string $senderNick, string $level = 'user', string $targetName = '', ?string $planId = null): array
     {
         $senderNick = trim($senderNick);
-        $level = strtolower(trim($level));
+        $level      = strtolower(trim($level));
 
         if ($level === 'nick' || $level === 'username') {
             $level = 'user';
         }
 
         if (empty($targetName)) {
-<<<<<<< HEAD
-            $targetName = ($level === 'user') ? $senderNick : '#lobby';
-=======
             $targetName = ($level === 'user') ? $senderNick : '#';
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
         }
 
         if ($level === 'channel' && !str_starts_with($targetName, '#') && !str_starts_with($targetName, '&')) {
@@ -67,8 +66,8 @@ class PayServ
         if ($planId === null || $planId === '') {
             $planId = match ($level) {
                 'channel' => 'channel_pro',
-                'server' => 'server_vip',
-                default => 'nick_pro'
+                'server'  => 'server_vip',
+                default   => 'nick_pro'
             };
         }
 
@@ -151,7 +150,3 @@ class PayServ
         return StripeService::cancelSubscription($sub->getId());
     }
 }
-=======
-// Backward-compat alias. The class now lives in Fortress\IRC\Serv\PayServ.
-class_alias(Fortress\IRC\Serv\PayServ::class, "Fortress\IRC\PayServ");
->>>>>>> 890a95f (rewrite of PHP class structure, imminent Port of models to TS/Java)

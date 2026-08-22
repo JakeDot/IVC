@@ -2,22 +2,16 @@
 
 declare(strict_types=1);
 
-<<<<<<< HEAD
-namespace Fortress\IRC;
+namespace Fortress\IRC\Serv;
 
 use Fortress\Database\UserNickRepository;
+use Fortress\IRC\IrcObject;
 use Fortress\Models\UserNick;
 
 /**
  * NAMESERV (Nickname Service) IRC System Bot
  * Handles user nickname registration, identification, subscription, and information queries stored in MySQL.
  */
-<<<<<<< HEAD
-class NameServ
-{
-    public const SERVICE_NAME = 'NAMESERV';
-
-=======
 class NameServ extends IrcObject
 {
     public const SERVICE_NAME = 'NAMESERV';
@@ -44,7 +38,8 @@ class NameServ extends IrcObject
         );
     }
     
-    protected static function createAndSaveDefault(string $target, string $modes, string $requesterNick): void {
+    protected static function createAndSaveDefault(string $target, string $modes, string $requesterNick): void
+    {
         // We do not auto-create unregistered users via mode commands
         self::updateModesInDb($target, $modes);
     }
@@ -53,7 +48,6 @@ class NameServ extends IrcObject
         return $target;
     }
 
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
     /**
      * Register a nickname
      */
@@ -107,14 +101,12 @@ class NameServ extends IrcObject
     }
 
     /**
-<<<<<<< HEAD
-=======
      * Set custom domain (§domain) for a nickname
      */
     public static function setDomain(string $nickname, string $domain): array
     {
         $nickname = trim($nickname);
-        $domain = trim($domain);
+        $domain   = trim($domain);
 
         if (empty($nickname)) {
             return ['success' => false, 'message' => 'NICKSERV: Nickname is required.'];
@@ -127,7 +119,7 @@ class NameServ extends IrcObject
         // Clean up domain if formatted with § or leading/trailing slashes
         $domain = ltrim($domain, '§$@');
 
-        $atPos = strrpos($nickname, '@');
+        $atPos    = strrpos($nickname, '@');
         $baseUser = ($atPos !== false && $atPos > 0) ? substr($nickname, 0, $atPos) : $nickname;
         if ($baseUser === '') {
             $baseUser = $nickname;
@@ -137,11 +129,11 @@ class NameServ extends IrcObject
         $standardized = "{$baseUser}@{$domain}";
 
         return [
-            'success' => true,
-            'message' => "NICKSERV: Property §domain set to '{$domain}' for user '{$baseUser}'. Standardized username: {$standardized}",
-            'user' => $baseUser,
-            'domain' => $domain,
-            'standardized' => $standardized
+            'success'       => true,
+            'message'       => "NICKSERV: Property §domain set to '{$domain}' for user '{$baseUser}'. Standardized username: {$standardized}",
+            'user'          => $baseUser,
+            'domain'        => $domain,
+            'standardized'  => $standardized
         ];
     }
 
@@ -151,7 +143,7 @@ class NameServ extends IrcObject
     public static function autoIdent(string $identString): array
     {
         $parsed = UserNick::parseIdent($identString);
-        $user = $parsed['user'];
+        $user   = $parsed['user'];
         $domain = $parsed['domain'];
 
         if ($domain !== '<anonymous>' && $domain !== '') {
@@ -162,7 +154,6 @@ class NameServ extends IrcObject
     }
 
     /**
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
      * Get info for a registered nickname
      */
     public static function getInfo(string $nickname): array
@@ -171,38 +162,29 @@ class NameServ extends IrcObject
         $userNick = UserNickRepository::findByNickname($nickname);
 
         if ($userNick === null) {
-<<<<<<< HEAD
-            return ['success' => false, 'message' => "NAMESERV: Nickname '{$nickname}' is not registered."];
-=======
             $parsed = UserNick::parseIdent($nickname);
             return [
                 'success' => false,
                 'message' => "NAMESERV: Nickname '{$nickname}' is not registered. (Ident: {$parsed['standardized']})",
-                'data' => [
-                    'nickname' => $parsed['user'],
-                    'domain' => $parsed['domain'],
+                'data'    => [
+                    'nickname'             => $parsed['user'],
+                    'domain'               => $parsed['domain'],
                     'standardized_username' => $parsed['standardized'],
-                    'is_identified' => 0
+                    'is_identified'        => 0
                 ]
             ];
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
         }
 
-        $regDate = date('Y-m-d H:i:s', $userNick->getRegisteredAt());
+        $regDate      = date('Y-m-d H:i:s', $userNick->getRegisteredAt());
         $lastSeenDate = date('Y-m-d H:i:s', $userNick->getLastSeen());
         $identifiedStr = $userNick->isIdentified() ? 'Yes' : 'No';
-        $subStr = $userNick->isPremium() ? "⭐ Active ({$userNick->getSubscriptionTier()})" : 'None (Standard)';
-<<<<<<< HEAD
-
-        $msg = "NAMESERV Information for {$userNick->getNickname()}:\n" .
-=======
-        $domainStr = $userNick->getDomain();
-        $stdUser = $userNick->getStandardizedUsername();
+        $subStr       = $userNick->isPremium() ? "⭐ Active ({$userNick->getSubscriptionTier()})" : 'None (Standard)';
+        $domainStr    = $userNick->getDomain();
+        $stdUser      = $userNick->getStandardizedUsername();
 
         $msg = "NAMESERV Information for {$userNick->getNickname()}:\n" .
                "• Standardized Username: {$stdUser}\n" .
                "• Domain: {$domainStr} (§domain: {$domainStr})\n" .
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
                "• Registered: {$regDate}\n" .
                "• Last Seen: {$lastSeenDate}\n" .
                "• Currently Identified: {$identifiedStr}\n" .
@@ -234,11 +216,11 @@ class NameServ extends IrcObject
     public static function purgeExpired(int $expireSeconds): int
     {
         $expiredNicks = UserNickRepository::findExpired($expireSeconds);
-        $purgedCount = 0;
+        $purgedCount  = 0;
 
         foreach ($expiredNicks as $userNick) {
             $nickname = $userNick->getNickname();
-            $email = $userNick->getEmail();
+            $email    = $userNick->getEmail();
 
             if ($email !== null) {
                 $subject = 'NAMESERV Nickname Expiration';
@@ -255,7 +237,3 @@ class NameServ extends IrcObject
         return $purgedCount;
     }
 }
-=======
-// Backward-compat alias. The class now lives in Fortress\IRC\Serv\NameServ.
-class_alias(Fortress\IRC\Serv\NameServ::class, "Fortress\IRC\NameServ");
->>>>>>> 890a95f (rewrite of PHP class structure, imminent Port of models to TS/Java)

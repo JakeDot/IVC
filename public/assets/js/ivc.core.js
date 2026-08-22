@@ -28,11 +28,50 @@ function parseModeFlagsJS(modeStr) {
     };
 }
 
+function parseQueryStringJS(queryStr, queryParams, searchKeys) {
+    if (!queryStr) return;
+    queryStr = String(queryStr).trim();
+    if (!queryStr) return;
+
+    const pairs = queryStr.split('&');
+    for (const pair of pairs) {
+        if (!pair) continue;
+        const kv = pair.split('=', 2);
+        const key = decodeURIComponent(kv[0].trim());
+        const val = kv[1] !== undefined ? decodeURIComponent(kv[1].trim()) : 'true';
+
+        if (queryParams[key] === undefined) {
+            queryParams[key] = val;
+        } else {
+            if (!Array.isArray(queryParams[key])) {
+                queryParams[key] = [queryParams[key], val];
+            } else {
+                queryParams[key].push(val);
+            }
+        }
+
+        if (key === 'search') {
+            searchKeys.push(val);
+        }
+    }
+}
+
 function parseSubobjects(input) {
     if (!input) {
-        return { baseTarget: '', subobjects: [], props: {}, events: {} };
+        return { baseTarget: '', subobjects: [], props: {}, events: {}, query: '', queryParams: {}, search: [] };
     }
     input = String(input).trim();
+
+    let queryStr = '';
+    const queryParams = {};
+    const searchKeys = [];
+
+    const qPos = input.indexOf('?');
+    if (qPos !== -1) {
+        queryStr = input.substring(qPos + 1);
+        input = input.substring(0, qPos);
+        parseQueryStringJS(queryStr, queryParams, searchKeys);
+    }
 
     const posSec = input.indexOf('§');
     const posDelta = input.indexOf('∆');
@@ -47,7 +86,7 @@ function parseSubobjects(input) {
     }
 
     if (firstSubPos === null) {
-        return { baseTarget: input, subobjects: [], props: {}, events: {} };
+        return { baseTarget: input, subobjects: [], props: {}, events: {}, query: queryStr, queryParams, search: searchKeys };
     }
 
     const baseTarget = input.substring(0, firstSubPos);
@@ -113,7 +152,7 @@ function parseSubobjects(input) {
         }
     }
 
-    return { baseTarget, subobjects, props, events };
+    return { baseTarget, subobjects, props, events, query: queryStr, queryParams, search: searchKeys };
 }
 
 function formatObjectUri(objData, host = '$me') {
@@ -152,7 +191,8 @@ function formatObjectUri(objData, host = '$me') {
     }
 
     let subStr = '';
-    const reservedKeys = new Set(['object', 'name', 'host', 'protocol', 'scheme', 'subobjects', 'props', 'events', 'uri', 'asObject']);
+    let queryPart = '';
+    const reservedKeys = new Set(['object', 'name', 'host', 'protocol', 'scheme', 'subobjects', 'props', 'events', 'uri', 'asObject', 'query', 'queryParams', 'query_params', 'search']);
 
     for (const [k, v] of Object.entries(props)) {
         if (reservedKeys.has(k)) continue;
@@ -181,7 +221,27 @@ function formatObjectUri(objData, host = '$me') {
         subStr += `${symbol}${keyName}=${valStr}${modeStr}`;
     }
 
-    return `ivc://${host}/${baseObject}${subStr}`;
+    if (props.search && Array.isArray(props.search)) {
+        const qPairs = props.search.map(sKey => `search=${encodeURIComponent(String(sKey))}`);
+        queryPart = '?' + qPairs.join('&');
+    } else if (props.queryParams || props.query_params) {
+        const qObj = props.queryParams || props.query_params;
+        const qPairs = [];
+        for (const [qk, qv] of Object.entries(qObj)) {
+            if (Array.isArray(qv)) {
+                for (const subV of qv) {
+                    qPairs.push(`${encodeURIComponent(String(qk))}=${encodeURIComponent(String(subV))}`);
+                }
+            } else {
+                qPairs.push(`${encodeURIComponent(String(qk))}=${encodeURIComponent(String(qv))}`);
+            }
+        }
+        queryPart = '?' + qPairs.join('&');
+    } else if (props.query && typeof props.query === 'string') {
+        queryPart = '?' + props.query.replace(/^\?/, '');
+    }
+
+    return `ivc://${host}/${baseObject}${subStr}${queryPart}`;
 }
 
 function parseObjectFromUri(uri) {
@@ -196,6 +256,13 @@ function parseObjectFromUri(uri) {
         for (const [k, item] of Object.entries(subParsed.events)) {
             asObject[`∆${k}`] = item.value;
         }
+        if (subParsed.search && subParsed.search.length > 0) {
+            asObject.search = subParsed.search;
+        }
+        if (subParsed.queryParams && Object.keys(subParsed.queryParams).length > 0) {
+            asObject.queryParams = subParsed.queryParams;
+            asObject.query_params = subParsed.queryParams;
+        }
         return {
             scheme: 'ivc',
             host: '$me',
@@ -204,6 +271,10 @@ function parseObjectFromUri(uri) {
             subobjects: subParsed.subobjects,
             props: subParsed.props,
             events: subParsed.events,
+            query: subParsed.query || '',
+            queryParams: subParsed.queryParams || {},
+            query_params: subParsed.queryParams || {},
+            search: subParsed.search || [],
             asObject
         };
     }
@@ -217,6 +288,13 @@ function parseObjectFromUri(uri) {
     for (const [k, item] of Object.entries(parsedServer.events || {})) {
         asObject[`∆${k}`] = item.value;
     }
+    if (parsedServer.search && parsedServer.search.length > 0) {
+        asObject.search = parsedServer.search;
+    }
+    if (parsedServer.queryParams && Object.keys(parsedServer.queryParams).length > 0) {
+        asObject.queryParams = parsedServer.queryParams;
+        asObject.query_params = parsedServer.queryParams;
+    }
 
     return {
         scheme: (parsedServer.protocol || 'ivc').toLowerCase(),
@@ -226,6 +304,10 @@ function parseObjectFromUri(uri) {
         subobjects: parsedServer.subobjects || [],
         props: parsedServer.props || {},
         events: parsedServer.events || {},
+        query: parsedServer.query || '',
+        queryParams: parsedServer.queryParams || {},
+        query_params: parsedServer.queryParams || {},
+        search: parsedServer.search || [],
         asObject
     };
 }
@@ -367,7 +449,7 @@ function parseServerUri(uri) {
     }
     const port = match[3] ? parseInt(match[3], 10) : defaultPort;
 
-    let channelRaw = match[4] || '#lobby';
+    let channelRaw = (match[4] || '#lobby').replace(/^\/+/, '');
 
     const subParsed = parseSubobjects(channelRaw);
     let baseChanRaw = subParsed.baseTarget || '#lobby';
@@ -389,7 +471,11 @@ function parseServerUri(uri) {
         uri,
         subobjects: subParsed.subobjects,
         props: subParsed.props,
-        events: subParsed.events
+        events: subParsed.events,
+        query: subParsed.query || '',
+        queryParams: subParsed.queryParams || {},
+        query_params: subParsed.queryParams || {},
+        search: subParsed.search || []
     };
 }
 

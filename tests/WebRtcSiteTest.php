@@ -695,6 +695,39 @@ assertTest($attachedTraceUri === 'ivc://$me/serverNode∆trace=tr-998877:active'
 $extractedTraceData = IrcServices::getTraceDataStream($attachedTraceUri);
 assertTest($extractedTraceData !== null && $extractedTraceData['parent_object'] === 'serverNode' && $extractedTraceData['subobject'] === 'trace' && $extractedTraceData['raw_value'] === 'tr-998877:active', 'IrcServices::getTraceDataStream extracted ∆trace subobject from parent object URI');
 
+// Test 19: Query Protocol Extension (?search=key1&search=key2 & ?param=value)
+echo "\n19. Testing Query Protocol Extension (?search=key1&search=key2 & ?param=value)...\n";
+
+// A. parseSubobjects with query string
+$querySubParsed = IrcServices::parseSubobjects('object§prop=val+m?param=active&search=key1&search=key2');
+assertTest($querySubParsed['base_target'] === 'object', 'parseSubobjects extracted base target with query string present');
+assertTest(isset($querySubParsed['props']['prop']) && $querySubParsed['props']['prop']['value'] === 'val', 'parseSubobjects extracted subobject properties with query string present');
+assertTest($querySubParsed['query'] === 'param=active&search=key1&search=key2', 'parseSubobjects extracted raw query string');
+assertTest(isset($querySubParsed['query_params']['param']) && $querySubParsed['query_params']['param'] === 'active', 'parseSubobjects parsed scalar query parameter');
+assertTest(is_array($querySubParsed['query_params']['search']) && $querySubParsed['query_params']['search'] === ['key1', 'key2'], 'parseSubobjects parsed repeated query parameters into array');
+assertTest($querySubParsed['search'] === ['key1', 'key2'], 'parseSubobjects populated search keys array');
+
+// B. parseServerUri with query parameters
+$queryServerUri = IrcServices::parseServerUri('ivc://node1.network.org:8080/general?search=key1&search=key2');
+assertTest($queryServerUri !== null && $queryServerUri['channel'] === '#general', 'parseServerUri parsed channel with search query extension');
+assertTest($queryServerUri['query'] === 'search=key1&search=key2', 'parseServerUri extracted query string');
+assertTest($queryServerUri['search'] === ['key1', 'key2'], 'parseServerUri extracted search keys array');
+
+$queryServerUri2 = IrcServices::parseServerUri('https://chat.fortress.net/#lobby?filter=open&search=alpha&search=beta');
+assertTest($queryServerUri2 !== null && $queryServerUri2['channel'] === '#lobby', 'parseServerUri parsed fragment channel with search query extension');
+assertTest(isset($queryServerUri2['query_params']['filter']) && $queryServerUri2['query_params']['filter'] === 'open', 'parseServerUri parsed filter query param');
+assertTest($queryServerUri2['search'] === ['alpha', 'beta'], 'parseServerUri extracted repeated search keys array from fragment URI');
+
+// C. formatObjectUri with search keys array and query params
+$formattedSearchUri = IrcServices::formatObjectUri(['object' => 'myobj', '§prop' => 'val', 'search' => ['key1', 'key2']]);
+assertTest($formattedSearchUri === 'ivc://$me/myobj§prop=val?search=key1&search=key2', 'formatObjectUri formatted search keys array into ?search=key1&search=key2 query string');
+
+// D. parseObjectFromUri with query parameters
+$parsedQueryObj = IrcServices::parseObjectFromUri('ivc://$me/searchObj§status=active?search=key1&search=key2');
+assertTest($parsedQueryObj['object'] === 'searchObj', 'parseObjectFromUri extracted object name with search query extension');
+assertTest($parsedQueryObj['search'] === ['key1', 'key2'], 'parseObjectFromUri extracted search keys array');
+assertTest(isset($parsedQueryObj['asObject']['search']) && $parsedQueryObj['asObject']['search'] === ['key1', 'key2'], 'parseObjectFromUri included search keys in asObject map');
+
 echo "\n-----------------------------------------\n";
 echo "Test Results: $testsPassed Passed, $testsFailed Failed.\n";
 echo "-----------------------------------------\n\n";

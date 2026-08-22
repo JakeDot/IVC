@@ -491,6 +491,58 @@ class IrcServices
     }
 
     /**
+     * Parses the /mode command arguments contextually to determine the target channel, mode string, and target user.
+     *
+     * @param array $parts
+     * @param string $defaultChannel
+     * @return array{targetChan: string, modeStr: string, targetUser: string}
+     */
+    public static function parseModeCommandContext(array $parts, string $defaultChannel): array
+    {
+        $targetChan = $defaultChannel;
+        $modeStr = '';
+        $targetUser = '';
+
+        $arg1 = $parts[1] ?? '';
+        $arg2 = $parts[2] ?? '';
+        $arg3 = $parts[3] ?? '';
+
+        $isObjectPrefix = function($str) {
+            if ($str === '') return false;
+            return str_starts_with($str, '#') || str_starts_with($str, '&') || str_starts_with($str, '@') || str_starts_with($str, '£') || str_starts_with($str, '$');
+        };
+
+        if ($arg1 !== '') {
+            if (str_starts_with($arg1, '+') || str_starts_with($arg1, '-')) {
+                // Flag-first syntax
+                $modeStr = $arg1;
+                if ($isObjectPrefix($arg2)) {
+                    $targetChan = $arg2;
+                    $targetUser = $arg3;
+                } else {
+                    $targetUser = $arg2;
+                }
+            } else {
+                // Target-first syntax
+                if ($isObjectPrefix($arg1)) {
+                    $targetChan = $arg1;
+                    $modeStr = $arg2;
+                    $targetUser = $arg3;
+                } else {
+                    $targetUser = $arg1;
+                    $modeStr = $arg2;
+                }
+            }
+        }
+
+        return [
+            'targetChan' => $targetChan,
+            'modeStr' => $modeStr,
+            'targetUser' => $targetUser
+        ];
+    }
+
+    /**
      * Check if a message is an IRC service command and execute it.
      *
      * @param string $senderNick
@@ -927,14 +979,11 @@ class IrcServices
         }
 
         if ($first === '/mode') {
-            $targetChan = $parts[1] ?? $channel;
-            $modeStr = $parts[2] ?? '';
-            $targetUser = $parts[3] ?? '';
-            if (str_starts_with($targetChan, '+') || str_starts_with($targetChan, '-')) {
-                $targetUser = $parts[2] ?? '';
-                $modeStr = $targetChan;
-                $targetChan = $channel;
-            }
+            $modeArgs = self::parseModeCommandContext($parts, $channel);
+            $targetChan = $modeArgs['targetChan'];
+            $modeStr = $modeArgs['modeStr'];
+            $targetUser = $modeArgs['targetUser'];
+
             if ($modeStr === '') {
                 $info = ChanServ::getInfo($targetChan);
                 $resp = $info['success'] ? "Modes for {$targetChan}: " . ($info['data']['modes'] ?? '+t') : "No modes set for {$targetChan}.";

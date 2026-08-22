@@ -98,10 +98,10 @@ class Database
         self::$driver = strtolower(trim($driver));
     }
 
-    public static function getCollection(string $name): MongoCollection
+    public static function getCollection(string $name)
     {
         if (!isset(self::$collections[$name])) {
-            self::$collections[$name] = new MongoCollection($name);
+            self::$collections[$name] = new \Fortress\Database\MongoCollection($name);
         }
         return self::$collections[$name];
     }
@@ -212,7 +212,6 @@ class Database
                     "updated_at" => $now
                 ]);
             }
-        }
         }
     }
 

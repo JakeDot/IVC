@@ -1,22 +1,15 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { spawn, ChildProcess } from 'child_process';
 import * as http from 'http';
-// @ts-ignore
-import Database from 'better-sqlite3';
 
 describe('IRC Channel Modes & Role Hierarchy: +i, +v, +a, +AON, Roles (+v/+o/+a/+n)', () => {
   let serverProcess: ChildProcess;
   const PORT = 18090;
 
   beforeAll((done) => {
-    try {
-      const db = new Database('./data/ivc_irc.sqlite');
-      db.prepare("DELETE FROM chanserv_channels WHERE channel_name IN ('#modechan', '#ident-channel')").run();
-      db.prepare("DELETE FROM channel_users WHERE channel_name IN ('#modechan', '#ident-channel')").run();
-      db.prepare("DELETE FROM nameserv_nicks WHERE nickname IN ('AliceOwner', 'BobUser', 'CharlieUser', 'DaveUnreg', 'DaveUnvoiced')").run();
-      db.close();
-    } catch(e) {}
     serverProcess = spawn('node', ['server.js'], { env: { ...process.env, PORT: String(PORT) } });
+
+    // Give the server time to start up and load php_engine
     setTimeout(done, 6000);
   }, 10000);
 
@@ -107,7 +100,7 @@ describe('IRC Channel Modes & Role Hierarchy: +i, +v, +a, +AON, Roles (+v/+o/+a/
   });
 
   it('should enforce +i (IDENTified only) mode', async () => {
-    // Set +i on #ident-channel
+    // Set +i on #ident-channel (Target First)
     let res = await fetchPost('/api/irc.php', {
       channel: '#ident-channel',
       sender: 'AliceOwner',
@@ -155,11 +148,11 @@ describe('IRC Channel Modes & Role Hierarchy: +i, +v, +a, +AON, Roles (+v/+o/+a/
   });
 
   it('should enforce +v (video-only: text messages blocked for non-+v users) mode', async () => {
-    // Set +v on #modechan
+    // Set +v on #modechan (Flag First)
     let res = await fetchPost('/api/irc.php', {
       channel: '#modechan',
       sender: 'AliceOwner',
-      text: '/mode #modechan +v'
+      text: '/mode +v #modechan'
     });
     expect(res.status).toBe(200);
 

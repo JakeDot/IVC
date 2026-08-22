@@ -1,179 +1,117 @@
 <?php
-
 declare(strict_types=1);
-
 namespace Fortress\Database;
-
 use Fortress\Models\Subscription;
 
-/**
- * Data Access Repository for paid subscriptions (subscriptions table).
- */
 class SubscriptionRepository
 {
     public static function findById(string $id): ?Subscription
     {
-        $row = Database::fetchOne(
-            "SELECT id, target_type, target_name, subscriber_nick, plan_id, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id, status, price_cents, currency, expires_at, created_at, updated_at FROM subscriptions WHERE id = :id",
-            [':id' => trim($id)]
-        );
-
+        $coll = Database::getCollection('subscriptions');
+        $row = $coll->findOne(['id' => trim($id)]);
         return $row !== null ? Subscription::fromArray($row) : null;
     }
 
-    public static function findByStripeSubscriptionId(string $stripeSubId): ?Subscription
+    public static function findByStripeCustomerId(string $stripeCustomerId): ?Subscription
     {
-        $row = Database::fetchOne(
-            "SELECT id, target_type, target_name, subscriber_nick, plan_id, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id, status, price_cents, currency, expires_at, created_at, updated_at FROM subscriptions WHERE stripe_subscription_id = :sid",
-            [':sid' => trim($stripeSubId)]
-        );
-
+        $coll = Database::getCollection('subscriptions');
+        $row = $coll->findOne(['stripe_customer_id' => trim($stripeCustomerId)]);
         return $row !== null ? Subscription::fromArray($row) : null;
     }
 
-    public static function findByStripeCheckoutSessionId(string $sessionId): ?Subscription
+    public static function findByStripeSubscriptionId(string $stripeSubscriptionId): ?Subscription
     {
-        $row = Database::fetchOne(
-            "SELECT id, target_type, target_name, subscriber_nick, plan_id, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id, status, price_cents, currency, expires_at, created_at, updated_at FROM subscriptions WHERE stripe_checkout_session_id = :csid",
-            [':csid' => trim($sessionId)]
-        );
-
+        $coll = Database::getCollection('subscriptions');
+        $row = $coll->findOne(['stripe_subscription_id' => trim($stripeSubscriptionId)]);
         return $row !== null ? Subscription::fromArray($row) : null;
     }
 
-    public static function findActiveByTarget(string $targetType, string $targetName): ?Subscription
+    public static function findByCheckoutSessionId(string $checkoutSessionId): ?Subscription
     {
-        $now = time();
-        $row = Database::fetchOne(
-            "SELECT id, target_type, target_name, subscriber_nick, plan_id, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id, status, price_cents, currency, expires_at, created_at, updated_at
-             FROM subscriptions
-             WHERE LOWER(target_type) = LOWER(:type) AND LOWER(target_name) = LOWER(:name) AND status IN ('active', 'trialing') AND expires_at > :now
-             ORDER BY expires_at DESC LIMIT 1",
-            [
-                ':type' => trim($targetType),
-                ':name' => trim($targetName),
-                ':now' => $now
-            ]
-        );
-
+        $coll = Database::getCollection('subscriptions');
+        $row = $coll->findOne(['stripe_checkout_session_id' => trim($checkoutSessionId)]);
         return $row !== null ? Subscription::fromArray($row) : null;
     }
 
-    /**
-     * Get all active and inactive subscriptions for a subscriber nickname.
-     *
-     * @return Subscription[]
-     */
-    public static function findAllBySubscriber(string $subscriberNick): array
+    public static function findByTarget(string $targetType, string $targetName): array
     {
-        $rows = Database::fetchAll(
-            "SELECT id, target_type, target_name, subscriber_nick, plan_id, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id, status, price_cents, currency, expires_at, created_at, updated_at
-             FROM subscriptions
-             WHERE LOWER(subscriber_nick) = LOWER(:nick)
-             ORDER BY created_at DESC",
-            [':nick' => trim($subscriberNick)]
-        );
-
+        $coll = Database::getCollection('subscriptions');
+        $rows = $coll->find([
+            'target_type' => trim($targetType),
+            'target_name' => ['$regex' => '^' . preg_quote(trim($targetName), '/') . '$', '$options' => 'i']
+        ], ['sort' => ['created_at' => -1]]);
+        
         $subs = [];
         foreach ($rows as $row) {
             $subs[] = Subscription::fromArray($row);
         }
-
         return $subs;
     }
 
     public static function save(Subscription $sub): bool
     {
-        $existing = self::findById($sub->getId());
-
-        if ($existing !== null) {
-            $stmt = Database::execute(
-                "UPDATE subscriptions SET
-                    target_type = :ttype,
-                    target_name = :tname,
-                    subscriber_nick = :subnick,
-                    plan_id = :plan,
-                    stripe_customer_id = :cid,
-                    stripe_subscription_id = :sid,
-                    stripe_checkout_session_id = :csid,
-                    status = :status,
-                    price_cents = :price,
-                    currency = :curr,
-                    expires_at = :exp,
-                    updated_at = :upd
-                 WHERE id = :id",
-                [
-                    ':ttype' => $sub->getTargetType(),
-                    ':tname' => $sub->getTargetName(),
-                    ':subnick' => $sub->getSubscriberNick(),
-                    ':plan' => $sub->getPlanId(),
-                    ':cid' => $sub->getStripeCustomerId(),
-                    ':sid' => $sub->getStripeSubscriptionId(),
-                    ':csid' => $sub->getStripeCheckoutSessionId(),
-                    ':status' => $sub->getStatus(),
-                    ':price' => $sub->getPriceCents(),
-                    ':curr' => $sub->getCurrency(),
-                    ':exp' => $sub->getExpiresAt(),
-                    ':upd' => time(),
-                    ':id' => $sub->getId()
-                ]
-            );
+        $coll = Database::getCollection('subscriptions');
+        $exists = self::findById($sub->getId()) !== null;
+        $doc = [
+            'id' => $sub->getId(),
+            'target_type' => $sub->getTargetType(),
+            'target_name' => $sub->getTargetName(),
+            'subscriber_nick' => $sub->getSubscriberNick(),
+            'plan_id' => $sub->getPlanId(),
+            'stripe_customer_id' => $sub->getStripeCustomerId(),
+            'stripe_subscription_id' => $sub->getStripeSubscriptionId(),
+            'stripe_checkout_session_id' => $sub->getStripeCheckoutSessionId(),
+            'status' => $sub->getStatus(),
+            'price_cents' => $sub->getPriceCents(),
+            'currency' => $sub->getCurrency(),
+            'expires_at' => $sub->getExpiresAt(),
+            'created_at' => $sub->getCreatedAt(),
+            'updated_at' => time()
+        ];
+        
+        if ($exists) {
+            $coll->updateOne(['id' => $sub->getId()], ['$set' => $doc]);
         } else {
-            $stmt = Database::execute(
-                "INSERT INTO subscriptions (id, target_type, target_name, subscriber_nick, plan_id, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id, status, price_cents, currency, expires_at, created_at, updated_at)
-                 VALUES (:id, :ttype, :tname, :subnick, :plan, :cid, :sid, :csid, :status, :price, :curr, :exp, :created, :upd)",
-                [
-                    ':id' => $sub->getId(),
-                    ':ttype' => $sub->getTargetType(),
-                    ':tname' => $sub->getTargetName(),
-                    ':subnick' => $sub->getSubscriberNick(),
-                    ':plan' => $sub->getPlanId(),
-                    ':cid' => $sub->getStripeCustomerId(),
-                    ':sid' => $sub->getStripeSubscriptionId(),
-                    ':csid' => $sub->getStripeCheckoutSessionId(),
-                    ':status' => $sub->getStatus(),
-                    ':price' => $sub->getPriceCents(),
-                    ':curr' => $sub->getCurrency(),
-                    ':exp' => $sub->getExpiresAt(),
-                    ':created' => $sub->getCreatedAt(),
-                    ':upd' => $sub->getUpdatedAt()
-                ]
-            );
+            $doc['updated_at'] = $sub->getUpdatedAt();
+            $coll->insertOne($doc);
         }
-
-        return $stmt->rowCount() > 0;
+        return true;
     }
 
-    public static function updateStatus(string $id, string $status, ?int $expiresAt = null): bool
+    public static function updateStatusBySubscriptionId(string $stripeSubscriptionId, string $status, int $expiresAt): bool
     {
-        $now = time();
-        if ($expiresAt !== null) {
-            $stmt = Database::execute(
-                "UPDATE subscriptions SET status = :status, expires_at = :exp, updated_at = :upd WHERE id = :id",
-                [
-                    ':status' => strtolower(trim($status)),
-                    ':exp' => $expiresAt,
-                    ':upd' => $now,
-                    ':id' => trim($id)
-                ]
-            );
-        } else {
-            $stmt = Database::execute(
-                "UPDATE subscriptions SET status = :status, updated_at = :upd WHERE id = :id",
-                [
-                    ':status' => strtolower(trim($status)),
-                    ':upd' => $now,
-                    ':id' => trim($id)
-                ]
-            );
-        }
+        $coll = Database::getCollection('subscriptions');
+        $coll->updateOne(
+            ['stripe_subscription_id' => trim($stripeSubscriptionId)],
+            ['$set' => ['status' => trim($status), 'expires_at' => $expiresAt, 'updated_at' => time()]]
+        );
+        return true;
+    }
 
-        return $stmt->rowCount() > 0;
+    public static function updateCheckoutSession(string $id, string $checkoutSessionId): bool
+    {
+        $coll = Database::getCollection('subscriptions');
+        $coll->updateOne(
+            ['id' => trim($id)],
+            ['$set' => ['stripe_checkout_session_id' => trim($checkoutSessionId), 'updated_at' => time()]]
+        );
+        return true;
+    }
+
+    public static function updateStripeIds(string $id, string $customerId, string $subscriptionId): bool
+    {
+        $coll = Database::getCollection('subscriptions');
+        $coll->updateOne(
+            ['id' => trim($id)],
+            ['$set' => ['stripe_customer_id' => trim($customerId), 'stripe_subscription_id' => trim($subscriptionId), 'updated_at' => time()]]
+        );
+        return true;
     }
 
     public static function delete(string $id): bool
     {
-        $stmt = Database::execute("DELETE FROM subscriptions WHERE id = :id", [':id' => trim($id)]);
-        return $stmt->rowCount() > 0;
+        $coll = Database::getCollection('subscriptions');
+        $coll->deleteOne(['id' => trim($id)]);
+        return true;
     }
 }

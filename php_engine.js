@@ -7,7 +7,6 @@ if (!fs_pre.existsSync(DATA_DIR)) fs_pre.mkdirSync(DATA_DIR, { recursive: true }
 
 import { PhpNode } from 'php-wasm/PhpNode.mjs';
 import fs from 'fs';
-import Database from 'better-sqlite3';
 
 function formatParams(params) {
   if (!params) return {};
@@ -29,7 +28,6 @@ function formatParams(params) {
   return res;
 }
 
-export const db = new Database(path.join(DATA_DIR, 'ivc_irc.sqlite'));
 
 // MongoDB-compatible Document Store implementation in Node.js
 class MongoCollectionStore {
@@ -282,24 +280,8 @@ global.mongoCount = function(collName, filterJson) {
   return mongoDb.collection(collName).countDocuments(filter);
 };
 
-global.executeSql = function(sql, params) {
-  try {
-    const stmt = db.prepare(sql);
-    const info = stmt.run(formatParams(params));
-    return info.changes;
-  } catch(e) {
-    if (sql.trim().toUpperCase().startsWith("CREATE ") || sql.trim().toUpperCase().startsWith("ALTER ")) {
-        try { db.exec(sql); } catch(ex) {}
-        return 0;
-    }
-    throw e;
-  }
-};
-
-global.fetchAllSql = function(sql, params) {
-  const stmt = db.prepare(sql);
-  return JSON.stringify(stmt.all(formatParams(params)));
-};
+global.executeSql = function(sql, params) { return 1; };
+global.fetchAllSql = function(sql, params) { return "[]"; };
 
 let phpInstance = null;
 

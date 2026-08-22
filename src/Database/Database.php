@@ -85,7 +85,7 @@ class MockPDO {
 class Database
 {
     private static $js = null;
-    private static string $driver = 'sqlite';
+    private static string $driver = 'mongodb';
     private static array $collections = [];
 
     public static function getDriver(): string
@@ -182,144 +182,11 @@ class Database
 
     public static function initialize(): void
     {
-        self::initializeSchema();
-    }
-
-    private static function initializeSchema(): void
-    {
-        self::initJs();
-        $autoInc = 'INTEGER PRIMARY KEY AUTOINCREMENT';
-
-        $queries = [
-            "CREATE TABLE IF NOT EXISTS irc_settings (
-                setting_key VARCHAR(64) PRIMARY KEY,
-                setting_value TEXT NOT NULL,
-                description TEXT NULL,
-                updated_at INT NOT NULL
-            );",
-            "CREATE TABLE IF NOT EXISTS nameserv_nicks (
-                nickname VARCHAR(64) PRIMARY KEY,
-                password_hash VARCHAR(255) NOT NULL,
-                email VARCHAR(128) NULL,
-                registered_at INT NOT NULL,
-                last_seen INT NOT NULL,
-                is_identified TINYINT DEFAULT 0,
-                role VARCHAR(16) DEFAULT 'USER',
-                subscription_tier VARCHAR(64) NULL,
-                subscription_status VARCHAR(32) DEFAULT 'none',
-                subscription_expires_at INT DEFAULT 0,
-                custom_domain VARCHAR(128) NULL
-            );",
-            "CREATE TABLE IF NOT EXISTS chanserv_channels (
-                channel_name VARCHAR(64) PRIMARY KEY,
-                owner_nick VARCHAR(64) NOT NULL,
-                registered_at INT NOT NULL,
-                topic TEXT NULL,
-                modes VARCHAR(32) DEFAULT '+nt',
-                passkey VARCHAR(64) NULL,
-                subscription_tier VARCHAR(64) NULL,
-                subscription_status VARCHAR(32) DEFAULT 'none',
-                subscription_expires_at INT DEFAULT 0
-            );",
-            "CREATE TABLE IF NOT EXISTS botserv_bots (
-                target VARCHAR(64) NOT NULL,
-                bot_nick VARCHAR(64) NOT NULL,
-                service_name VARCHAR(64) NOT NULL,
-                assigned_by VARCHAR(64) NOT NULL,
-                assigned_at INT NOT NULL,
-                PRIMARY KEY (target, bot_nick)
-            );",
-            "CREATE TABLE IF NOT EXISTS channel_users (
-                id {$autoInc},
-                channel_name VARCHAR(64) NOT NULL,
-                nickname VARCHAR(64) NOT NULL,
-                role VARCHAR(16) DEFAULT 'MEMBER',
-                added_at INT NOT NULL
-            );",
-            "CREATE TABLE IF NOT EXISTS memoserv_memos (
-                id {$autoInc},
-                sender_nick VARCHAR(64) NOT NULL,
-                recipient_nick VARCHAR(64) NOT NULL,
-                message TEXT NOT NULL,
-                sent_at INT NOT NULL,
-                is_read TINYINT DEFAULT 0
-            );",
-            "CREATE TABLE IF NOT EXISTS hostserv_vhosts (
-                nickname VARCHAR(64) PRIMARY KEY,
-                vhost VARCHAR(128) NOT NULL,
-                status VARCHAR(32) DEFAULT 'ACTIVE',
-                assigned_at INT NOT NULL
-            );",
-            "CREATE TABLE IF NOT EXISTS foreign_services (
-                service_name VARCHAR(64) PRIMARY KEY,
-                host VARCHAR(128) NOT NULL,
-                api_endpoint VARCHAR(255) NOT NULL,
-                status VARCHAR(32) DEFAULT 'ACTIVE',
-                registered_at INT NOT NULL,
-                last_ping INT NOT NULL,
-                metadata TEXT NULL
-            );",
-            "CREATE TABLE IF NOT EXISTS shared_files (
-                id VARCHAR(64) PRIMARY KEY,
-                channel_name VARCHAR(64) NOT NULL,
-                sharer_client_id VARCHAR(64) NOT NULL,
-                encrypted_metadata TEXT NOT NULL,
-                cloud_link TEXT NULL,
-                created_at INT NOT NULL
-            );",
-            "CREATE TABLE IF NOT EXISTS subscriptions (
-                id VARCHAR(64) PRIMARY KEY,
-                target_type VARCHAR(16) NOT NULL,
-                target_name VARCHAR(64) NOT NULL,
-                subscriber_nick VARCHAR(64) NOT NULL,
-                plan_id VARCHAR(64) NOT NULL,
-                stripe_customer_id VARCHAR(128) NULL,
-                stripe_subscription_id VARCHAR(128) NULL,
-                stripe_checkout_session_id VARCHAR(128) NULL,
-                status VARCHAR(32) DEFAULT 'active',
-                price_cents INT DEFAULT 499,
-                currency VARCHAR(10) DEFAULT 'usd',
-                expires_at INT NOT NULL,
-                created_at INT NOT NULL,
-                updated_at INT NOT NULL
-            );"
-        ];
-
-        foreach ($queries as $sql) {
-            self::$js->executeSql($sql, (object)[]);
-        }
-
-        self::ensureColumnsExist();
         self::seedDefaultSettings();
         self::registerDefaultForeignServices();
     }
 
-    private static function ensureColumnsExist(): void
-    {
-        $columns = [
-            'nameserv_nicks' => [
-                'subscription_tier' => 'VARCHAR(64) NULL',
-                'subscription_status' => "VARCHAR(32) DEFAULT 'none'",
-                'subscription_expires_at' => 'INT DEFAULT 0',
-                'custom_domain' => 'VARCHAR(128) NULL'
-            ],
-            'chanserv_channels' => [
-                'subscription_tier' => 'VARCHAR(64) NULL',
-                'subscription_status' => "VARCHAR(32) DEFAULT 'none'",
-                'subscription_expires_at' => 'INT DEFAULT 0'
-            ]
-        ];
-
-        foreach ($columns as $table => $cols) {
-            foreach ($cols as $colName => $colDef) {
-                try {
-                    self::$js->executeSql("ALTER TABLE {$table} ADD COLUMN {$colName} {$colDef}", (object)[]);
-                } catch (Throwable $e) {
-                }
-            }
-        }
-    }
-
+    
     private static function seedDefaultSettings(): void
     {
         $defaults = [
@@ -336,18 +203,16 @@ class Database
 
         $now = time();
         foreach ($defaults as $key => [$val, $desc]) {
-            $count = (int)self::fetchColumn("SELECT COUNT(*) FROM irc_settings WHERE setting_key = :key", [':key' => $key]);
-            if ($count === 0) {
-                self::execute(
-                    "INSERT INTO irc_settings (setting_key, setting_value, description, updated_at) VALUES (:key, :val, :desc, :time)",
-                    [
-                        ':key' => $key,
-                        ':val' => $val,
-                        ':desc' => $desc,
-                        ':time' => $now
-                    ]
-                );
+            $coll = self::getCollection("irc_settings");
+            if ($coll->countDocuments(["setting_key" => $key]) === 0) {
+                $coll->insertOne([
+                    "setting_key" => $key,
+                    "setting_value" => $val,
+                    "description" => $desc,
+                    "updated_at" => $now
+                ]);
             }
+        }
         }
     }
 
@@ -359,20 +224,27 @@ class Database
             ('CLAUDE', 'ai.external-domain.org', 'https://api.external-domain.org/claude', 'ACTIVE', $time, $time, 'Anthropic Claude Chat Bot'),
             ('CHATGPT', 'ai.external-domain.org', 'https://api.external-domain.org/chatgpt', 'ACTIVE', $time, $time, 'OpenAI ChatGPT Bot'),
             ('COPILOT', 'ai.external-domain.org', 'https://api.external-domain.org/copilot', 'ACTIVE', $time, $time, 'Microsoft Copilot Chat Bot')";
-        self::$js->executeSql($query, (object)[]);
+        
+        $coll = self::getCollection("foreign_services");
+        if ($coll->countDocuments([]) === 0) {
+            $coll->insertOne(["service_name" => "GEMINI", "host" => "ai.external-domain.org", "api_endpoint" => "https://api.external-domain.org/gemini", "status" => "ACTIVE", "registered_at" => $time, "last_ping" => $time, "metadata" => "Google Gemini Chat Bot"]);
+            $coll->insertOne(["service_name" => "CLAUDE", "host" => "ai.external-domain.org", "api_endpoint" => "https://api.external-domain.org/claude", "status" => "ACTIVE", "registered_at" => $time, "last_ping" => $time, "metadata" => "Anthropic Claude Chat Bot"]);
+            $coll->insertOne(["service_name" => "CHATGPT", "host" => "ai.external-domain.org", "api_endpoint" => "https://api.external-domain.org/chatgpt", "status" => "ACTIVE", "registered_at" => $time, "last_ping" => $time, "metadata" => "OpenAI ChatGPT Bot"]);
+            $coll->insertOne(["service_name" => "COPILOT", "host" => "ai.external-domain.org", "api_endpoint" => "https://api.external-domain.org/copilot", "status" => "ACTIVE", "registered_at" => $time, "last_ping" => $time, "metadata" => "Microsoft Copilot Chat Bot"]);
+        }
+
     }
 
     public static function resetDatabase(): void
     {
-        self::initJs();
-        self::$js->executeSql("DELETE FROM nameserv_nicks;", (object)[]);
-        self::$js->executeSql("DELETE FROM chanserv_channels;", (object)[]);
-        self::$js->executeSql("DELETE FROM channel_users;", (object)[]);
-        self::$js->executeSql("DELETE FROM memoserv_memos;", (object)[]);
-        self::$js->executeSql("DELETE FROM hostserv_vhosts;", (object)[]);
-        self::$js->executeSql("DELETE FROM foreign_services;", (object)[]);
-        self::$js->executeSql("DELETE FROM shared_files;", (object)[]);
-        self::$js->executeSql("DELETE FROM subscriptions;", (object)[]);
+        self::getCollection("nameserv_nicks")->deleteMany([]);
+        self::getCollection("chanserv_channels")->deleteMany([]);
+        self::getCollection("channel_users")->deleteMany([]);
+        self::getCollection("memoserv_memos")->deleteMany([]);
+        self::getCollection("hostserv_vhosts")->deleteMany([]);
+        self::getCollection("foreign_services")->deleteMany([]);
+        self::getCollection("shared_files")->deleteMany([]);
+        self::getCollection("subscriptions")->deleteMany([]);
         self::seedDefaultSettings();
         self::registerDefaultForeignServices();
     }

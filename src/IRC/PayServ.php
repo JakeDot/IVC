@@ -52,7 +52,11 @@ class PayServ
         }
 
         if (empty($targetName)) {
+<<<<<<< HEAD
             $targetName = ($level === 'user') ? $senderNick : '#lobby';
+=======
+            $targetName = ($level === 'user') ? $senderNick : '#';
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
         }
 
         if ($level === 'channel' && !str_starts_with($targetName, '#') && !str_starts_with($targetName, '&')) {

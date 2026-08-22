@@ -16,6 +16,7 @@ class ChannelRepository
      */
     public static function findByChannelName(string $channelName): ?Channel
     {
+<<<<<<< HEAD
         $row = Database::fetchOne(
             "SELECT channel_name, owner_nick, topic, passkey, modes, registered_at, subscription_tier, subscription_status, subscription_expires_at
              FROM chanserv_channels WHERE LOWER(channel_name) = LOWER(:chan)",
@@ -123,10 +124,93 @@ class ChannelRepository
         );
 
         return $stmt->rowCount() > 0;
+=======
+        $coll = Database::getCollection('chanserv_channels');
+        $row = $coll->findOne(['channel_name' => ['$regex' => '^' . preg_quote(trim($channelName), '/') . '$', '$options' => 'i']]);
+        return $row !== null ? Channel::fromArray($row) : null;
+    }
+
+    public static function save(Channel $channel): bool
+    {
+        $coll = Database::getCollection('chanserv_channels');
+        $exists = self::exists($channel->getChannelName());
+
+        $doc = [
+            'channel_name' => $channel->getChannelName(),
+            'owner_nick' => $channel->getOwnerNick(),
+            'topic' => $channel->getTopic(),
+            'passkey' => $channel->getPasskey(),
+            'modes' => $channel->getModes(),
+            'subscription_tier' => $channel->getSubscriptionTier(),
+            'subscription_status' => $channel->getSubscriptionStatus(),
+            'subscription_expires_at' => $channel->getSubscriptionExpiresAt()
+        ];
+
+        if ($exists) {
+            $coll->updateOne(
+                ['channel_name' => ['$regex' => '^' . preg_quote($channel->getChannelName(), '/') . '$', '$options' => 'i']],
+                ['$set' => $doc]
+            );
+        } else {
+            $doc['registered_at'] = $channel->getRegisteredAt();
+            $coll->insertOne($doc);
+        }
+        return true;
+    }
+
+    public static function updateTopic(string $channelName, string $topic): bool
+    {
+        $coll = Database::getCollection('chanserv_channels');
+        $coll->updateOne(
+            ['channel_name' => ['$regex' => '^' . preg_quote(trim($channelName), '/') . '$', '$options' => 'i']],
+            ['$set' => ['topic' => $topic]]
+        );
+        return true;
+    }
+
+    public static function updateModes(string $channelName, string $modes): bool
+    {
+        $coll = Database::getCollection('chanserv_channels');
+        $coll->updateOne(
+            ['channel_name' => ['$regex' => '^' . preg_quote(trim($channelName), '/') . '$', '$options' => 'i']],
+            ['$set' => ['modes' => $modes]]
+        );
+        return true;
+    }
+
+    public static function setPasskey(string $channelName, string $passkey): bool
+    {
+        $coll = Database::getCollection('chanserv_channels');
+        $coll->updateOne(
+            ['channel_name' => ['$regex' => '^' . preg_quote(trim($channelName), '/') . '$', '$options' => 'i']],
+            ['$set' => ['passkey' => $passkey]]
+        );
+        return true;
+    }
+
+    public static function removePasskey(string $channelName): bool
+    {
+        $coll = Database::getCollection('chanserv_channels');
+        $coll->updateOne(
+            ['channel_name' => ['$regex' => '^' . preg_quote(trim($channelName), '/') . '$', '$options' => 'i']],
+            ['$set' => ['passkey' => null]]
+        );
+        return true;
+    }
+
+    public static function drop(string $channelName): bool
+    {
+        $coll = Database::getCollection('chanserv_channels');
+        $coll->deleteOne(
+            ['channel_name' => ['$regex' => '^' . preg_quote(trim($channelName), '/') . '$', '$options' => 'i']]
+        );
+        return true;
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
     }
 
     public static function exists(string $channelName): bool
     {
+<<<<<<< HEAD
         $count = (int)Database::fetchColumn(
             "SELECT COUNT(*) FROM chanserv_channels WHERE LOWER(channel_name) = LOWER(:chan)",
             [':chan' => trim($channelName)]
@@ -143,11 +227,36 @@ class ChannelRepository
     public static function findAll(): array
     {
         $rows = Database::fetchAll("SELECT channel_name, owner_nick, topic, passkey, modes, registered_at, subscription_tier, subscription_status, subscription_expires_at FROM chanserv_channels ORDER BY registered_at DESC");
+=======
+        $coll = Database::getCollection('chanserv_channels');
+        $row = $coll->findOne(
+            ['channel_name' => ['$regex' => '^' . preg_quote(trim($channelName), '/') . '$', '$options' => 'i']]
+        );
+        return $row !== null;
+    }
+
+    public static function fetchAll(): array
+    {
+        $coll = Database::getCollection('chanserv_channels');
+        $rows = $coll->find([]);
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
         $channels = [];
         foreach ($rows as $row) {
             $channels[] = Channel::fromArray($row);
         }
+<<<<<<< HEAD
 
         return $channels;
     }
+=======
+        return $channels;
+    }
+
+    public static function count(): int
+    {
+        $coll = Database::getCollection('chanserv_channels');
+        $rows = $coll->find([]);
+        return count($rows);
+    }
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
 }

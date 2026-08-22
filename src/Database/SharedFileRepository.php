@@ -16,6 +16,7 @@ class SharedFileRepository
      */
     public static function findById(string $id): ?SharedFile
     {
+<<<<<<< HEAD
         $row = Database::fetchOne(
             "SELECT id, channel_name, sharer_client_id, encrypted_metadata, cloud_link, created_at FROM shared_files WHERE id = :id",
             [':id' => trim($id)]
@@ -71,10 +72,45 @@ class SharedFileRepository
             [':chan' => trim($channelName)]
         );
 
+=======
+        $coll = Database::getCollection('shared_files');
+        $row = $coll->findOne(['id' => trim($id)]);
+        return $row !== null ? SharedFile::fromArray($row) : null;
+    }
+
+    public static function save(SharedFile $file): bool
+    {
+        $coll = Database::getCollection('shared_files');
+        $exists = self::findById($file->getId()) !== null;
+
+        $doc = [
+            'id' => $file->getId(),
+            'channel_name' => $file->getChannelName(),
+            'sharer_client_id' => $file->getSharerClientId(),
+            'encrypted_metadata' => $file->getEncryptedMetadata(),
+            'cloud_link' => $file->getCloudLink(),
+            'created_at' => $file->getCreatedAt()
+        ];
+
+        if ($exists) {
+            $coll->updateOne(['id' => $file->getId()], ['$set' => $doc]);
+        } else {
+            $coll->insertOne($doc);
+        }
+        return true;
+    }
+
+    public static function findByChannel(string $channelName): array
+    {
+        $coll = Database::getCollection('shared_files');
+        $rows = $coll->find(['channel_name' => ['$regex' => '^' . preg_quote(trim($channelName), '/') . '$', '$options' => 'i']]);
+        
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
         $files = [];
         foreach ($rows as $row) {
             $files[] = SharedFile::fromArray($row);
         }
+<<<<<<< HEAD
 
         return $files;
     }
@@ -90,5 +126,15 @@ class SharedFileRepository
         );
 
         return $stmt->rowCount() > 0;
+=======
+        return $files;
+    }
+
+    public static function deleteById(string $id): bool
+    {
+        $coll = Database::getCollection('shared_files');
+        $coll->deleteOne(['id' => trim($id)]);
+        return true;
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
     }
 }

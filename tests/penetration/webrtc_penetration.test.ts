@@ -9,6 +9,7 @@ describe('WebRTC Penetration Tests', () => {
   let serverProcess: ChildProcess;
 
   beforeAll((done) => {
+<<<<<<< HEAD
     serverProcess = spawn('php', ['-S', '127.0.0.1:8080', '-t', 'public']);
     setTimeout(done, 1500);
   });
@@ -16,6 +17,25 @@ describe('WebRTC Penetration Tests', () => {
   afterAll(() => {
     if (serverProcess) {
       serverProcess.kill();
+=======
+    serverProcess = spawn('node', ['server.js'], { env: { ...process.env, PORT: '18080' } });
+    let ready = false;
+    serverProcess.stdout?.on('data', (d) => {
+      if (d.toString().includes('Server listening') && !ready) {
+        ready = true;
+        done();
+      }
+    });
+    setTimeout(() => { if (!ready) { ready = true; done(); } }, 10000);
+  }, 15000);
+
+  afterAll((done) => {
+    if (serverProcess) {
+      serverProcess.on('exit', () => done());
+      serverProcess.kill();
+    } else {
+      done();
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
     }
   });
 
@@ -24,7 +44,11 @@ describe('WebRTC Penetration Tests', () => {
       const data = JSON.stringify(bodyObj);
       const req = http.request({
         hostname: '127.0.0.1',
+<<<<<<< HEAD
         port: 8080,
+=======
+        port: 18080,
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
         path: path,
         method: 'POST',
         headers: {
@@ -77,5 +101,9 @@ describe('WebRTC Penetration Tests', () => {
     }
 
     expect(blocked).toBe(true);
+<<<<<<< HEAD
   }, 30000);
+=======
+  });
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
 });

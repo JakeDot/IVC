@@ -695,6 +695,7 @@ assertTest($attachedTraceUri === 'ivc://$me/serverNode∆trace=tr-998877:active'
 $extractedTraceData = IrcServices::getTraceDataStream($attachedTraceUri);
 assertTest($extractedTraceData !== null && $extractedTraceData['parent_object'] === 'serverNode' && $extractedTraceData['subobject'] === 'trace' && $extractedTraceData['raw_value'] === 'tr-998877:active', 'IrcServices::getTraceDataStream extracted ∆trace subobject from parent object URI');
 
+<<<<<<< HEAD
 // Test 19: Query Protocol Extension (?search=key1&search=key2 & ?param=value)
 echo "\n19. Testing Query Protocol Extension (?search=key1&search=key2 & ?param=value)...\n";
 
@@ -728,6 +729,55 @@ assertTest($parsedQueryObj['object'] === 'searchObj', 'parseObjectFromUri extrac
 assertTest($parsedQueryObj['search'] === ['key1', 'key2'], 'parseObjectFromUri extracted search keys array');
 assertTest(isset($parsedQueryObj['asObject']['search']) && $parsedQueryObj['asObject']['search'] === ['key1', 'key2'], 'parseObjectFromUri included search keys in asObject map');
 
+=======
+<<<<<<< HEAD
+=======
+// Test 19: Object Reactions (❤️ / <emoji> / HEART) & ivc://objectΔreactions Metadata
+echo "\n19. Testing Object Reactions (❤️, Emojis, HEART) & ivc://objectΔreactions Metadata...\n";
+\Fortress\Database\ObjectReactionRepository::clear('ivc://object/:comment-1');
+
+// A. Add heart reaction via command ❤️ ivc://object/:comment-1
+$reactCmd1 = IrcServices::processCommand('Alice', '#lobby', '❤️ ivc://object/:comment-1');
+assertTest($reactCmd1 !== null && $reactCmd1['is_service_command'] === true && $reactCmd1['reaction'] === '❤️', 'Executed ❤️ ivc://object/:comment-1 command');
+assertTest($reactCmd1['reactions_uri'] === 'ivc://object/:comment-1Δreactions={"❤️":1}', 'Returned formatted reactions URI for ❤️ reaction');
+
+// B. Add another reaction via HEART keyword
+$reactCmd2 = IrcServices::processCommand('Bob', '#lobby', 'HEART ivc://object/:comment-1');
+assertTest($reactCmd2 !== null && $reactCmd2['is_service_command'] === true && $reactCmd2['data']['total_count'] === 2, 'Executed HEART ivc://object/:comment-1 command by Bob (total 2)');
+
+// C. Add other emojis (e.g. 👍, 🔥)
+$reactCmd3 = IrcServices::processCommand('Charlie', '#lobby', '🔥 ivc://object/:comment-1');
+assertTest($reactCmd3 !== null && $reactCmd3['reaction'] === '🔥' && $reactCmd3['data']['total_count'] === 3, 'Executed 🔥 ivc://object/:comment-1 command');
+
+// D. Query reactions via helper and URI
+$commentReactions = IrcServices::getReactions('ivc://object/:comment-1');
+assertTest($commentReactions['total_count'] === 3 && isset($commentReactions['reactions']['❤️']) && isset($commentReactions['reactions']['🔥']), 'IrcServices::getReactions retrieved aggregated reaction counts');
+assertTest($commentReactions['reactions']['❤️']['count'] === 2, '❤️ count is 2 (Alice and Bob)');
+assertTest($commentReactions['reactions']['🔥']['count'] === 1, '🔥 count is 1 (Charlie)');
+
+// E. Parse and extract reactions from ivc://object/:comment-1Δreactions URI
+$extractedReactions = IrcServices::getReactionsFromUri('ivc://object/:comment-1Δreactions');
+assertTest($extractedReactions !== null && $extractedReactions['total_count'] === 3, 'IrcServices::getReactionsFromUri extracted metadata from ivc://object/:comment-1Δreactions');
+
+$extractedReactionsGreek = IrcServices::getReactionsFromUri('ivc://object/:comment-1∆reactions');
+assertTest($extractedReactionsGreek !== null && $extractedReactionsGreek['total_count'] === 3, 'IrcServices::getReactionsFromUri extracted metadata from ivc://object/:comment-1∆reactions');
+
+// F. Test /reactserv command interface
+$reactservList = IrcServices::processCommand('Alice', '#lobby', '/msg REACTSERV LIST ivc://object/:comment-1');
+assertTest($reactservList !== null && str_contains($reactservList['response'], '❤️: 2'), '/msg REACTSERV LIST returned reaction summary');
+
+// G. Native HTTP Reaction Support (PUT requests to ivc://objectΔreactions/<emoji> -> [ count => $count ])
+$putReaction1 = IrcServices::handleHttpReaction('ivc://object/:comment-2Δreactions/❤️', 'Dave');
+assertTest(is_array($putReaction1) && ($putReaction1['count'] ?? 0) === 1, 'ReactionServ::handleHttpReaction processed PUT ivc://object/:comment-2Δreactions/❤️ (count 1)');
+
+$putReaction2 = IrcServices::handleHttpReaction('ivc://object/:comment-2Δreactions/❤️', 'Eve');
+assertTest(is_array($putReaction2) && ($putReaction2['count'] ?? 0) === 2, 'ReactionServ::handleHttpReaction processed second PUT ivc://object/:comment-2Δreactions/❤️ (count 2)');
+
+$putReaction3 = IrcServices::handleHttpReaction('ivc://object/:comment-2Δreactions/🔥', 'Frank');
+assertTest(is_array($putReaction3) && ($putReaction3['count'] ?? 0) === 1, 'ReactionServ::handleHttpReaction processed PUT ivc://object/:comment-2Δreactions/🔥 (count 1)');
+
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
+>>>>>>> 3242792 (merge??)
 echo "\n-----------------------------------------\n";
 echo "Test Results: $testsPassed Passed, $testsFailed Failed.\n";
 echo "-----------------------------------------\n\n";

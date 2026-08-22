@@ -13,10 +13,43 @@ use Fortress\Models\ChannelUser;
  * CHANSERV (Channel Service) IRC System Bot
  * Handles channel registration, operator management, topic control, passkeys, modes, and paid channel subscriptions.
  */
+<<<<<<< HEAD
 class ChanServ
 {
     public const SERVICE_NAME = 'CHANSERV';
 
+=======
+class ChanServ extends IrcObject
+{
+    public const SERVICE_NAME = 'CHANSERV';
+
+    protected static function isAuthorizedToSetModes(string $target, string $requesterNick): bool {
+        return self::isOp($target, $requesterNick);
+    }
+    
+    protected static function isTargetRegistered(string $target): bool {
+        return self::isRegistered($target);
+    }
+    
+    protected static function getModesFromDb(string $target): ?string {
+        $chanModel = ChannelRepository::findByChannelName($target);
+        return $chanModel ? $chanModel->getModes() : null;
+    }
+    
+    protected static function updateModesInDb(string $target, string $modes): void {
+        ChannelRepository::updateModes($target, $modes);
+    }
+    
+    protected static function createAndSaveDefault(string $target, string $modes, string $requesterNick): void {
+        $chanModel = new Channel($target, $requesterNick !== '' ? $requesterNick : 'System', null, null, $modes, time());
+        ChannelRepository::save($chanModel);
+    }
+    
+    protected static function getTargetNameForMessage(string $target): string {
+        return $target;
+    }
+
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
     /**
      * Normalize channel name (ensure leading #)
      */
@@ -99,6 +132,7 @@ class ChanServ
         return Channel::setTopicCommand($channel, $topic, $requesterNick);
     }
 
+<<<<<<< HEAD
     /**
      * Set modes for a channel
      */
@@ -207,6 +241,12 @@ class ChanServ
 
     /**
      * Parse target and attached mode suffixes (e.g. #channel+Δmodes, @object+bookmarks, #room+v+t)
+=======
+    // Modes logic is now inherited from IrcObject
+
+    /**
+     * Parse target and attached mode suffixes (e.g. #channel+Δmodes, @object+r, #room+v+t)
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
      *
      * @param string $target
      * @return array{base_target: string, raw_target: string, modes: string, mode_flags: array}
@@ -222,9 +262,12 @@ class ChanServ
         if (($pos = strpos($baseTarget, '+')) !== false) {
             $modes = substr($baseTarget, $pos);
             $baseTarget = substr($baseTarget, 0, $pos);
+<<<<<<< HEAD
         } elseif (($pos = strpos($baseTarget, '-')) !== false) {
             $modes = substr($baseTarget, $pos);
             $baseTarget = substr($baseTarget, 0, $pos);
+=======
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
         }
 
         $flags = self::parseModeFlags($modes);
@@ -276,9 +319,209 @@ class ChanServ
         return ['success' => true, 'message' => "CHANSERV: Removed VOICE status (-v) from '{$targetNick}' in {$channel}."];
     }
 
+<<<<<<< HEAD
     public static function getInfo(string $channel): array
     {
         $channel = self::normalizeChannelName($channel);
+=======
+    /**
+     * Assign ADMIN role to user in channel
+     */
+    public static function admin(string $channel, string $targetNick, string $requesterNick = ''): array
+    {
+        return Channel::admin($channel, $targetNick, $requesterNick);
+    }
+
+    /**
+     * Remove ADMIN role from user in channel
+     */
+    public static function deadmin(string $channel, string $targetNick, string $requesterNick = ''): array
+    {
+        return Channel::deadmin($channel, $targetNick, $requesterNick);
+    }
+
+    /**
+     * Assign NETADMIN role to user in channel
+     */
+    public static function netadmin(string $channel, string $targetNick, string $requesterNick = ''): array
+    {
+        return Channel::netadmin($channel, $targetNick, $requesterNick);
+    }
+
+    /**
+     * Remove NETADMIN role from user in channel
+     */
+    public static function denetadmin(string $channel, string $targetNick, string $requesterNick = ''): array
+    {
+        return Channel::denetadmin($channel, $targetNick, $requesterNick);
+    }
+
+    /**
+     * Check access to any channel or object, enforcing +k (key), +r (registered), +i (identified), and +AON modes.
+     *
+     * @param string $target Target channel, object, or URI
+     * @param string|null $user Requester nickname or client ID
+     * @return array{success: bool, code?: int, message?: string, base_target: string, target?: string, modes?: string, mode_flags?: array}
+     */
+    public static function checkAccess(string $target, ?string $user = null): array
+    {
+        $parsed = self::parseTargetAndModes($target);
+        $baseTarget = $parsed['base_target'];
+        $firstChar = mb_substr($baseTarget, 0, 1);
+
+        $channel = in_array($firstChar, ['#', '&', '@', '£', '$'], true)
+            ? $baseTarget
+            : self::normalizeChannelName($baseTarget);
+
+        $suppliedKey = $parsed['mode_flags']['k'] ?? null;
+        $targetFlags = $parsed['mode_flags'];
+
+        $isKeyProtected = !empty($targetFlags['k']);
+        $requiredKey = $targetFlags['k'] ?? null;
+        $isRegisteredOnly = !empty($targetFlags['r']);
+        $isIdentifiedOnly = !empty($targetFlags['i']);
+        $isAdminOnly = !empty($targetFlags['A']);
+        $isOpOnly = !empty($targetFlags['O']);
+        $isNetAdminOnly = !empty($targetFlags['N']);
+
+        // Check channel record in DB if target is a channel
+        if (str_starts_with($channel, '#') || str_starts_with($channel, '&')) {
+            $chanModel = ChannelRepository::findByChannelName($channel);
+            if ($chanModel !== null) {
+                $currentModes = self::parseModeStringToArray($chanModel->getModes());
+                $chanFlags = self::parseModeFlags($chanModel->getModes());
+                if (!empty($currentModes['k'])) {
+                    $isKeyProtected = true;
+                    $requiredKey = $currentModes['k'];
+                }
+                if (!empty($chanFlags['r'])) {
+                    $isRegisteredOnly = true;
+                }
+                if (!empty($chanFlags['i'])) {
+                    $isIdentifiedOnly = true;
+                }
+                if (!empty($chanFlags['A'])) {
+                    $isAdminOnly = true;
+                }
+                if (!empty($chanFlags['O'])) {
+                    $isOpOnly = true;
+                }
+                if (!empty($chanFlags['N'])) {
+                    $isNetAdminOnly = true;
+                }
+            }
+        }
+
+        // Also check if any attached subobject has +r or +i mode
+        if (!empty($parsed['subobjects'])) {
+            foreach ($parsed['subobjects'] as $sub) {
+                if (!empty($sub['mode_flags']['r'])) {
+                    $isRegisteredOnly = true;
+                }
+                if (!empty($sub['mode_flags']['i'])) {
+                    $isIdentifiedOnly = true;
+                }
+            }
+        }
+
+        $cleanUser = null;
+        if ($user !== null && trim($user) !== '') {
+            $cleanUser = explode('@', explode(':', trim($user))[0])[0];
+        }
+
+        // 1. Key protection (+k) check
+        if ($isKeyProtected) {
+            if ($suppliedKey !== $requiredKey) {
+                return [
+                    'success' => false,
+                    'code' => 475,
+                    'message' => "CHANSERV: Channel '{$channel}' is protected. Query mode +k=pass is required.",
+                    'base_target' => $channel
+                ];
+            }
+        }
+
+        // 2. Registered-only (+r) access check
+        if ($isRegisteredOnly) {
+            $isReg = $cleanUser !== null && (NameServ::isIdentified($cleanUser) || NameServ::isRegistered($cleanUser));
+            if (!$isReg) {
+                return [
+                    'success' => false,
+                    'code' => 477,
+                    'message' => "CHANSERV: Object/Channel '{$channel}' is restricted to registered (+r) users.",
+                    'base_target' => $channel
+                ];
+            }
+        }
+
+        // 3. Identified-only (+i) access check
+        if ($isIdentifiedOnly) {
+            $isIdent = $cleanUser !== null && NameServ::isIdentified($cleanUser);
+            if (!$isIdent) {
+                return [
+                    'success' => false,
+                    'code' => 477,
+                    'message' => "CHANSERV: Object/Channel '{$channel}' is restricted to identified (+i) users.",
+                    'base_target' => $channel
+                ];
+            }
+        }
+
+        // 4. Require Channel Admin (+A) mode
+        if ($isAdminOnly) {
+            if ($cleanUser === null || !self::isAdmin($channel, $cleanUser)) {
+                return [
+                    'success' => false,
+                    'code' => 473,
+                    'message' => "CHANSERV: Cannot join channel '{$channel}' (+A) - Channel admin (+a) status required.",
+                    'base_target' => $channel
+                ];
+            }
+        }
+
+        // 5. Require Channel Operator (+O) mode
+        if ($isOpOnly) {
+            if ($cleanUser === null || !self::isOp($channel, $cleanUser)) {
+                return [
+                    'success' => false,
+                    'code' => 473,
+                    'message' => "CHANSERV: Cannot join channel '{$channel}' (+O) - Channel operator (+o) status required.",
+                    'base_target' => $channel
+                ];
+            }
+        }
+
+        // 6. Require Network Admin / Owner (+N) mode
+        if ($isNetAdminOnly) {
+            if ($cleanUser === null || !self::isNetAdmin($channel, $cleanUser)) {
+                return [
+                    'success' => false,
+                    'code' => 473,
+                    'message' => "CHANSERV: Cannot join channel '{$channel}' (+N) - Network admin / owner (+n) status required.",
+                    'base_target' => $channel
+                ];
+            }
+        }
+
+        return [
+            'success' => true,
+            'code' => 200,
+            'base_target' => $channel,
+            'target' => $target,
+            'modes' => $parsed['modes'],
+            'mode_flags' => $targetFlags
+        ];
+    }
+
+    public static function getInfo(string $channel): array
+    {
+        $access = self::checkAccess($channel);
+        if (!$access['success']) {
+            return $access;
+        }
+        $channel = $access['base_target'];
+        
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
         $chanModel = ChannelRepository::findByChannelName($channel);
 
         if ($chanModel === null) {
@@ -319,6 +562,33 @@ class ChanServ
     }
 
     /**
+<<<<<<< HEAD
+=======
+     * Check if user has VOICE (+v) or higher in channel
+     */
+    public static function hasVoice(string $channel, string $nickname): bool
+    {
+        return Channel::hasVoice($channel, $nickname);
+    }
+
+    /**
+     * Check if user has ADMIN (+a) or higher in channel
+     */
+    public static function isAdmin(string $channel, string $nickname): bool
+    {
+        return Channel::isAdmin($channel, $nickname);
+    }
+
+    /**
+     * Check if user has NETADMIN/OWNER (+n) in channel
+     */
+    public static function isNetAdmin(string $channel, string $nickname): bool
+    {
+        return Channel::isNetAdmin($channel, $nickname);
+    }
+
+    /**
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
      * Check if user is OP in channel
      */
     public static function isOp(string $channel, string $nickname): bool

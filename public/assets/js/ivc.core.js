@@ -17,6 +17,7 @@ const connectedServers = {};
 
 function parseModeFlagsJS(modeStr) {
     if (!modeStr) return {};
+<<<<<<< HEAD
     return {
         m: modeStr.includes('m'),
         v: modeStr.includes('v'),
@@ -25,6 +26,46 @@ function parseModeFlagsJS(modeStr) {
         d: modeStr.includes('d'),
         raw: modeStr.includes('raw'),
         deltaModes: modeStr.includes('Δmodes') || modeStr.includes('deltamodes') || modeStr.includes('∆')
+=======
+    
+    const statePlus = {};
+    const stateMinus = {};
+    let op = '+';
+    for (const char of modeStr) {
+        if (char === '+' || char === '-' || char === '0') {
+            op = char;
+        } else if (/[a-zA-Z]/.test(char)) {
+            if (op === '+') statePlus[char] = true;
+            else if (op === '-') stateMinus[char] = true;
+            else if (op === '0') { delete statePlus[char]; delete stateMinus[char]; }
+        }
+    }
+
+    return {
+        m: statePlus['m'] === true,
+        v: statePlus['v'] === true,
+        V: statePlus['V'] === true,
+        o: statePlus['o'] === true,
+        O: statePlus['O'] === true,
+        a: statePlus['a'] === true,
+        A: statePlus['A'] === true,
+        e: statePlus['e'] === true,
+        d: statePlus['d'] === true,
+        optOutD: stateMinus['d'] === true,
+        k: statePlus['k'] === true,
+        r: statePlus['r'] === true || statePlus['R'] === true,
+        R: statePlus['r'] === true || statePlus['R'] === true,
+        i: statePlus['i'] === true || statePlus['I'] === true,
+        I: statePlus['i'] === true || statePlus['I'] === true,
+        s: statePlus['s'] === true || statePlus['S'] === true,
+        n: statePlus['n'] === true,
+        N: statePlus['N'] === true,
+        t: statePlus['t'] === true,
+        raw: modeStr.includes('raw'),
+        deltaModes: modeStr.includes('Δmodes') || modeStr.includes('deltamodes') || modeStr.includes('∆'),
+        statePlus,
+        stateMinus
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
     };
 }
 
@@ -74,7 +115,15 @@ function parseSubobjects(input) {
     }
 
     const posSec = input.indexOf('§');
+<<<<<<< HEAD
     const posDelta = input.indexOf('∆');
+=======
+    const posDelta1 = input.indexOf('∆');
+    const posDelta2 = input.indexOf('Δ');
+    const posDelta = (posDelta1 !== -1 && posDelta2 !== -1)
+        ? Math.min(posDelta1, posDelta2)
+        : (posDelta1 !== -1 ? posDelta1 : posDelta2);
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
 
     let firstSubPos = null;
     if (posSec !== -1 && posDelta !== -1) {
@@ -92,7 +141,11 @@ function parseSubobjects(input) {
     const baseTarget = input.substring(0, firstSubPos);
     const subStr = input.substring(firstSubPos);
 
+<<<<<<< HEAD
     const tokens = subStr.split(/([§∆])/g).filter(Boolean);
+=======
+    const tokens = subStr.split(/([§∆Δ])/g).filter(Boolean);
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
 
     const subobjects = [];
     const props = {};
@@ -102,7 +155,11 @@ function parseSubobjects(input) {
         const symbol = tokens[i];
         const segment = tokens[i + 1] || '';
 
+<<<<<<< HEAD
         if (symbol !== '§' && symbol !== '∆') continue;
+=======
+        if (symbol !== '§' && symbol !== '∆' && symbol !== 'Δ') continue;
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
 
         const type = (symbol === '§') ? 'property' : 'event';
         let name = '';
@@ -118,7 +175,11 @@ function parseSubobjects(input) {
             name = match[1];
             value = match[2];
             modes = match[3] || '';
+<<<<<<< HEAD
         } else if ((match = segment.match(/^([a-zA-Z0-9_\-\.\/]+)([\+\-][a-zA-Z0-9_\-\+]+)?$/))) {
+=======
+        } else if ((match = segment.match(/^([a-zA-Z0-9_\-\.\/]+)([\+\-0][a-zA-Z0-9_\-\+0=]+)?$/))) {
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
             name = match[1];
             modes = match[2] || '';
             value = 'true';
@@ -315,6 +376,7 @@ function parseObjectFromUri(uri) {
 function applySubobjectModes(subobj, modeChange) {
     if (!subobj) return subobj;
     let currentModes = subobj.modes || '';
+<<<<<<< HEAD
     let add = true;
 
     for (const char of modeChange) {
@@ -339,6 +401,138 @@ function applySubobjectModes(subobj, modeChange) {
     return subobj;
 }
 
+=======
+    
+    const statePlus = {};
+    const stateMinus = {};
+    let op = '+';
+    for (const char of currentModes) {
+        if (char === '+' || char === '-') op = char;
+        else if (/[a-zA-Z]/.test(char)) {
+            if (op === '+') statePlus[char] = true;
+            else if (op === '-') stateMinus[char] = true;
+        }
+    }
+    
+    op = '+';
+    let i = 0;
+    while (i < modeChange.length) {
+        const char = modeChange[i];
+        if (char === '+' || char === '-' || char === '0') {
+            op = char;
+        } else if (/[a-zA-Z]/.test(char)) {
+            if (i + 1 < modeChange.length && modeChange[i+1] === '=') {
+                delete statePlus[char];
+                delete stateMinus[char];
+                i++;
+            } else {
+                if (op === '+') { statePlus[char] = true; if (char !== 'd') delete stateMinus[char]; }
+                else if (op === '-') { stateMinus[char] = true; if (char !== 'd') delete statePlus[char]; }
+                else if (op === '0') { delete statePlus[char]; delete stateMinus[char]; }
+            }
+        }
+        i++;
+    }
+    
+    let plus = '';
+    let minus = '';
+    for (const k of Object.keys(statePlus)) { if (statePlus[k]) plus += k; }
+    for (const k of Object.keys(stateMinus)) { if (stateMinus[k]) minus += k; }
+    
+    let res = '';
+    if (plus) res += '+' + plus;
+    if (minus) res += '-' + minus;
+    
+    subobj.modes = res;
+    subobj.modeFlags = parseModeFlagsJS(res);
+    return subobj;
+}
+
+function generateDataStream(parentObject, options = {}) {
+    const timestamp = Date.now() / 1000;
+    return {
+        timestamp,
+        parent_object: parentObject,
+        metrics: {
+            active_nodes: Math.floor(Math.random() * 50) + 1,
+            peer_mesh_connections: Math.floor(Math.random() * 200),
+            bandwidth_kbps: Math.floor(Math.random() * 10000),
+            latency_ms: Math.floor(Math.random() * 150),
+            health_score: 98,
+            memory_usage_mb: Math.floor(Math.random() * 1024)
+        },
+        ...options
+    };
+}
+
+function attachDataSubobject(objData, dataPayload = null, host = '$me') {
+    if (dataPayload === null) {
+        const parentName = typeof objData === 'string' ? objData : (objData.object || 'object');
+        dataPayload = generateDataStream(parentName);
+    }
+    let targetObj = {};
+    if (typeof objData === 'string') {
+        const parsed = parseObjectFromUri(objData);
+        targetObj = parsed.asObject || {};
+    } else if (typeof objData === 'object' && objData !== null) {
+        targetObj = Object.assign({}, objData);
+    } else {
+        targetObj = { object: 'object' };
+    }
+    targetObj['∆data'] = typeof dataPayload === 'string' ? dataPayload : JSON.stringify(dataPayload);
+    return formatObjectUri(targetObj, host);
+}
+
+function getDataViewStream(objUriOrData, userModes = {}) {
+    let events = {};
+    let parentObject = 'object';
+    let objectModes = {};
+
+    if (typeof objUriOrData === 'string') {
+        const parsed = parseObjectFromUri(objUriOrData);
+        events = parsed.events || {};
+        parentObject = parsed.object || 'object';
+        const rawModes = parsed.props.modes ? parsed.props.modes.value : '';
+        objectModes = parseModeFlagsJS(rawModes);
+    } else if (typeof objUriOrData === 'object' && objUriOrData !== null) {
+        events = objUriOrData.events || {};
+        parentObject = objUriOrData.object || 'object';
+        objectModes = objUriOrData.modes ? parseModeFlagsJS(objUriOrData.modes) : {};
+    }
+
+    if (!events.data) return null;
+
+    const dataItem = events.data;
+    const itemModes = dataItem.modeFlags || {};
+
+    // Authorization: User has +d, OR Object explicitly has +d (opt-in to sharing)
+    if (!userModes.d && !objectModes.d && !itemModes.d) {
+        return { error: '403 Access Denied: Requires +d user mode or +d object mode', code: 403 };
+    }
+
+    // Opt-Out: Object or item explicitly has -d (blocks sharing)
+    if (objectModes.optOutD || itemModes.optOutD) {
+        return { error: '403 Opted Out: Object opted out of Δdata sharing', code: 403 };
+    }
+
+    let rawVal = dataItem.value || '';
+    let decoded = null;
+    if (rawVal.startsWith('{') || rawVal.startsWith('[')) {
+        try { decoded = JSON.parse(rawVal); } catch(e) {}
+    }
+
+    return {
+        parent_object: parentObject,
+        symbol: '∆',
+        subobject: 'data',
+        raw_value: rawVal,
+        modes: dataItem.modes || '',
+        mode_flags: itemModes,
+        stream_details: decoded || { payload: rawVal }
+    };
+}
+
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
 function generateTraceStream(parentObject, extraData = {}) {
     const timestamp = Date.now() / 1000;
     const traceId = 'tr-' + Math.random().toString(36).substring(2, 14);
@@ -449,10 +643,21 @@ function parseServerUri(uri) {
     }
     const port = match[3] ? parseInt(match[3], 10) : defaultPort;
 
+<<<<<<< HEAD
     let channelRaw = (match[4] || '#lobby').replace(/^\/+/, '');
+=======
+<<<<<<< HEAD
+    let channelRaw = match[4] || '#lobby';
+>>>>>>> 3242792 (merge??)
 
     const subParsed = parseSubobjects(channelRaw);
     let baseChanRaw = subParsed.baseTarget || '#lobby';
+=======
+    let channelRaw = match[4] || '#';
+
+    const subParsed = parseSubobjects(channelRaw);
+    let baseChanRaw = subParsed.baseTarget || '#';
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
 
     if (baseChanRaw.includes('#')) {
         baseChanRaw = '#' + baseChanRaw.split('#').pop();
@@ -492,6 +697,7 @@ function generateAnonymousName() {
 
 // Helper: Normalize channel name
 function normalizeChannel(name) {
+<<<<<<< HEAD
     if (!name) return '#lobby';
     name = name.trim();
     if (name === 'stats' || name === '#stats') return '#stats';
@@ -499,6 +705,15 @@ function normalizeChannel(name) {
         name = '#' + name;
     }
     return name.replace(/[^a-zA-Z0-9\-_#&\/]/g, '').replace(/\/+/g, '/').replace(/\/$/, '');
+=======
+    if (!name) return '#';
+    name = name.trim();
+    if (name === 'stats' || name === '#stats') return '#stats';
+    if (!/^[#&$£@!+~%]/.test(name)) {
+        name = '#' + name;
+    }
+    return name.replace(/[^a-zA-Z0-9\-_#&$£@!+~%\/]/g, '').replace(/\/+/g, '/').replace(/\/$/, '');
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
 }
 
 // Global Client ID
@@ -535,4 +750,33 @@ const rtcConfig = {
     ]
 };
 
+<<<<<<< HEAD
 const localSharedFilesMap = {};
+=======
+const DELTA_SYMBOL = 'Δ';
+const DELTA_SYMBOL_ALT = '∆';
+const SECTION_SYMBOL = '§';
+const DELTA_SYMBOLS = [DELTA_SYMBOL, DELTA_SYMBOL_ALT];
+
+const localSharedFilesMap = {};
+
+function formatReactionsUri(objectUri, reactions = null) {
+    if (!objectUri) return `ivc://$me/object${DELTA_SYMBOL}reactions`;
+    let base = String(objectUri).trim().replace(/[Δ∆]reactions(?:=.*)?$/i, '').replace(/\/+$/, '');
+    if (reactions && typeof reactions === 'object' && Object.keys(reactions).length > 0) {
+        const counts = {};
+        for (const [em, info] of Object.entries(reactions)) {
+            const c = typeof info === 'object' ? (info.count || 1) : Number(info);
+            if (c > 0) counts[em] = c;
+        }
+        if (Object.keys(counts).length > 0) {
+            return `${base}${DELTA_SYMBOL}reactions=${JSON.stringify(counts)}`;
+        }
+    }
+    return `${base}${DELTA_SYMBOL}reactions`;
+}
+
+function getRedirectUri(objectUri, reactions = null) {
+    return formatReactionsUri(objectUri, reactions);
+}
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)

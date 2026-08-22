@@ -18,6 +18,10 @@ class UserNick
     private ?string $subscriptionTier;
     private string $subscriptionStatus;
     private int $subscriptionExpiresAt;
+<<<<<<< HEAD
+=======
+    private ?string $vhost;
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
 
     public function __construct(
         string $nickname,
@@ -28,7 +32,12 @@ class UserNick
         bool $isIdentified = false,
         ?string $subscriptionTier = null,
         string $subscriptionStatus = 'none',
+<<<<<<< HEAD
         int $subscriptionExpiresAt = 0
+=======
+        int $subscriptionExpiresAt = 0,
+        ?string $vhost = 'users.ivc.cx'
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
     ) {
         $this->nickname = trim($nickname);
         $this->passwordHash = $passwordHash;
@@ -39,6 +48,10 @@ class UserNick
         $this->subscriptionTier = $subscriptionTier;
         $this->subscriptionStatus = strtolower(trim($subscriptionStatus));
         $this->subscriptionExpiresAt = $subscriptionExpiresAt;
+<<<<<<< HEAD
+=======
+        $this->vhost = $vhost !== null ? trim($vhost) : 'users.ivc.cx';
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
     }
 
     public function getNickname(): string
@@ -51,6 +64,99 @@ class UserNick
         $this->nickname = trim($nickname);
     }
 
+<<<<<<< HEAD
+=======
+    public function getVhost(): ?string
+    {
+        return $this->vhost;
+    }
+
+    public function setVhost(?string $vhost): void
+    {
+        $this->vhost = $vhost !== null ? trim($vhost) : 'users.ivc.cx';
+    }
+
+    public function getCustomDomain(): ?string
+    {
+        return $this->getVhost();
+    }
+
+    public function setCustomDomain(?string $customDomain): void
+    {
+        $this->setVhost($customDomain);
+    }
+
+    public function getBaseUser(): string
+    {
+        $atPos = strrpos($this->nickname, '@');
+        if ($atPos !== false && $atPos > 0) {
+            return substr($this->nickname, 0, $atPos);
+        }
+        return $this->nickname;
+    }
+
+    public function getDomain(): string
+    {
+        if (!empty($this->vhost)) {
+            return $this->vhost;
+        }
+        $atPos = strrpos($this->nickname, '@');
+        if ($atPos !== false && $atPos > 0) {
+            $dom = trim(substr($this->nickname, $atPos + 1));
+            if ($dom !== '' && $dom !== '<anonymous>' && filter_var($dom, FILTER_VALIDATE_IP) === false) {
+                return $dom;
+            }
+        }
+        return '<anonymous>';
+    }
+
+    public function getStandardizedUsername(): string
+    {
+        $base = $this->getBaseUser();
+        $domain = $this->getDomain();
+        return "{$base}@{$domain}";
+    }
+
+    public static function parseIdent(string $identString): array
+    {
+        $identString = trim($identString);
+        if ($identString === '') {
+            return [
+                'user' => 'anonymous',
+                'domain' => '<anonymous>',
+                'standardized' => 'anonymous@<anonymous>'
+            ];
+        }
+
+        $atPos = strrpos($identString, '@');
+        if ($atPos !== false && $atPos > 0) {
+            $user = trim(substr($identString, 0, $atPos));
+            $domain = trim(substr($identString, $atPos + 1));
+
+            if ($user === '') {
+                $user = 'anonymous';
+            }
+
+            if ($domain === '' || $domain === '<anonymous>' || filter_var($domain, FILTER_VALIDATE_IP) !== false) {
+                $domain = '<anonymous>';
+            }
+
+            return [
+                'user' => $user,
+                'domain' => $domain,
+                'standardized' => "{$user}@{$domain}"
+            ];
+        }
+
+        // Single name or raw IP or @nick
+        return [
+            'user' => $identString,
+            'domain' => '<anonymous>',
+            'standardized' => "{$identString}@<anonymous>"
+        ];
+    }
+
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
     public function getPasswordHash(): string
     {
         return $this->passwordHash;
@@ -159,6 +265,13 @@ class UserNick
             'subscription_status' => $this->subscriptionStatus,
             'subscription_expires_at' => $this->subscriptionExpiresAt,
             'is_premium' => $this->isPremium() ? 1 : 0,
+<<<<<<< HEAD
+=======
+            'vhost' => $this->vhost,
+            'custom_domain' => $this->vhost,
+            'domain' => $this->getDomain(),
+            'standardized_username' => $this->getStandardizedUsername(),
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
         ];
     }
 
@@ -173,7 +286,12 @@ class UserNick
             !empty($data['is_identified']),
             isset($data['subscription_tier']) ? (string)$data['subscription_tier'] : null,
             (string)($data['subscription_status'] ?? 'none'),
+<<<<<<< HEAD
             isset($data['subscription_expires_at']) ? (int)$data['subscription_expires_at'] : 0
+=======
+            isset($data['subscription_expires_at']) ? (int)$data['subscription_expires_at'] : 0,
+            isset($data['vhost']) ? (string)$data['vhost'] : (isset($data['custom_domain']) ? (string)$data['custom_domain'] : (isset($data['domain']) ? (string)$data['domain'] : null))
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
         );
     }
 

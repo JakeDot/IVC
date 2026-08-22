@@ -1,9 +1,13 @@
 <?php
+<<<<<<< HEAD
 
+=======
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
 declare(strict_types=1);
 
 namespace Fortress\Database;
 
+<<<<<<< HEAD
 use PDO;
 use PDOException;
 use PDOStatement;
@@ -103,12 +107,543 @@ class Database
      * @param array<string|int, mixed> $params
      * @return array<int, array<string, mixed>>
      */
+=======
+class MongoStatement
+{
+    private array $results;
+    private int $affectedRows;
+    private int $cursor = 0;
+
+    public function __construct(array $results = [], int $affectedRows = 0)
+    {
+        $this->results = array_values($results);
+        $this->affectedRows = $affectedRows;
+    }
+
+    public function execute(array $params = []): bool
+    {
+        return true;
+    }
+
+    public function fetch(int $mode = 2): mixed
+    {
+        if ($this->cursor < count($this->results)) {
+            $row = $this->results[$this->cursor++];
+            return is_array($row) ? $row : false;
+        }
+        return false;
+    }
+
+    public function fetchAll(int $mode = 2): array
+    {
+        return $this->results;
+    }
+
+    public function fetchColumn(int $columnNumber = 0): mixed
+    {
+        $row = $this->fetch();
+        if ($row && is_array($row)) {
+            $vals = array_values($row);
+            return $vals[$columnNumber] ?? false;
+        }
+        return false;
+    }
+
+    public function rowCount(): int
+    {
+        return $this->affectedRows;
+    }
+}
+
+class MongoPrepared
+{
+    private string $sql;
+    private ?MongoStatement $stmt = null;
+
+    public function __construct(string $sql)
+    {
+        $this->sql = $sql;
+    }
+
+    public function execute(array $params = []): bool
+    {
+        $this->stmt = Database::execute($this->sql, $params);
+        return true;
+    }
+
+    public function fetch(int $mode = 2): mixed
+    {
+        if ($this->stmt === null) {
+            $this->stmt = Database::execute($this->sql, []);
+        }
+        return $this->stmt->fetch($mode);
+    }
+
+    public function fetchAll(int $mode = 2): array
+    {
+        if ($this->stmt === null) {
+            $this->stmt = Database::execute($this->sql, []);
+        }
+        return $this->stmt->fetchAll($mode);
+    }
+
+    public function fetchColumn(int $col = 0): mixed
+    {
+        if ($this->stmt === null) {
+            $this->stmt = Database::execute($this->sql, []);
+        }
+        return $this->stmt->fetchColumn($col);
+    }
+
+    public function rowCount(): int
+    {
+        return $this->stmt ? $this->stmt->rowCount() : 0;
+    }
+}
+
+class MongoConnection
+{
+    public function prepare(string $sql): MongoPrepared
+    {
+        return new MongoPrepared($sql);
+    }
+
+    public function query(string $sql): MongoStatement
+    {
+        return Database::execute($sql);
+    }
+
+    public function exec(string $sql): int
+    {
+        $stmt = Database::execute($sql);
+        return $stmt->rowCount();
+    }
+
+    public function lastInsertId(?string $name = null): string
+    {
+        return '';
+    }
+}
+
+class Database
+{
+    private static array $collections = [];
+    private static ?MongoConnection $connection = null;
+
+    public static function getDriver(): string
+    {
+        return 'mongodb';
+    }
+
+    public static function setDriver(string $driver): void
+    {
+    }
+
+    public static function initialize(): void
+    {
+    }
+
+    public static function resetDatabase(): void
+    {
+    }
+
+    public static function getConnection(): MongoConnection
+    {
+        if (self::$connection === null) {
+            self::$connection = new MongoConnection();
+        }
+        return self::$connection;
+    }
+
+    public static function getCollection(string $collectionName): MongoCollection
+    {
+        if (!isset(self::$collections[$collectionName])) {
+            self::$collections[$collectionName] = new MongoCollection($collectionName);
+        }
+        return self::$collections[$collectionName];
+    }
+
+    private static function normalizeParams(array $params): array
+    {
+        $normalized = [];
+        foreach ($params as $k => $v) {
+            $cleanKey = ltrim((string)$k, ':@$');
+            $normalized[$cleanKey] = $v;
+        }
+        return $normalized;
+    }
+
+    public static function execute(string $sql, array $params = []): MongoStatement
+    {
+        $sqlClean = trim(preg_replace('/\s+/', ' ', $sql));
+        $p = self::normalizeParams($params);
+
+        // SELECT
+        if (preg_match('/^SELECT\s+(.+?)\s+FROM\s+([a-zA-Z0-9_]+)(.*)$/i', $sqlClean, $m)) {
+            $selectCols = trim($m[1]);
+            $table = trim($m[2]);
+            $rest = trim($m[3]);
+
+            $whereClause = '';
+            $orderBy = '';
+            $limit = 0;
+
+            if (preg_match('/\bWHERE\s+(.+)$/i', $rest, $wm)) {
+                $whereClause = trim($wm[1]);
+                if (preg_match('/^(.*?)\s+ORDER\s+BY\s+(.+)$/i', $whereClause, $obm)) {
+                    $whereClause = trim($obm[1]);
+                    $orderBy = trim($obm[2]);
+                }
+                if (preg_match('/^(.*?)\s+LIMIT\s+(\d+)$/i', $whereClause, $lm)) {
+                    $whereClause = trim($lm[1]);
+                    $limit = (int)$lm[2];
+                }
+            } elseif (preg_match('/\bORDER\s+BY\s+(.+)$/i', $rest, $om)) {
+                $orderBy = trim($om[1]);
+                if (preg_match('/^(.*?)\s+LIMIT\s+(\d+)$/i', $orderBy, $lm)) {
+                    $orderBy = trim($lm[1]);
+                    $limit = (int)$lm[2];
+                }
+            } elseif (preg_match('/\bLIMIT\s+(\d+)$/i', $rest, $lm)) {
+                $limit = (int)$lm[1];
+            }
+            if ($orderBy !== '' && preg_match('/^(.*?)\s+LIMIT\s+(\d+)$/i', $orderBy, $lm)) {
+                $orderBy = trim($lm[1]);
+                $limit = (int)$lm[2];
+            }
+
+            $coll = self::getCollection($table);
+            $docs = $coll->find();
+
+            // Filter
+            if ($whereClause !== '') {
+                $docs = array_values(array_filter($docs, function($doc) use ($whereClause, $p) {
+                    return self::evalWhere($doc, $whereClause, $p);
+                }));
+            }
+
+            // ORDER BY
+            if ($orderBy !== '') {
+                $orderParts = explode(',', $orderBy);
+                usort($docs, function($a, $b) use ($orderParts) {
+                    foreach ($orderParts as $part) {
+                        $part = trim($part);
+                        $dir = 1;
+                        if (preg_match('/^([a-zA-Z0-9_]+)\s+(ASC|DESC)$/i', $part, $om)) {
+                            $field = $om[1];
+                            $dir = strtoupper($om[2]) === 'DESC' ? -1 : 1;
+                        } else {
+                            $field = $part;
+                        }
+                        $va = $a[$field] ?? null;
+                        $vb = $b[$field] ?? null;
+                        if ($va != $vb) {
+                            return ($va > $vb ? 1 : -1) * $dir;
+                        }
+                    }
+                    return 0;
+                });
+            }
+
+            if ($limit > 0) {
+                $docs = array_slice($docs, 0, $limit);
+            }
+
+            // Project columns
+            if (stripos($selectCols, 'COUNT(*)') !== false) {
+                return new MongoStatement([['COUNT(*)' => count($docs), 'count' => count($docs)]], count($docs));
+            }
+
+            if ($selectCols !== '*') {
+                $colNames = array_map('trim', explode(',', $selectCols));
+                $projected = [];
+                foreach ($docs as $d) {
+                    $row = [];
+                    foreach ($colNames as $colExpr) {
+                        if (preg_match('/^[\'"](.+?)[\'"]\s+AS\s+([a-zA-Z0-9_]+)$/i', $colExpr, $cm)) {
+                            $row[$cm[2]] = $cm[1];
+                        } elseif (preg_match('/^([a-zA-Z0-9_]+)\s+AS\s+([a-zA-Z0-9_]+)$/i', $colExpr, $cm)) {
+                            $row[$cm[2]] = $d[$cm[1]] ?? null;
+                        } else {
+                            $colClean = trim($colExpr);
+                            $row[$colClean] = $d[$colClean] ?? null;
+                        }
+                    }
+                    $projected[] = $row;
+                }
+                return new MongoStatement($projected, count($projected));
+            }
+
+            return new MongoStatement($docs, count($docs));
+        }
+
+        // INSERT
+        if (preg_match('/^INSERT\s+INTO\s+([a-zA-Z0-9_]+)\s*\((.+?)\)\s*VALUES\s*\((.+?)\)(.*)$/i', $sqlClean, $m)) {
+            $table = trim($m[1]);
+            $cols = array_map('trim', explode(',', $m[2]));
+            $valTokens = array_map('trim', explode(',', $m[3]));
+            $extra = isset($m[4]) ? trim($m[4]) : '';
+
+            $doc = [];
+            for ($i = 0; $i < count($cols); $i++) {
+                $colName = $cols[$i];
+                $token = $valTokens[$i] ?? null;
+                if ($token !== null && str_starts_with($token, ':')) {
+                    $pKey = ltrim($token, ':');
+                    $doc[$colName] = $p[$pKey] ?? null;
+                } elseif ($token !== null && preg_match('/^[\'"](.*)[\'"]$/', $token, $sm)) {
+                    $doc[$colName] = $sm[1];
+                } elseif ($token !== null && is_numeric($token)) {
+                    $doc[$colName] = str_contains($token, '.') ? (float)$token : (int)$token;
+                } else {
+                    $doc[$colName] = null;
+                }
+            }
+
+            $coll = self::getCollection($table);
+
+            if (stripos($extra, 'ON DUPLICATE KEY UPDATE') !== false || stripos($extra, 'ON CONFLICT') !== false) {
+                $filter = [];
+                if (isset($doc['target']) && isset($doc['bot_nick'])) {
+                    $filter = ['target' => $doc['target'], 'bot_nick' => $doc['bot_nick']];
+                } elseif (isset($doc['channel_name']) && isset($doc['nickname'])) {
+                    $filter = ['channel_name' => $doc['channel_name'], 'nickname' => $doc['nickname']];
+                } elseif (isset($doc['channel_name'])) {
+                    $filter = ['channel_name' => $doc['channel_name']];
+                } elseif (isset($doc['nickname'])) {
+                    $filter = ['nickname' => $doc['nickname']];
+                } elseif (isset($doc['setting_key'])) {
+                    $filter = ['setting_key' => $doc['setting_key']];
+                } elseif (isset($doc['service_name'])) {
+                    $filter = ['service_name' => $doc['service_name']];
+                } elseif (isset($doc['id'])) {
+                    $filter = ['id' => $doc['id']];
+                }
+                if (!empty($filter)) {
+                    $coll->updateOne($filter, ['$set' => $doc], ['upsert' => true]);
+                    return new MongoStatement([], 1);
+                }
+            }
+
+            $coll->insertOne($doc);
+            return new MongoStatement([], 1);
+        }
+
+        // UPDATE
+        if (preg_match('/^UPDATE\s+([a-zA-Z0-9_]+)\s+SET\s+(.+?)(?:\s+WHERE\s+(.+))?$/i', $sqlClean, $m)) {
+            $table = trim($m[1]);
+            $setClause = trim($m[2]);
+            $whereClause = isset($m[3]) ? trim($m[3]) : '';
+
+            $setPairs = explode(',', $setClause);
+            $updateFields = [];
+            foreach ($setPairs as $pair) {
+                $parts = explode('=', $pair, 2);
+                if (count($parts) === 2) {
+                    $col = trim($parts[0]);
+                    $valToken = trim($parts[1]);
+                    if (str_starts_with($valToken, ':')) {
+                        $pKey = ltrim($valToken, ':');
+                        $updateFields[$col] = $p[$pKey] ?? null;
+                    } elseif (preg_match('/^[\'"](.*)[\'"]$/', $valToken, $sm)) {
+                        $updateFields[$col] = $sm[1];
+                    } elseif (is_numeric($valToken)) {
+                        $updateFields[$col] = str_contains($valToken, '.') ? (float)$valToken : (int)$valToken;
+                    }
+                }
+            }
+
+            $coll = self::getCollection($table);
+            $docs = $coll->find();
+            $matchedCount = 0;
+
+            foreach ($docs as $d) {
+                if ($whereClause === '' || self::evalWhere($d, $whereClause, $p)) {
+                    $matchedCount++;
+                    $idFilter = [];
+                    if (isset($d['id'])) {
+                        $idFilter['id'] = $d['id'];
+                    } elseif (isset($d['channel_name']) && isset($d['nickname'])) {
+                        $idFilter['channel_name'] = $d['channel_name'];
+                        $idFilter['nickname'] = $d['nickname'];
+                    } elseif (isset($d['channel_name'])) {
+                        $idFilter['channel_name'] = $d['channel_name'];
+                    } elseif (isset($d['nickname'])) {
+                        $idFilter['nickname'] = $d['nickname'];
+                    } elseif (isset($d['setting_key'])) {
+                        $idFilter['setting_key'] = $d['setting_key'];
+                    } elseif (isset($d['target']) && isset($d['bot_nick'])) {
+                        $idFilter['target'] = $d['target'];
+                        $idFilter['bot_nick'] = $d['bot_nick'];
+                    }
+                    if (!empty($idFilter)) {
+                        $coll->updateOne($idFilter, ['$set' => $updateFields]);
+                    }
+                }
+            }
+
+            return new MongoStatement([], $matchedCount);
+        }
+
+        // DELETE
+        if (preg_match('/^DELETE\s+FROM\s+([a-zA-Z0-9_]+)(?:\s+WHERE\s+(.+))?$/i', $sqlClean, $m)) {
+            $table = trim($m[1]);
+            $whereClause = isset($m[2]) ? trim($m[2]) : '';
+
+            $coll = self::getCollection($table);
+            if ($whereClause === '') {
+                $cnt = $coll->countDocuments();
+                $coll->deleteMany([]);
+                return new MongoStatement([], $cnt);
+            }
+
+            $docs = $coll->find();
+            $deletedCount = 0;
+            foreach ($docs as $d) {
+                if (self::evalWhere($d, $whereClause, $p)) {
+                    $deletedCount++;
+                    $idFilter = [];
+                    if (isset($d['id'])) {
+                        $idFilter['id'] = $d['id'];
+                    } elseif (isset($d['channel_name']) && isset($d['nickname'])) {
+                        $idFilter['channel_name'] = $d['channel_name'];
+                        $idFilter['nickname'] = $d['nickname'];
+                    } elseif (isset($d['channel_name'])) {
+                        $idFilter['channel_name'] = $d['channel_name'];
+                    } elseif (isset($d['nickname'])) {
+                        $idFilter['nickname'] = $d['nickname'];
+                    } elseif (isset($d['setting_key'])) {
+                        $idFilter['setting_key'] = $d['setting_key'];
+                    } elseif (isset($d['target']) && isset($d['bot_nick'])) {
+                        $idFilter['target'] = $d['target'];
+                        $idFilter['bot_nick'] = $d['bot_nick'];
+                    }
+                    if (!empty($idFilter)) {
+                        $coll->deleteOne($idFilter);
+                    }
+                }
+            }
+
+            return new MongoStatement([], $deletedCount);
+        }
+
+        return new MongoStatement([], 0);
+    }
+
+    private static function evalWhere(array $doc, string $whereClause, array $params): bool
+    {
+        if (preg_match('/\bOR\b/i', $whereClause) && !preg_match('/^\(/', trim($whereClause))) {
+            $orParts = preg_split('/\bOR\b/i', $whereClause);
+            foreach ($orParts as $orPart) {
+                if (self::evalWhere($doc, trim($orPart), $params)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        if (preg_match('/\bAND\b/i', $whereClause)) {
+            $andParts = preg_split('/\bAND\b/i', $whereClause);
+            foreach ($andParts as $andPart) {
+                if (!self::evalWhere($doc, trim($andPart), $params)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        $clause = trim($whereClause);
+        while (str_starts_with($clause, '(') && str_ends_with($clause, ')') && substr_count($clause, '(') === substr_count($clause, ')')) {
+            // Check if outer parentheses actually wrap the whole expression
+            $depth = 0;
+            $wrapsAll = true;
+            for ($i = 0; $i < strlen($clause) - 1; $i++) {
+                if ($clause[$i] === '(') $depth++;
+                elseif ($clause[$i] === ')') $depth--;
+                if ($depth === 0) {
+                    $wrapsAll = false;
+                    break;
+                }
+            }
+            if ($wrapsAll) {
+                $clause = trim(substr($clause, 1, -1));
+            } else {
+                break;
+            }
+        }
+
+        if (preg_match('/^(?:LOWER|UPPER)\s*\(\s*([a-zA-Z0-9_]+)\s*\)\s*=\s*(?:LOWER|UPPER)\s*\(\s*:([a-zA-Z0-9_]+)\s*\)$/i', $clause, $m)) {
+            $col = $m[1];
+            $pKey = $m[2];
+            $val1 = strtolower((string)($doc[$col] ?? ''));
+            $val2 = strtolower((string)($params[$pKey] ?? ''));
+            return $val1 === $val2;
+        }
+
+        if (preg_match('/^(?:LOWER|UPPER)\s*\(\s*([a-zA-Z0-9_]+)\s*\)\s*=\s*:([a-zA-Z0-9_]+)$/i', $clause, $m)) {
+            $col = $m[1];
+            $pKey = $m[2];
+            $val1 = strtolower((string)($doc[$col] ?? ''));
+            $val2 = strtolower((string)($params[$pKey] ?? ''));
+            return $val1 === $val2;
+        }
+
+        if (preg_match('/^(?:LOWER|UPPER)\s*\(\s*([a-zA-Z0-9_]+)\s*\)\s*=\s*[\'"](.*)[\'"]$/i', $clause, $m)) {
+            $col = $m[1];
+            $target = $m[2];
+            $val1 = strtolower((string)($doc[$col] ?? ''));
+            return $val1 === strtolower($target);
+        }
+
+        if (preg_match('/^([a-zA-Z0-9_]+)\s*=\s*:([a-zA-Z0-9_]+)$/i', $clause, $m)) {
+            $col = $m[1];
+            $pKey = $m[2];
+            $val1 = $doc[$col] ?? null;
+            $val2 = $params[$pKey] ?? null;
+            if ($val1 === null && $val2 === null) return true;
+            if ($val1 === null || $val2 === null) return false;
+            return (string)$val1 == (string)$val2;
+        }
+
+        if (preg_match('/^([a-zA-Z0-9_]+)\s*=\s*[\'"](.*)[\'"]$/i', $clause, $m)) {
+            $col = $m[1];
+            $target = $m[2];
+            return strtolower((string)($doc[$col] ?? '')) === strtolower($target);
+        }
+
+        if (preg_match('/^([a-zA-Z0-9_]+)\s*=\s*(\d+)$/i', $clause, $m)) {
+            $col = $m[1];
+            $target = (int)$m[2];
+            return (int)($doc[$col] ?? 0) === $target;
+        }
+
+        if (preg_match('/^([a-zA-Z0-9_]+)\s*IN\s*\((.+?)\)$/i', $clause, $m)) {
+            $col = $m[1];
+            $items = array_map(function($i) {
+                return strtolower(trim($i, " '\t\n\r\0\x0B\""));
+            }, explode(',', $m[2]));
+            $val = strtolower((string)($doc[$col] ?? ''));
+            return in_array($val, $items, true);
+        }
+
+        return false;
+    }
+
+    public static function fetchOne(string $sql, array $params = []): ?array
+    {
+        $stmt = self::execute($sql, $params);
+        $res = $stmt->fetch();
+        return is_array($res) ? $res : null;
+    }
+
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
     public static function fetchAll(string $sql, array $params = []): array
     {
         $stmt = self::execute($sql, $params);
         return $stmt->fetchAll();
     }
 
+<<<<<<< HEAD
     /**
      * Fetch a single column scalar value using a prepared statement.
      *
@@ -404,5 +939,11 @@ class Database
         self::$pdo->exec("DELETE FROM subscriptions;");
         self::seedDefaultSettings();
         self::registerDefaultForeignServices();
+=======
+    public static function fetchColumn(string $sql, array $params = []): mixed
+    {
+        $stmt = self::execute($sql, $params);
+        return $stmt->fetchColumn();
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
     }
 }

@@ -10,7 +10,11 @@ The core mechanism for routing users to networks, local servers, and specific ch
 
 Objects targeted within the IVC protocol are classified by explicit prefix symbols. The backend `Sanitizer::sanitizeRoomId` strictly enforces multibyte validation on these prefixes:
 
+<<<<<<< HEAD
 *   **`#` (Global Channel)**: A standard, network-wide chat room (e.g., `#lobby`). Broadcasts signals to all connected peers.
+=======
+*   **`#` (Global Channel)**: A standard, network-wide chat room (e.g., `#`). Broadcasts signals to all connected peers.
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
 *   **`&` (Local Channel)**: A chat room restricted to the local server node (e.g., `&oper`).
 *   **`@` (User)**: Targets a specific user nick for direct interaction or memo routing (e.g., `@CyberFox`).
 *   **`£` (Network)**: Targets network-wide services or broadcast channels.
@@ -39,6 +43,41 @@ However, IVC supports `PUT` requests to handle offline notices, comments, and di
 
 If a `PUT` payload targets a **non-channel object** (an object prefixed with `@`, `£`, or `$`), the backend halts the WebRTC broadcast loop. Instead, the payload's text is seamlessly routed into the **`MemoServ` offline messaging database** as a `[PUT Notice]`. This allows external services or clients to leave messages for users or networks even when WebRTC peer-to-peer data channels are unavailable.
 
+<<<<<<< HEAD
+=======
+### 2.2 Native HTTP Reactions, Comment URIs & Automatic Reaction Redirects
+
+Addressable objects and comments support emoji reactions:
+
+1. **Comment Addressing & Network Comments:**
+   - `<object>` is a placeholder for any addressable object that has comments (e.g. `ivc://#channel/:comment-id`, `ivc://my-post/:comment-id`, `ivc://object/:comment-id`).
+   - The network itself can also have comments, addressable as `ivc://[£]:comment-id` (the `£` prefix is optional, e.g. `ivc://:comment-id` or `ivc://£:comment-id`).
+
+2. **IRC Chat Reaction Commands:**
+   - `❤️ ivc://:comment-id` or `❤️ ivc://object/:id`
+   - `HEART ivc://:comment-id`
+   - `<emoji> ivc://:comment-id` (e.g. `🔥 ivc://:comment-1`, `👍 ivc://£:comment-1`)
+   - `/react <emoji> <uri>` or `/heart <uri>`
+
+3. **Compact Encoded Representation (`Δreactions={...}`):**
+   - Reactions are represented in compact encoded format on the metadata URI:
+     `ivc://object/:idΔreactions={"❤️":2,"🔥":1}` or `ivc://:comment-idΔreactions={"❤️":2}`.
+
+4. **Automatic Reaction Extension & HTTP Redirects:**
+   - Comment URIs (e.g. `ivc://:comment-id`, `ivc://£:comment-id`, `ivc://object/:comment-id`) are automatically extended to their compact encoded reaction representation by using HTTP redirects (HTTP 302 / `Location: <extendedUri>`).
+   - Querying `GET /api/reactions.php?uri=ivc://:comment-id` or navigating directly to the comment URL provides the extended URI `redirect_uri` / `reactions_uri`.
+
+5. **Native HTTP PUT Reaction Endpoint:**
+   - Direct HTTP `PUT` requests to `ivc://:comment-idΔreactions/<emoji>` or `ivc://object/:idΔreactions/<emoji>` apply the reaction and return:
+     ```json
+     {
+       "count": 2,
+       "redirect": "ivc://:comment-1Δreactions={\"❤️\":2}",
+       "reactions_uri": "ivc://:comment-1Δreactions={\"❤️\":2}"
+     }
+     ```
+
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
 ---
 
 ## 3. Protocol Status Headers

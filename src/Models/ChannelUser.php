@@ -69,14 +69,34 @@ class ChannelUser
         $this->role = strtoupper(trim($role));
     }
 
+<<<<<<< HEAD
     public function isOp(): bool
     {
         return $this->role === 'OP';
+=======
+    public function isNetAdmin(): bool
+    {
+        return in_array($this->role, ['NETADMIN', 'NETWORK_ADMIN', 'NETOP', 'OWNER'], true);
+    }
+
+    public function isAdmin(): bool
+    {
+        return in_array($this->role, ['ADMIN', 'PROTECT', 'CHANADMIN', 'OWNER', 'NETADMIN', 'NETWORK_ADMIN', 'NETOP'], true);
+    }
+
+    public function isOp(): bool
+    {
+        return in_array($this->role, ['OP', 'ADMIN', 'PROTECT', 'CHANADMIN', 'OWNER', 'NETADMIN', 'NETWORK_ADMIN', 'NETOP'], true);
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
     }
 
     public function isVoice(): bool
     {
+<<<<<<< HEAD
         return $this->role === 'VOICE' || $this->role === 'OP';
+=======
+        return in_array($this->role, ['VOICE', 'OP', 'ADMIN', 'PROTECT', 'CHANADMIN', 'OWNER', 'NETADMIN', 'NETWORK_ADMIN', 'NETOP'], true);
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
     }
 
     public function getAddedAt(): int

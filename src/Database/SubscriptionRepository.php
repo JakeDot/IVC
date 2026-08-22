@@ -13,37 +13,53 @@ class SubscriptionRepository
 {
     public static function findById(string $id): ?Subscription
     {
+<<<<<<< HEAD
         $row = Database::fetchOne(
             "SELECT id, target_type, target_name, subscriber_nick, plan_id, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id, status, price_cents, currency, expires_at, created_at, updated_at FROM subscriptions WHERE id = :id",
             [':id' => trim($id)]
         );
 
+=======
+        $coll = Database::getCollection('subscriptions');
+        $row = $coll->findOne(['id' => trim($id)]);
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
         return $row !== null ? Subscription::fromArray($row) : null;
     }
 
     public static function findByStripeSubscriptionId(string $stripeSubId): ?Subscription
     {
+<<<<<<< HEAD
         $row = Database::fetchOne(
             "SELECT id, target_type, target_name, subscriber_nick, plan_id, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id, status, price_cents, currency, expires_at, created_at, updated_at FROM subscriptions WHERE stripe_subscription_id = :sid",
             [':sid' => trim($stripeSubId)]
         );
 
+=======
+        $coll = Database::getCollection('subscriptions');
+        $row = $coll->findOne(['stripe_subscription_id' => trim($stripeSubId)]);
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
         return $row !== null ? Subscription::fromArray($row) : null;
     }
 
     public static function findByStripeCheckoutSessionId(string $sessionId): ?Subscription
     {
+<<<<<<< HEAD
         $row = Database::fetchOne(
             "SELECT id, target_type, target_name, subscriber_nick, plan_id, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id, status, price_cents, currency, expires_at, created_at, updated_at FROM subscriptions WHERE stripe_checkout_session_id = :csid",
             [':csid' => trim($sessionId)]
         );
 
+=======
+        $coll = Database::getCollection('subscriptions');
+        $row = $coll->findOne(['stripe_checkout_session_id' => trim($sessionId)]);
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
         return $row !== null ? Subscription::fromArray($row) : null;
     }
 
     public static function findActiveByTarget(string $targetType, string $targetName): ?Subscription
     {
         $now = time();
+<<<<<<< HEAD
         $row = Database::fetchOne(
             "SELECT id, target_type, target_name, subscriber_nick, plan_id, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id, status, price_cents, currency, expires_at, created_at, updated_at
              FROM subscriptions
@@ -56,6 +72,15 @@ class SubscriptionRepository
             ]
         );
 
+=======
+        $coll = Database::getCollection('subscriptions');
+        $row = $coll->findOne([
+            'target_type' => ['$regex' => '^' . preg_quote(trim($targetType), '/') . '$', '$options' => 'i'],
+            'target_name' => ['$regex' => '^' . preg_quote(trim($targetName), '/') . '$', '$options' => 'i'],
+            'status' => ['$in' => ['active', 'trialing']],
+            'expires_at' => ['$gt' => $now]
+        ]);
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
         return $row !== null ? Subscription::fromArray($row) : null;
     }
 
@@ -66,6 +91,7 @@ class SubscriptionRepository
      */
     public static function findAllBySubscriber(string $subscriberNick): array
     {
+<<<<<<< HEAD
         $rows = Database::fetchAll(
             "SELECT id, target_type, target_name, subscriber_nick, plan_id, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id, status, price_cents, currency, expires_at, created_at, updated_at
              FROM subscriptions
@@ -74,6 +100,10 @@ class SubscriptionRepository
             [':nick' => trim($subscriberNick)]
         );
 
+=======
+        $coll = Database::getCollection('subscriptions');
+        $rows = $coll->find(['subscriber_nick' => ['$regex' => '^' . preg_quote(trim($subscriberNick), '/') . '$', '$options' => 'i']]);
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
         $subs = [];
         foreach ($rows as $row) {
             $subs[] = Subscription::fromArray($row);
@@ -84,6 +114,7 @@ class SubscriptionRepository
 
     public static function save(Subscription $sub): bool
     {
+<<<<<<< HEAD
         $existing = self::findById($sub->getId());
 
         if ($existing !== null) {
@@ -169,11 +200,55 @@ class SubscriptionRepository
         }
 
         return $stmt->rowCount() > 0;
+=======
+        $coll = Database::getCollection('subscriptions');
+        $existing = self::findById($sub->getId());
+
+        $doc = [
+            'id' => $sub->getId(),
+            'target_type' => $sub->getTargetType(),
+            'target_name' => $sub->getTargetName(),
+            'subscriber_nick' => $sub->getSubscriberNick(),
+            'plan_id' => $sub->getPlanId(),
+            'stripe_customer_id' => $sub->getStripeCustomerId(),
+            'stripe_subscription_id' => $sub->getStripeSubscriptionId(),
+            'stripe_checkout_session_id' => $sub->getStripeCheckoutSessionId(),
+            'status' => $sub->getStatus(),
+            'price_cents' => $sub->getPriceCents(),
+            'currency' => $sub->getCurrency(),
+            'expires_at' => $sub->getExpiresAt(),
+            'created_at' => $sub->getCreatedAt(),
+            'updated_at' => time()
+        ];
+
+        if ($existing !== null) {
+            $coll->updateOne(['id' => $sub->getId()], ['$set' => $doc]);
+        } else {
+            $coll->insertOne($doc);
+        }
+        return true;
+    }
+
+    public static function updateStatusAndExpiryBySubscriptionId(string $stripeSubId, string $status, int $expiresAt): bool
+    {
+        $coll = Database::getCollection('subscriptions');
+        $coll->updateOne(
+            ['stripe_subscription_id' => trim($stripeSubId)],
+            ['$set' => ['status' => $status, 'expires_at' => $expiresAt, 'updated_at' => time()]]
+        );
+        return true;
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
     }
 
     public static function delete(string $id): bool
     {
+<<<<<<< HEAD
         $stmt = Database::execute("DELETE FROM subscriptions WHERE id = :id", [':id' => trim($id)]);
         return $stmt->rowCount() > 0;
+=======
+        $coll = Database::getCollection('subscriptions');
+        $coll->deleteOne(['id' => trim($id)]);
+        return true;
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
     }
 }

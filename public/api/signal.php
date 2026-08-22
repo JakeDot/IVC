@@ -10,7 +10,10 @@ require_once __DIR__ . '/../../src/Database/Database.php';
 require_once __DIR__ . '/../../src/Database/BotServRepository.php';
 require_once __DIR__ . '/../../src/Database/TextServRepository.php';
 require_once __DIR__ . '/../../src/IRC/SettingsManager.php';
+<<<<<<< HEAD
 require_once __DIR__ . '/../../src/Database/ChannelRepository.php';
+=======
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
 require_once __DIR__ . '/../../src/IRC/NameServ.php';
 require_once __DIR__ . '/../../src/IRC/ChanServ.php';
 require_once __DIR__ . '/../../src/IRC/MotdServ.php';

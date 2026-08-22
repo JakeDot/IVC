@@ -10,8 +10,12 @@ const keyInput = document.getElementById('key-input');
 const nicknameInput = document.getElementById('nickname-input');
 const nickPasswordInput = document.getElementById('nick-password-input');
 const btnRandomName = document.getElementById('btn-random-name');
+<<<<<<< HEAD
 const btnCreateRoom = document.getElementById('btn-create-room');
 const btnJoinRoom = document.getElementById('btn-join-room');
+=======
+const btnJoinCreateRoom = document.getElementById('btn-join-create-room');
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
 
 const roomShareSection = document.getElementById('room-share-section');
 const shareUrlInput = document.getElementById('share-url');
@@ -48,6 +52,184 @@ const btnRefreshStats = document.getElementById('btn-refresh-stats');
 const serverStatsContent = document.getElementById('server-stats-content');
 const clientStatsContent = document.getElementById('client-stats-content');
 
+<<<<<<< HEAD
+=======
+// DOM Elements - Data Stage
+window.dataStage = document.getElementById('data-stage');
+const dataStageTitle = document.getElementById('data-stage-title');
+const dataStageModeBadge = document.getElementById('data-stage-mode-badge');
+const dataStageOptOutBanner = document.getElementById('data-stage-opt-out-banner');
+const dataStageContent = document.getElementById('data-stage-content');
+const kpiNodes = document.getElementById('kpi-nodes');
+const kpiPeers = document.getElementById('kpi-peers');
+const kpiBandwidth = document.getElementById('kpi-bandwidth');
+const kpiHealth = document.getElementById('kpi-health');
+const btnRefreshData = document.getElementById('btn-refresh-data');
+const aiChatHistory = document.getElementById('ai-chat-history');
+const aiSuggestions = document.getElementById('ai-suggestions');
+const aiChatInput = document.getElementById('ai-chat-input');
+const btnSendAiQuery = document.getElementById('btn-send-ai-query');
+
+let activeDataTelemetryTarget = null;
+let aiChatAbortController = null;
+
+window.loadDataTelemetry = async function(tabId) {
+    const parts = tabId.split('∆');
+    activeDataTelemetryTarget = parts[0];
+    const subobjectRaw = parts.length > 1 ? parts[1] : 'data';
+
+    dataStageTitle.textContent = `📡 Data View: ${activeDataTelemetryTarget}`;
+    dataStageModeBadge.textContent = 'Loading...';
+    
+    try {
+        const res = await fetch(`/api/data.php?target=${encodeURIComponent(activeDataTelemetryTarget)}&subobject=${encodeURIComponent(subobjectRaw)}&client=${encodeURIComponent(myNickname)}`);
+        const data = await res.json();
+        
+        if (!res.ok || data.error) {
+            dataStageModeBadge.textContent = 'Restricted';
+            dataStageModeBadge.className = 'badge bg-danger';
+            dataStageContent.classList.add('hidden');
+            dataStageOptOutBanner.classList.remove('hidden');
+            if (data.error) {
+                dataStageOptOutBanner.innerHTML = `<strong>Access Denied:</strong> ${data.error}`;
+            }
+            return;
+        }
+        
+        dataStageModeBadge.textContent = 'Live (+d)';
+        dataStageModeBadge.className = 'badge bg-success';
+        dataStageContent.classList.remove('hidden');
+        dataStageOptOutBanner.classList.add('hidden');
+        
+        // Update KPIs
+        kpiNodes.textContent = data.metrics.active_nodes;
+        kpiPeers.textContent = data.metrics.peer_mesh_connections;
+        kpiBandwidth.textContent = (data.metrics.bandwidth_kbps / 1000).toFixed(1) + ' Mbps';
+        kpiHealth.textContent = data.metrics.health_score + '%';
+        
+    } catch (e) {
+        dataStageModeBadge.textContent = 'Error';
+    }
+};
+
+if (btnRefreshData) {
+    btnRefreshData.addEventListener('click', () => {
+        if (activeDataTelemetryTarget) window.loadDataTelemetry(activeDataTelemetryTarget + '∆data');
+    });
+}
+
+async function sendAiDataQuery(queryStr = null) {
+    const query = queryStr || aiChatInput.value.trim();
+    if (!query || !activeDataTelemetryTarget) return;
+    
+    aiChatInput.value = '';
+    
+    const userMsg = document.createElement('div');
+    userMsg.className = 'ai-msg user-msg';
+    userMsg.style.alignSelf = 'flex-end';
+    userMsg.style.background = 'var(--primary-color)';
+    userMsg.style.padding = '8px 12px';
+    userMsg.style.borderRadius = '12px';
+    userMsg.style.color = '#fff';
+    userMsg.textContent = query;
+    aiChatHistory.appendChild(userMsg);
+    aiChatHistory.scrollTop = aiChatHistory.scrollHeight;
+    
+    const aiMsgContainer = document.createElement('div');
+    aiMsgContainer.className = 'ai-msg ai-response';
+    aiMsgContainer.style.background = 'var(--card-bg)';
+    aiMsgContainer.style.border = '1px solid var(--card-border)';
+    aiMsgContainer.style.padding = '10px 14px';
+    aiMsgContainer.style.borderRadius = '12px';
+    
+    const thoughtsDiv = document.createElement('div');
+    thoughtsDiv.className = 'ai-thoughts';
+    thoughtsDiv.style.fontSize = '0.85rem';
+    thoughtsDiv.style.color = 'var(--text-muted)';
+    thoughtsDiv.style.fontStyle = 'italic';
+    thoughtsDiv.style.marginBottom = '8px';
+    
+    const responseDiv = document.createElement('div');
+    responseDiv.className = 'ai-final-response';
+    responseDiv.style.color = 'var(--text-bright)';
+    
+    aiMsgContainer.appendChild(thoughtsDiv);
+    aiMsgContainer.appendChild(responseDiv);
+    aiChatHistory.appendChild(aiMsgContainer);
+    aiChatHistory.scrollTop = aiChatHistory.scrollHeight;
+    
+    if (aiChatAbortController) aiChatAbortController.abort();
+    aiChatAbortController = new AbortController();
+    
+    try {
+        const res = await fetch('/api/ai-analytics', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target: activeDataTelemetryTarget, query }),
+            signal: aiChatAbortController.signal
+        });
+        
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const dataStr = line.substring(6).trim();
+                    if (dataStr === '[DONE]') break;
+                    if (!dataStr) continue;
+                    
+                    try {
+                        const parsed = JSON.parse(dataStr);
+                        if (parsed.type === 'THOUGHT') {
+                            thoughtsDiv.innerHTML += `<div>💭 ${parsed.content}</div>`;
+                        } else if (parsed.type === 'FINAL_RESPONSE') {
+                            // Convert simple markdown-like syntax
+                            let html = parsed.content
+                                .replace(/\\n/g, '<br>')
+                                .replace(/\n/g, '<br>')
+                                .replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>')
+                                .replace(/`(.*?)`/g, '<code>$1</code>');
+                            responseDiv.innerHTML = html;
+                        } else if (parsed.type === 'SUGGESTION') {
+                            aiSuggestions.innerHTML = '';
+                            parsed.items.forEach(item => {
+                                const btn = document.createElement('button');
+                                btn.className = 'btn btn-secondary btn-sm';
+                                btn.textContent = item.text;
+                                btn.onclick = () => sendAiDataQuery(item.text);
+                                aiSuggestions.appendChild(btn);
+                            });
+                        }
+                        aiChatHistory.scrollTop = aiChatHistory.scrollHeight;
+                    } catch (e) {}
+                }
+            }
+        }
+    } catch (e) {
+        if (e.name !== 'AbortError') {
+            responseDiv.innerHTML = '<span style="color:var(--danger-color)">Error communicating with AI Data Explorer.</span>';
+        }
+    }
+}
+
+if (btnSendAiQuery) {
+    btnSendAiQuery.addEventListener('click', () => sendAiDataQuery());
+    aiChatInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendAiDataQuery();
+        }
+    });
+}
+
+
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
 // DOM Elements - Theme Controls
 const themeSelect = document.getElementById('theme-select');
 const btnThemeModal = document.getElementById('btn-theme-modal');
@@ -96,8 +278,16 @@ function renderTabsNav() {
         tabEl.setAttribute('tabindex', '0');
         tabEl.setAttribute('aria-selected', isActive ? 'true' : 'false');
 
+<<<<<<< HEAD
         const icon = tab.isStats ? '📊 ' : '#';
         const cleanTitle = tab.isStats ? 'Connection Stats' : chanId.replace(/^#/, '');
+=======
+        const icon = tab.isStats ? '📊 ' : '';
+        let displayName = tab.name || tab.alias || chanId;
+        if (window.objectNames && window.objectNames[chanId]) displayName = window.objectNames[chanId];
+        if (window.objectAliases && window.objectAliases[chanId]) displayName = window.objectAliases[chanId];
+        const cleanTitle = tab.isStats ? 'Connection Stats' : displayName;
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
 
         tabEl.setAttribute('aria-label', `Channel ${cleanTitle}`);
         tabEl.setAttribute('title', `Switch to ${cleanTitle}`);
@@ -116,10 +306,13 @@ function renderTabsNav() {
             const closeBtn = document.createElement('span');
             closeBtn.className = 'close-tab';
             closeBtn.textContent = '×';
+<<<<<<< HEAD
             closeBtn.title = 'Close Channel';
             closeBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 closeTab(chanId);
+=======
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
             closeBtn.setAttribute('role', 'button');
             closeBtn.setAttribute('tabindex', '0');
             closeBtn.setAttribute('aria-label', `Close channel ${cleanTitle}`);
@@ -159,7 +352,17 @@ function updateTabUI(channelId) {
     channelTopicBar.textContent = `Topic: ${tab.topic || 'Welcome to IVC IRC WebRTC!'}`;
 
     // Update Share link
+<<<<<<< HEAD
     let shareUrl = `${window.location.origin}/#${encodeURIComponent(channelId.replace(/^#/, ''))}`;
+=======
+    let shareUrl = '';
+    if (channelId.startsWith('#')) {
+        shareUrl = `${window.location.origin}/#${encodeURIComponent(channelId.substring(1))}`;
+    } else {
+        shareUrl = `${window.location.origin}/${encodeURIComponent(channelId)}`;
+    }
+    
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
     if (tab.key) {
         shareUrl += `?key=${encodeURIComponent(tab.key)}`;
     }
@@ -193,7 +396,20 @@ function renderChatMessages(tab) {
 
             const senderTag = document.createElement('div');
             senderTag.className = 'sender-tag';
+<<<<<<< HEAD
             senderTag.textContent = msg.sender || msg.sharerNick || 'Anonymous';
+=======
+            
+            let finalSender = msg.sender || msg.sharerNick || 'Anonymous';
+            const senderId = msg.senderId || msg.sharerClientId;
+            if (senderId) {
+                if (window.objectNames && window.objectNames[senderId]) finalSender = window.objectNames[senderId];
+                else if (window.objectAliases && window.objectAliases[senderId]) finalSender = window.objectAliases[senderId];
+                else if (tab && tab.peerNicks && tab.peerNicks[senderId]) finalSender = tab.peerNicks[senderId];
+            }
+            
+            senderTag.textContent = finalSender;
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
 
             const fileCard = document.createElement('div');
             fileCard.className = 'file-card';
@@ -272,7 +488,20 @@ function renderChatMessages(tab) {
 
             const senderTag = document.createElement('div');
             senderTag.className = 'sender-tag';
+<<<<<<< HEAD
             senderTag.textContent = msg.sender;
+=======
+            
+            let finalSender = msg.sender;
+            const senderId = msg.senderId;
+            if (senderId) {
+                if (window.objectNames && window.objectNames[senderId]) finalSender = window.objectNames[senderId];
+                else if (window.objectAliases && window.objectAliases[senderId]) finalSender = window.objectAliases[senderId];
+                else if (tab && tab.peerNicks && tab.peerNicks[senderId]) finalSender = tab.peerNicks[senderId];
+            }
+            
+            senderTag.textContent = finalSender;
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
 
             const content = document.createElement('div');
             content.textContent = msg.text;
@@ -292,14 +521,26 @@ function renderUserList(tab) {
     const selfLi = document.createElement('li');
     selfLi.className = 'user-item';
     const isSelfTalking = !!tab.speakingStates['local'];
+<<<<<<< HEAD
     selfLi.innerHTML = `<span class="op-tag">@</span> ${myNickname} (You) ${isSelfTalking ? '<span class="talking-dot" title="Speaking"></span>' : ''}`;
+=======
+    let myDisplayNick = myNickname;
+    if (window.objectAliases && window.objectAliases[myClientId]) myDisplayNick = window.objectAliases[myClientId];
+    selfLi.innerHTML = `<span class="op-tag">@</span> ${myDisplayNick} (You) ${isSelfTalking ? '<span class="talking-dot" title="Speaking"></span>' : ''}`;
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
     userList.appendChild(selfLi);
 
     // Add remote peers
     tab.peers.forEach(peerId => {
         const li = document.createElement('li');
         li.className = 'user-item';
+<<<<<<< HEAD
         const nick = tab.peerNicks[peerId] || peerId;
+=======
+        let nick = tab.peerNicks[peerId] || peerId;
+        if (window.objectNames && window.objectNames[peerId]) nick = window.objectNames[peerId];
+        if (window.objectAliases && window.objectAliases[peerId]) nick = window.objectAliases[peerId];
+>>>>>>> f79f4cf (local state jakedot@petar-vivo)
         const isPeerTalking = !!tab.speakingStates[peerId];
         li.innerHTML = `<span>👤</span> ${nick} ${isPeerTalking ? '<span class="talking-dot" title="Speaking"></span>' : ''}`;
         userList.appendChild(li);

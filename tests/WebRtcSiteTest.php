@@ -12,6 +12,7 @@ require_once __DIR__ . '/../src/Models/ChannelUser.php';
 require_once __DIR__ . '/../src/Models/IrcSetting.php';
 require_once __DIR__ . '/../src/Models/SharedFile.php';
 require_once __DIR__ . '/../src/Models/Subscription.php';
+require_once __DIR__ . '/../src/Database/MongoCollection.php';
 require_once __DIR__ . '/../src/Database/Database.php';
 require_once __DIR__ . '/../src/Database/SharedFileRepository.php';
 require_once __DIR__ . '/../src/Database/UserNickRepository.php';

@@ -1,4 +1,4 @@
-package cx.ivc;
+package ivc;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -18,8 +18,7 @@ import java.util.concurrent.CompletableFuture;
  *   net.set("§motd", "Hello", operNick).join();
  *   Map<String,String> all = net.all();
  */
-public class Network extends AbstractIvcObject {
-    public static final Network net = new Network();
+public class Network extends IrcObject {
 
     public static final String OBJECT_KEY = "\u00A3"; // £
 
@@ -60,9 +59,9 @@ public class Network extends AbstractIvcObject {
     /** Return all active §key=value server properties as a plain map. */
     public Map<String, String> all() {
         Map<String, String> out = new LinkedHashMap<>();
-        for (IvcMode mode : modes) {
-            if (mode.mod() == IvcMode.Modifier.ADD && mode.value() != null) {
-                out.put(mode.name(), mode.value());
+        for (Map.Entry<String, Object> e : modes.entrySet()) {
+            if (e.getValue() instanceof ModeEntry me && me.isSet() && me.val() != null) {
+                out.put(e.getKey(), me.val());
             }
         }
         return Map.copyOf(out);
@@ -74,7 +73,7 @@ public class Network extends AbstractIvcObject {
 
     /** Called by IvcMarshaller.fromResponse() for £ targets. */
     public static Network fromBody(Map<String, Object> body) {
-        return AbstractIvcObject.applyBody(new Network(), body);
+        return IrcObject.applyBody(new Network(), body);
     }
 
     /**

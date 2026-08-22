@@ -304,11 +304,7 @@ function renderChatMessages(tab) {
             senderTag.textContent = finalSender;
 
             const content = document.createElement('div');
-            if (msg.isHtml) {
-                content.innerHTML = msg.text;
-            } else {
-                content.textContent = msg.text;
-            }
+            content.textContent = msg.text;
 
             msgDiv.appendChild(senderTag);
             msgDiv.appendChild(content);
@@ -337,9 +333,8 @@ function renderUserList(tab) {
         let nick = tab.peerNicks[peerId] || peerId;
         if (window.objectNames && window.objectNames[peerId]) nick = window.objectNames[peerId];
         if (window.objectAliases && window.objectAliases[peerId]) nick = window.objectAliases[peerId];
-        const prefix = tab.peerPrefixes && tab.peerPrefixes[peerId] ? `<span class="op-tag">${tab.peerPrefixes[peerId]}</span> ` : '<span>👤</span> ';
         const isPeerTalking = !!tab.speakingStates[peerId];
-        li.innerHTML = `${prefix}${nick} ${isPeerTalking ? '<span class="talking-dot" title="Speaking"></span>' : ''}`;
+        li.innerHTML = `<span>👤</span> ${nick} ${isPeerTalking ? '<span class="talking-dot" title="Speaking"></span>' : ''}`;
         userList.appendChild(li);
     });
 }

@@ -1,4 +1,4 @@
-package cx.ivc;
+package ivc;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -20,6 +20,91 @@ public final class IvcMarshaller {
 
     private IvcMarshaller() {}
 
+    // ---------------------------------------------------------------
+    // Mode string codec
+    // ---------------------------------------------------------------
+
+    /**
+     * Parse an IVC mode string into a Map<key, Object> where values are
+     * either a {@link ModeEntry} (for §key=value pairs and single-char flags)
+     * or {@code Boolean} (legacy boolean shorthand).
+     *
+     * Input:  "+§maxchans=500+§motd=Welcome-t+o"
+     * Output: { "§maxchans" -> ModeEntry(true,false,"500"),
+     *           "§motd"     -> ModeEntry(true,false,"Welcome"),
+     *           "t"         -> ModeEntry(false,true,null),
+     *           "o"         -> ModeEntry(true,false,null) }
+     */
+    public static Map<String, Object> parseModeString(String raw) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (raw == null || raw.isBlank()) return result;
+
+        // Use codepoint iteration for proper Unicode handling (§ is U+00A7).
+        int[] cps = raw.codePoints().toArray();
+        int i     = 0;
+        char sign = '+';
+
+        final int CP_PLUS    = '+';
+        final int CP_MINUS   = '-';
+        final int CP_ZERO    = '0';
+        final int CP_SECTION = '\u00A7'; // §
+
+        while (i < cps.length) {
+            int cp = cps[i];
+
+            if (cp == CP_PLUS)    { sign = '+'; i++; continue; }
+            if (cp == CP_MINUS)   { sign = '-'; i++; continue; }
+            if (cp == CP_ZERO)    { sign = '0'; i++; continue; }
+
+            if (cp == CP_SECTION) {
+                // Consume §key[=value] until next sign delimiter
+                StringBuilder token = new StringBuilder().appendCodePoint(cp);
+                i++;
+                while (i < cps.length && cps[i] != CP_PLUS && cps[i] != CP_MINUS && cps[i] != CP_ZERO) {
+                    token.appendCodePoint(cps[i++]);
+                }
+                String t    = token.toString();
+                int eqPos   = t.indexOf('=');
+                if (eqPos != -1) {
+                    String key = t.substring(0, eqPos);
+                    String val = t.substring(eqPos + 1);
+                    result.put(key, new ModeEntry(sign == '+', sign == '-', val));
+                } else {
+                    result.put(t, new ModeEntry(sign == '+', sign == '-', null));
+                }
+                continue;
+            }
+
+            // Single-character boolean flag mode
+            String key = new String(Character.toChars(cp));
+            result.put(key, new ModeEntry(sign == '+', sign == '-', null));
+            i++;
+        }
+
+        return result;
+    }
+
+    /**
+     * Pack a mode map back into an IVC mode string.
+     *
+     * Input:  { "§motd" -> ModeEntry(true,false,"Hello"), "o" -> ModeEntry(true,false,null) }
+     * Output: "+§motd=Hello+o"
+     */
+    public static String toModeString(Map<String, Object> modes) {
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, Object> e : modes.entrySet()) {
+            String key = e.getKey();
+            Object val = e.getValue();
+            if (val instanceof Boolean b) {
+                sb.append(b ? '+' : '-').append(key);
+            } else if (val instanceof ModeEntry me) {
+                char sign = me.plus() ? '+' : (me.minus() ? '-' : '0');
+                sb.append(sign).append(key);
+                if (me.val() != null) sb.append('=').append(me.val());
+            }
+        }
+        return sb.toString();
+    }
 
     // ---------------------------------------------------------------
     // ivc:// URI parser
@@ -176,7 +261,7 @@ public final class IvcMarshaller {
      * Hydrate the correct IrcObject subclass from a raw parsed API response.
      * Returns null if no matching subclass is found.
      */
-    public static AbstractIvcObject fromResponse(Map<String, Object> body) {
+    public static IrcObject fromResponse(Map<String, Object> body) {
         Object bt = body.get("base_target");
         if (bt == null) return null;
         String baseTarget = bt.toString().trim();

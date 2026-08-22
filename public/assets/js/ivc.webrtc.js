@@ -42,7 +42,6 @@ async function openTab(channelId, switchImmediately = true, key = '') {
         dataChannels: {},    // peerClientId -> RTCDataChannel
         remoteStreams: {},   // peerClientId -> MediaStream
         peerNicks: {},       // peerClientId -> nickname
-        peerPrefixes: {},    // peerClientId -> role prefix (+, @, etc.)
         speakingStates: {},  // 'local' or peerClientId -> boolean
         audioAnalyzers: {},  // 'local' or peerClientId -> analyzer obj
         localStream: null,
@@ -329,12 +328,10 @@ async function handleIncomingSignal(channelId, signal) {
     const peerId = signal.sender;
 
     switch (signal.type) {
-        case 'join':
         case 'peer-joined':
         case 'ping':
             if (peerId) {
                 tab.peerNicks[peerId] = signal.nickname || peerId;
-                if (signal.prefix !== undefined) tab.peerPrefixes[peerId] = signal.prefix;
                 if (!tab.peers.includes(peerId)) {
                     tab.peers.push(peerId);
                     addMessageToTab(channelId, {
@@ -525,24 +522,7 @@ async function handleIncomingSignal(channelId, signal) {
             break;
 
         case 'peer-left':
-        case 'leave':
             removePeerFromTab(channelId, peerId);
-            break;
-
-        case 'whois_response':
-            if (signal.target && signal.html) {
-                const whoisTabId = `ivc://@${signal.target}Δwhois`;
-                if (!openTabs[whoisTabId]) {
-                    openTab(whoisTabId, false);
-                }
-                const whoisTab = openTabs[whoisTabId];
-                addMessageToTab(whoisTabId, {
-                    sender: 'SYSTEM',
-                    text: signal.html,
-                    type: 'system',
-                    isHtml: true
-                });
-            }
             break;
     }
 }
@@ -1227,29 +1207,6 @@ async function handleChatSubmit() {
             addMessageToTab(activeTabId, {
                 sender: 'SYSTEM',
                 text: `Usage: /nick <new_nickname>`,
-                type: 'system'
-            });
-        }
-        return;
-    }
-
-    // Check if message is a /whois command
-    if (text.startsWith('/whois ') || text === '/whois') {
-        const parts = text.split(/\s+/);
-        const targetNick = parts[1] || '';
-        if (targetNick) {
-            openTab(`ivc://@${targetNick}Δwhois`, false);
-            // Request whois from signaling server
-            sendSignal(activeTabId, {
-                type: 'whois',
-                room: activeTabId,
-                client: myClientId,
-                target: targetNick
-            });
-        } else {
-            addMessageToTab(activeTabId, {
-                sender: 'SYSTEM',
-                text: `Usage: /whois <nickname>`,
                 type: 'system'
             });
         }

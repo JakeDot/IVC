@@ -308,7 +308,6 @@ export async function getPhp() {
 
   phpInstance = new PhpNode();
   phpInstance.addEventListener('error', e => console.error('PHP ERR:', e.detail[0]));
-  phpInstance.addEventListener('output', e => console.log('PHP OUT:', e.detail[0]));
   
   try { await phpInstance.mkdir('/src'); } catch(e){}
   await copyDir(phpInstance, './src', '/src');

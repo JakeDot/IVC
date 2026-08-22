@@ -92,11 +92,28 @@ btnJoinCreateRoom.addEventListener('click', async () => {
     performIrcServiceCommands(chan, nickPasswordInput.value, chanKey, !!chanKey);
 });
 
-btnCopyLink.addEventListener('click', () => {
+btnCopyLink.addEventListener('click', async () => {
     shareUrlInput.select();
-    navigator.clipboard.writeText(shareUrlInput.value);
-    btnCopyLink.textContent = '✅ Copied!';
-    setTimeout(() => { btnCopyLink.textContent = '📋 Copy Channel Link'; }, 2000);
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(shareUrlInput.value);
+        } else {
+            document.execCommand('copy');
+        }
+        btnCopyLink.textContent = '✅ Copied!';
+        btnCopyLink.setAttribute('aria-label', 'Channel link copied to clipboard');
+        setTimeout(() => {
+            btnCopyLink.textContent = '📋 Copy Channel Link';
+            btnCopyLink.setAttribute('aria-label', 'Copy Channel Link');
+        }, 2000);
+    } catch (err) {
+        btnCopyLink.textContent = '❌ Failed to copy';
+        btnCopyLink.setAttribute('aria-label', 'Failed to copy channel link');
+        setTimeout(() => {
+            btnCopyLink.textContent = '📋 Copy Channel Link';
+            btnCopyLink.setAttribute('aria-label', 'Copy Channel Link');
+        }, 2000);
+    }
 });
 
 btnQrLink.addEventListener('click', () => {

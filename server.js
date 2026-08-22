@@ -164,7 +164,34 @@ app.all('/api/signal.php', (req, res) => {
     if (type === 'join' && req.body.nickname) {
         if (!rooms.has(roomId)) rooms.set(roomId, { peers: new Map() });
         const peer = rooms.get(roomId).peers.get(clientId);
-        if (peer) peer.nickname = req.body.nickname;
+        if (peer) {
+            peer.nickname = req.body.nickname;
+            
+            // Send existing web users to the new user
+            rooms.get(roomId).peers.forEach((otherPeer, otherId) => {
+                if (otherId !== clientId && !otherId.startsWith('irc-')) {
+                    const rRole = getUserChannelRole(baseRoom, otherPeer.nickname || otherId);
+                    let prefix = '';
+                    if (rRole === 'OWNER' || rRole === 'NETADMIN') prefix = '~';
+                    else if (rRole === 'ADMIN') prefix = '&';
+                    else if (rRole === 'OPERATOR' || rRole === 'OP') prefix = '@';
+                    else if (rRole === 'VOICE') prefix = '+';
+                    peer.write(`data: ${JSON.stringify({ type: 'join', sender: otherId, nickname: otherPeer.nickname || otherId, role: rRole, prefix: prefix })}\n\n`);
+                }
+            });
+            // Send existing IRC users to the new user
+            for (const [ircId, ircClient] of ircClients.entries()) {
+                if (ircClient.registered && ircClient.channels.has(baseRoom)) {
+                    const rRole = getUserChannelRole(baseRoom, ircClient.nick);
+                    let prefix = '';
+                    if (rRole === 'OWNER' || rRole === 'NETADMIN') prefix = '~';
+                    else if (rRole === 'ADMIN') prefix = '&';
+                    else if (rRole === 'OPERATOR' || rRole === 'OP') prefix = '@';
+                    else if (rRole === 'VOICE') prefix = '+';
+                    peer.write(`data: ${JSON.stringify({ type: 'join', sender: `irc-${ircClient.nick}`, nickname: ircClient.nick, role: rRole, prefix: prefix })}\n\n`);
+                }
+            }
+        }
     }
 
     if (type === 'leave') {
@@ -180,6 +207,8 @@ app.all('/api/signal.php', (req, res) => {
             senderRole = getUserChannelRole(baseRoom, clientId);
         }
     } catch (e) {}
+    
+    const broadcastPayload = { ...req.body, role: senderRole };
 
     // Broadcast to Web peers
     if (rooms.has(roomId)) {
@@ -219,6 +248,12 @@ app.all('/api/signal.php', (req, res) => {
         for (const [ircId, ircClient] of ircClients.entries()) {
             if (ircClient.registered && ircClient.channels.has(baseRoom)) {
                 ircClient.socket.write(`:${nick}!${clientId}@web.client PART ${baseRoom}\r\n`);
+            }
+        }
+    } else if (type === 'chat') {
+        for (const [ircId, ircClient] of ircClients.entries()) {
+            if (ircClient.registered && ircClient.channels.has(baseRoom)) {
+                ircClient.socket.write(`:${nick}!${clientId}@web.client PRIVMSG ${baseRoom} :${req.body.message || req.body.text}\r\n`);
             }
         }
     } else if (type === 'file') {
@@ -399,7 +434,7 @@ try {
     serverVersion = `IVC-IRC/${pkg.version}`;
 } catch (e) { }
 
-const defaultVhost = process.env.SERVER_VHOST || os.hostname() || 'localhost';
+const defaultVhost = process.env.SERVER_VHOST || (os.hostname() ? `${os.hostname()}.ivc.cx` : 'localhost.ivc.cx');
 
 let meAlias = mongoDb.collection('object_aliases').findOne({ alias_name: '$me' });
 let serverGuid;
@@ -425,7 +460,7 @@ hostObj = mongoDb.collection('ivc_objects').findOne({ guid: serverGuid });
 
 const ivcObjects = new Map();
 ivcObjects.set('ivc://$me', hostObj);
-const serverHost = hostObj.vhost;
+const serverHost = hostObj.vhost.includes('.') ? hostObj.vhost : `${hostObj.vhost}.ivc.cx`;
 const serverCreated = new Date().toUTCString();
 const networkUri = process.env.NETWORK_URI || 'ivc://ivc.cx';
 
@@ -499,6 +534,24 @@ const ircServer = net.createServer((socket) => {
                     }
 
                     send(`:${clientState.nick}!${clientState.user}@localhost JOIN ${channel}`);
+                    for (const [s, c] of ircClients.entries()) {
+                        if (c.registered && c.channels.has(channel) && s !== socket) {
+                            s.write(`:${clientState.nick}!${clientState.user}@localhost JOIN ${channel}\r\n`);
+                        }
+                    }
+
+                    let topic = null;
+                    if (typeof mongoDb !== 'undefined' && mongoDb) {
+                        try {
+                            const mChan = mongoDb.collection('chanserv_channels').findOne({ channel: { $regex: new RegExp(`^${channel}$`, 'i') } });
+                            if (mChan && mChan.description) topic = mChan.description;
+                        } catch (e) {}
+                    }
+                    if (topic) {
+                        send(`:${serverHost} 332 ${clientState.nick} ${channel} :${topic}`);
+                    } else {
+                        send(`:${serverHost} 331 ${clientState.nick} ${channel} :No topic is set`);
+                    }
                     
                     let isFirst = false;
                     if (!rooms.has(channel) || rooms.get(channel).peers.size === 0) {
@@ -564,7 +617,7 @@ const ircServer = net.createServer((socket) => {
                             } catch (e) {}
                         }
                         if (giveFounder) {
-                            send(`:${channel} MODE ${channel} +q ${clientState.nick}`);
+                            send(`:${serverHost} MODE ${channel} +q ${clientState.nick}`);
                         }
                     }
                 });
@@ -593,6 +646,51 @@ const ircServer = net.createServer((socket) => {
                     }
                     send(`:${clientState.nick}!${clientState.user}@localhost PART ${channel}`);
                 });
+            } else if (cmd === 'LIST') {
+                send(`:${serverHost} 321 ${clientState.nick} Channel :Users  Name`);
+                
+                const allChannels = new Map(); // channelName -> { users: count, topic: string }
+                
+                for (const [chan, room] of rooms.entries()) {
+                    if (!allChannels.has(chan)) allChannels.set(chan, { users: 0, topic: '' });
+                    let webCount = 0;
+                    for (const peerId of room.peers.keys()) {
+                        if (!peerId.startsWith('irc-')) webCount++;
+                    }
+                    allChannels.get(chan).users += webCount;
+                }
+                
+                for (const c of ircClients.values()) {
+                    if (c.registered) {
+                        for (const chan of c.channels) {
+                            if (!allChannels.has(chan)) allChannels.set(chan, { users: 0, topic: '' });
+                            allChannels.get(chan).users++;
+                        }
+                    }
+                }
+                
+                if (!allChannels.has('$service')) allChannels.set('$service', { users: 0, topic: 'Network Services' });
+                if (!allChannels.has('&opers')) allChannels.set('&opers', { users: 0, topic: 'Network Operators' });
+                
+                if (typeof mongoDb !== 'undefined' && mongoDb) {
+                    try {
+                        const registeredChans = mongoDb.collection('chanserv_channels').find({});
+                        for (const rc of registeredChans) {
+                            const cname = rc.channel || rc.channel_name;
+                            if (cname && !allChannels.has(cname)) {
+                                allChannels.set(cname, { users: 0, topic: rc.description || '' });
+                            } else if (cname && allChannels.has(cname) && rc.description) {
+                                allChannels.get(cname).topic = rc.description;
+                            }
+                        }
+                    } catch (e) {}
+                }
+                
+                for (const [chan, info] of allChannels.entries()) {
+                    send(`:${serverHost} 322 ${clientState.nick} ${chan} ${info.users} :${info.topic}`);
+                }
+                
+                send(`:${serverHost} 323 ${clientState.nick} :End of /LIST`);
             } else if (cmd === 'PRIVMSG') {
                 const target = parts[1];
                 const msg = parts.slice(2).join(' ').replace(/^:/, '');
@@ -711,8 +809,15 @@ const ircServer = net.createServer((socket) => {
                     const formattedMsg = `/${cmd.toLowerCase()} ${parts.slice(1).join(' ')}`;
                     const result = await processIrcCommand(clientState.nick, '', formattedMsg);
                     if (result && result.response) {
-                        const serviceName = result.service || cmd;
-                        send(`:${serviceName}!service@localhost PRIVMSG ${clientState.nick} :${result.response}`);
+                        if (cmd === 'MODE' && result.response.startsWith('Modes for')) {
+                            const targetChan = parts[1];
+                            const modesMatch = result.response.match(/Modes for [^:]+: (.*)/);
+                            const modes = modesMatch ? modesMatch[1] : '+t';
+                            send(`:${serverHost} 324 ${clientState.nick} ${targetChan} ${modes}`);
+                        } else {
+                            const serviceName = result.service || cmd;
+                            send(`:${serviceName}!service@localhost PRIVMSG ${clientState.nick} :${result.response}`);
+                        }
                     }
                     if (result && result.mode_broadcast && result.channel) {
                         const broadcastMsg = `:${clientState.nick}!${clientState.user}@localhost MODE ${result.channel} ${result.mode_broadcast}\r\n`;
@@ -720,6 +825,16 @@ const ircServer = net.createServer((socket) => {
                             if (c.registered && c.channels.has(result.channel)) {
                                 s.write(broadcastMsg);
                             }
+                        }
+                        
+                        // Also broadcast mode to web clients
+                        if (rooms.has(result.channel)) {
+                            const modeMsg = JSON.stringify({ type: 'chat', sender: 'SYSTEM', nickname: 'SYSTEM', message: `* MODE ${result.channel} ${result.mode_broadcast} by ${clientState.nick}` });
+                            rooms.get(result.channel).peers.forEach((peer, peerId) => {
+                                if (!peerId.startsWith('irc-')) {
+                                    peer.write(`data: ${modeMsg}\n\n`);
+                                }
+                            });
                         }
                     }
                 } catch (e) { }

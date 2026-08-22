@@ -10,10 +10,6 @@ require_once __DIR__ . '/../../src/Database/Database.php';
 require_once __DIR__ . '/../../src/Database/BotServRepository.php';
 require_once __DIR__ . '/../../src/Database/TextServRepository.php';
 require_once __DIR__ . '/../../src/IRC/SettingsManager.php';
-<<<<<<< HEAD
-require_once __DIR__ . '/../../src/Database/ChannelRepository.php';
-=======
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
 require_once __DIR__ . '/../../src/IRC/NameServ.php';
 require_once __DIR__ . '/../../src/IRC/ChanServ.php';
 require_once __DIR__ . '/../../src/IRC/MotdServ.php';
@@ -194,12 +190,14 @@ if ($method === 'POST' || $method === 'PUT') {
             $botMsg = $appStatus !== '' ? "Status:+modes:{$appStatus}\n" . $svcResult['response'] : $svcResult['response'];
 
             // Broadcast IRC Bot Response to room
-            RoomManager::broadcastSignal($roomId, 'SYSTEM_BOT', [
-                'type' => 'chat',
-                'sender' => $svcResult['service'],
-                'message' => $botMsg,
-                'is_bot' => true
-            ], false);
+            if (empty($svcResult['skip_bot_broadcast'])) {
+                RoomManager::broadcastSignal($roomId, 'SYSTEM_BOT', [
+                    'type' => 'chat',
+                    'sender' => $svcResult['service'],
+                    'message' => $botMsg,
+                    'is_bot' => true
+                ], false);
+            }
 
             echo json_encode(['status' => 'sent', 'is_service' => true, 'response' => $botMsg], JSON_THROW_ON_ERROR);
             exit;

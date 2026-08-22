@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-<<<<<<< HEAD
 namespace Fortress\IRC;
 
 use Fortress\Services\StripeService;
@@ -53,11 +52,7 @@ class PayServ
         }
 
         if (empty($targetName)) {
-<<<<<<< HEAD
-            $targetName = ($level === 'user') ? $senderNick : '#lobby';
-=======
             $targetName = ($level === 'user') ? $senderNick : '#';
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
         }
 
         if ($level === 'channel' && !str_starts_with($targetName, '#') && !str_starts_with($targetName, '&')) {
@@ -151,7 +146,3 @@ class PayServ
         return StripeService::cancelSubscription($sub->getId());
     }
 }
-=======
-// Backward-compat alias. The class now lives in Fortress\IRC\Serv\PayServ.
-class_alias(Fortress\IRC\Serv\PayServ::class, "Fortress\IRC\PayServ");
->>>>>>> 890a95f (rewrite of PHP class structure, imminent Port of models to TS/Java)

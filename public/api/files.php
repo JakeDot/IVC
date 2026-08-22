@@ -32,10 +32,7 @@ $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 if ($method === 'GET') {
     $channel = Sanitizer::sanitizeRoomId($_GET['channel'] ?? $_GET['room'] ?? '');
-<<<<<<< HEAD
-=======
     $client = $_GET['client'] ?? $_GET['user'] ?? $_GET['nick'] ?? '';
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
 
     if (empty($channel)) {
         http_response_code(400);
@@ -43,8 +40,6 @@ if ($method === 'GET') {
         exit;
     }
 
-<<<<<<< HEAD
-=======
     if (class_exists('\Fortress\IRC\ChanServ')) {
         $access = \Fortress\IRC\ChanServ::checkAccess($channel, $client);
         if (!$access['success']) {
@@ -55,7 +50,6 @@ if ($method === 'GET') {
         $channel = $access['base_target'];
     }
 
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
     $files = SharedFileRepository::findByChannel($channel);
     $result = array_map(fn(SharedFile $f) => $f->toArray(), $files);
 
@@ -94,8 +88,6 @@ if ($method === 'POST') {
         exit;
     }
 
-<<<<<<< HEAD
-=======
     if (class_exists('\Fortress\IRC\ChanServ')) {
         $access = \Fortress\IRC\ChanServ::checkAccess($channel, $sharerClientId);
         if (!$access['success']) {
@@ -106,7 +98,6 @@ if ($method === 'POST') {
         $channel = $access['base_target'];
     }
 
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
     $file = new SharedFile(
         $id,
         $channel,

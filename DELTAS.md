@@ -56,16 +56,4 @@ Because deltas represent state changes from external or asynchronous sources, th
 
 1.  **Schema Validation**: The type and structure of the ∆event object must be verified before processing.
 2.  **Sanitization**: For signaling deltas, properties like `room` and `client` IDs undergo strict regex filtering to prevent injection.
-<<<<<<< HEAD
 3.  **Authentication/Verification**: Webhook deltas from Stripe must be cryptographically verified using webhook secrets to ensure they originated from the trusted payment provider.
-=======
-3.  **Authentication/Verification**: Webhook deltas from Stripe must be cryptographically verified using webhook secrets to ensure they originated from the trusted payment provider.
-
-### 4. Dynamic Data & AI Analytics (∆data)
-
-The `∆data` subobject is a specialized delta type used to query and stream live telemetry and AI-driven insights for IVC objects.
-
-*   **Targets**: Can be attached to server nodes (`ivc://$node∆data`), networks (`ivc://network/£global∆data`), channels (`ivc://localhost/#lobby∆data`), or users.
-*   **Payload**: Contains live metrics such as active nodes, peer mesh connections, bandwidth throughput (Kbps), latency, memory, and a computed health score.
-*   **Access Control**: Streaming `∆data` requires the user to possess the `+d` (Data Viewer) user mode. Additionally, target objects can explicitly opt out of telemetry sharing by setting the `-d` object mode. Queries blocked by mode restrictions return HTTP 403.
->>>>>>> f79f4cf (local state jakedot@petar-vivo)

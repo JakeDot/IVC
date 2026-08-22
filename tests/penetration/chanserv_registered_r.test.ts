@@ -1,40 +1,19 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { spawn, ChildProcess } from 'child_process';
 import * as http from 'http';
-import * as fs from 'fs';
 
 describe('IRC Object & Channel Modes Test: +r (Registered-Only Access)', () => {
   let serverProcess: ChildProcess;
   const PORT = 18083;
 
   beforeAll((done) => {
-    try {
-      if (fs.existsSync(`./data/mongodb_store_${PORT}.json`)) {
-        fs.unlinkSync(`./data/mongodb_store_${PORT}.json`);
-      }
-    } catch (e) {}
     serverProcess = spawn('node', ['server.js'], { env: { ...process.env, PORT: String(PORT) } });
-    let ready = false;
-    serverProcess.stdout?.on('data', (d) => {
-      if (d.toString().includes('PHP WASM Engine loaded and initialized') && !ready) {
-        ready = true;
-        done();
-      }
-    });
-    setTimeout(() => { if (!ready) { ready = true; done(); } }, 15000);
-  }, 20000);
+    setTimeout(done, 6000);
+  }, 10000);
 
-  afterAll((done) => {
-    try {
-      if (fs.existsSync(`./data/mongodb_store_${PORT}.json`)) {
-        fs.unlinkSync(`./data/mongodb_store_${PORT}.json`);
-      }
-    } catch (e) {}
+  afterAll(() => {
     if (serverProcess) {
-      serverProcess.on('exit', () => done());
       serverProcess.kill();
-    } else {
-      done();
     }
   });
 
@@ -84,9 +63,9 @@ describe('IRC Object & Channel Modes Test: +r (Registered-Only Access)', () => {
 
   it('should register a nickname RegUser via /register command', async () => {
     const res = await fetchPost('/api/irc.php', {
-      channel: '#lobby',
+      channel: '#general',
       sender: 'RegUser',
-      text: '/register Pass123 reguser@example.com'
+      text: '/register SecretPass123 reg@example.com'
     });
     expect(res.status).toBe(200);
     const body = JSON.parse(res.data);
@@ -102,7 +81,7 @@ describe('IRC Object & Channel Modes Test: +r (Registered-Only Access)', () => {
     });
     expect(res.status).toBe(200);
     const body = JSON.parse(res.data);
-    expect(body.response).toMatch(/[+a-zA-Z0-9]*r/i);
+    expect(body.response).toContain('+r');
   });
 
   it('should deny UnregUser from accessing +r channel #secure-vault', async () => {

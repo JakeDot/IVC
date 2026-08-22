@@ -232,8 +232,6 @@ class Channel
         return ['success' => true, 'message' => "CHANSERV: Topic for {$channel} updated to: \"{$topic}\"", 'topic' => $topic];
     }
 
-<<<<<<< HEAD
-=======
     public static function admin(string $channel, string $targetNick, string $requesterNick = ''): array
     {
         $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
@@ -286,7 +284,6 @@ class Channel
         return ['success' => true, 'message' => "CHANSERV: Removed NETADMIN status (-n) from '{$targetNick}' in {$channel}."];
     }
 
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
     public static function isRegistered(string $channel): bool
     {
         $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
@@ -300,23 +297,18 @@ class Channel
         \Fortress\Database\ChannelUserRepository::saveRole($channelUser);
     }
 
-<<<<<<< HEAD
-=======
     public static function hasVoice(string $channel, string $nickname): bool
     {
         $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
         return \Fortress\Database\ChannelUserRepository::hasVoice($channel, $nickname);
     }
 
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
     public static function isOp(string $channel, string $nickname): bool
     {
         $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
         return \Fortress\Database\ChannelUserRepository::isOp($channel, $nickname);
     }
 
-<<<<<<< HEAD
-=======
     public static function isAdmin(string $channel, string $nickname): bool
     {
         $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
@@ -329,7 +321,6 @@ class Channel
         return \Fortress\Database\ChannelUserRepository::isNetAdmin($channel, $nickname);
     }
 
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
     public static function getOperators(string $channel): array
     {
         $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);

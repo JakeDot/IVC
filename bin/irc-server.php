@@ -302,10 +302,7 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
             $clientData[$clientId]['user'] = $args;
             if ($clientData[$clientId]['nick'] !== null) {
                 welcomeClient($client, $clientId, $clientData[$clientId]['nick'], $clientData);
-<<<<<<< HEAD
-=======
                 welcomeClient($client, $clientData[$clientId]['nick']);
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
             }
             break;
 
@@ -324,9 +321,6 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
                 if (empty($c)) continue;
                 if ($c[0] !== '#') $c = '#' . $c;
 
-<<<<<<< HEAD
-                RoomManager::joinRoom($c, $nick);
-=======
                 $joinRes = RoomManager::joinRoom($c, $nick);
                 if (isset($joinRes['error']) && $joinRes['error']) {
                     sendToClient($client, $clientId, ":server 475 $nick $c :Cannot join channel (+k) - bad key\r\n", $clientData);
@@ -337,7 +331,6 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
                     $c = $joinRes['roomId'];
                 }
 
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
                 $clientData[$clientId]['channels'][] = $c;
 
                 if (!isset($channels[$c])) {
@@ -356,11 +349,7 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
                 // In a full implementation, we'd sync this better.
                 fwrite($client, ":server 332 $nick $c :Welcome to $c\r\n");
 
-<<<<<<< HEAD
-                $users = RoomManager::joinRoom($c, $nick)['peers'];
-=======
                 $users = isset($joinRes['peers']) ? $joinRes['peers'] : [];
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
                 $users[] = $nick; // Add self
                 $userList = implode(' ', $users);
 
@@ -718,9 +707,5 @@ function welcomeClient($client, $clientId, $nick, &$clientData) {
 function cloneCommandForService($nick, $service, $text) {
     // Process direct MSG to a service as if it was a command in a channel
     // e.g. PRIVMSG NAMESERV :REGISTER pass email -> /msg NAMESERV REGISTER pass email
-<<<<<<< HEAD
-    return IrcServices::processCommand($nick, '#lobby', "/msg $service $text");
-=======
     return IrcServices::processCommand($nick, '#', "/msg $service $text");
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
 }

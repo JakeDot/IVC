@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-<<<<<<< HEAD
 namespace Fortress\IRC;
 
 use Fortress\Database\ChannelRepository;
@@ -14,43 +13,10 @@ use Fortress\Models\ChannelUser;
  * CHANSERV (Channel Service) IRC System Bot
  * Handles channel registration, operator management, topic control, passkeys, modes, and paid channel subscriptions.
  */
-<<<<<<< HEAD
 class ChanServ
 {
     public const SERVICE_NAME = 'CHANSERV';
 
-=======
-class ChanServ extends IrcObject
-{
-    public const SERVICE_NAME = 'CHANSERV';
-
-    protected static function isAuthorizedToSetModes(string $target, string $requesterNick): bool {
-        return self::isOp($target, $requesterNick);
-    }
-    
-    protected static function isTargetRegistered(string $target): bool {
-        return self::isRegistered($target);
-    }
-    
-    protected static function getModesFromDb(string $target): ?string {
-        $chanModel = ChannelRepository::findByChannelName($target);
-        return $chanModel ? $chanModel->getModes() : null;
-    }
-    
-    protected static function updateModesInDb(string $target, string $modes): void {
-        ChannelRepository::updateModes($target, $modes);
-    }
-    
-    protected static function createAndSaveDefault(string $target, string $modes, string $requesterNick): void {
-        $chanModel = new Channel($target, $requesterNick !== '' ? $requesterNick : 'System', null, null, $modes, time());
-        ChannelRepository::save($chanModel);
-    }
-    
-    protected static function getTargetNameForMessage(string $target): string {
-        return $target;
-    }
-
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
     /**
      * Normalize channel name (ensure leading #)
      */
@@ -60,7 +26,7 @@ class ChanServ extends IrcObject
         if ($channel === '') {
             return '';
         }
-        if (!str_starts_with($channel, '#') && !str_starts_with($channel, '&')) {
+        if (!str_starts_with($channel, '#') && !str_starts_with($channel, '&') && !str_starts_with($channel, '@') && !str_starts_with($channel, '£') && !str_starts_with($channel, '$')) {
             $channel = '#' . $channel;
         }
         return $channel;
@@ -133,7 +99,90 @@ class ChanServ extends IrcObject
         return Channel::setTopicCommand($channel, $topic, $requesterNick);
     }
 
-<<<<<<< HEAD
+    public static function parseModeStringToArray(string $modeStr): array {
+        $modes = [];
+        $add = true;
+        $i = 0;
+        $len = strlen($modeStr);
+        $singleCharModes = 'nNsSOoAaIiVvkmMedtiplbrR$';
+        $knownWords = ['operators', 'network', 'raw', 'deltamodes', 'Δmodes', 'modes'];
+        
+        while ($i < $len) {
+            $char = $modeStr[$i];
+            if ($char === '+') {
+                $add = true;
+                $i++;
+            } elseif ($char === '-') {
+                $add = false;
+                $i++;
+            } else {
+                $nextSign = strcspn($modeStr, "+-", $i);
+                $part = substr($modeStr, $i, $nextSign);
+                
+                if (str_contains($part, '=')) {
+                    list($key, $val) = explode('=', $part, 2);
+                    if ($add) {
+                        $modes[$key] = $val;
+                    } else {
+                        $modes[$key] = false;
+                    }
+                } else {
+                    $isCluster = true;
+                    if (strlen($part) === 1) {
+                        $isCluster = true;
+                    } else {
+                        for ($j = 0; $j < strlen($part); $j++) {
+                            if (!str_contains($singleCharModes, $part[$j])) {
+                                $isCluster = false;
+                                break;
+                            }
+                        }
+                    }
+                    if (in_array(strtolower($part), $knownWords)) {
+                        $isCluster = false;
+                    }
+                    
+                    if ($isCluster) {
+                        for ($j = 0; $j < strlen($part); $j++) {
+                             $modes[$part[$j]] = $add ? true : false;
+                        }
+                    } else {
+                        $modes[$part] = $add ? true : false;
+                    }
+                }
+                $i += $nextSign;
+            }
+        }
+        return $modes;
+    }
+
+    public static function arrayToModeString(array $modes): string {
+        $singleTrue = '';
+        $singleFalse = '';
+        $wordTrue = '';
+        $wordFalse = '';
+        $valModes = '';
+        
+        foreach ($modes as $k => $v) {
+            $isWord = strlen($k) > 1;
+            if ($v === false) {
+                if ($isWord) $wordFalse .= '-' . $k;
+                else $singleFalse .= $k;
+            } elseif ($v === true) {
+                if ($isWord) $wordTrue .= '+' . $k;
+                else $singleTrue .= $k;
+            } else {
+                $valModes .= '+' . $k . '=' . $v;
+            }
+        }
+        
+        $res = '';
+        if ($singleTrue !== '') $res .= '+' . $singleTrue;
+        if ($singleFalse !== '') $res .= '-' . $singleFalse;
+        $res .= $wordTrue . $wordFalse . $valModes;
+        return $res;
+    }
+
     /**
      * Set modes for a channel
      */
@@ -148,64 +197,25 @@ class ChanServ extends IrcObject
         if (self::isRegistered($channel)) {
             $chanModel = ChannelRepository::findByChannelName($channel);
             if ($chanModel) {
-                $currentModes = $chanModel->getModes();
-                $hasDeltaModes = str_contains($modes, 'Δ');
-                $cleanModes = str_replace(['Δmodes', '∆modes', 'deltamodes'], '', $modes);
-                $add = true;
-                $mbChars = preg_split('//u', $cleanModes, -1, PREG_SPLIT_NO_EMPTY) ?: [];
-                for ($i = 0; $i < count($mbChars); $i++) {
-                    $char = $mbChars[$i];
-
-                // Allow specific multibyte/string modes
-                $specialModes = ['Δmodes', 'deltamodes', 'raw'];
-
-                $add = true;
-
-                // Handle special modes first
-                foreach ($specialModes as $sm) {
-                    if (str_contains($modes, "+$sm")) {
-                        if (!str_contains($currentModes, $sm)) {
-                            $currentModes .= $sm;
-                        }
-                        $modes = str_replace("+$sm", "", $modes);
-                    }
-                    if (str_contains($modes, "-$sm")) {
-                        $currentModes = str_replace($sm, '', $currentModes);
-                        $modes = str_replace("-$sm", "", $modes);
+                $currentModesArr = self::parseModeStringToArray($chanModel->getModes());
+                $newOperations = self::parseModeStringToArray($modes);
+                
+                foreach ($newOperations as $k => $v) {
+                    if ($v === false) {
+                        unset($currentModesArr[$k]);
+                    } else {
+                        $currentModesArr[$k] = $v;
                     }
                 }
 
-                // Handle single character modes
-                for ($i = 0; $i < mb_strlen($modes); $i++) {
-                    $char = mb_substr($modes, $i, 1);
-                    if ($char === '+') {
-                        $add = true;
-                    } elseif ($char === '-') {
-                        $add = false;
-                    } elseif (preg_match('/[a-zA-ZΔ]/u', $char)) {
-                        if ($add && !str_contains($currentModes, $char)) {
-                            $currentModes .= $char;
-                        } elseif (!$add && str_contains($currentModes, $char)) {
-                            $currentModes = str_replace($char, '', $currentModes);
-                        }
-                    }
-                }
-                if ($hasDeltaModes && !str_contains($currentModes, 'Δmodes')) {
-                    $currentModes .= 'Δmodes';
-                }
-                // Ensure there is a + at the start if not empty, otherwise default to +t
-                if (!empty($currentModes) && !str_starts_with($currentModes, '+')) {
-                    $currentModes = '+' . $currentModes;
-                }
-
-                $currentModes = str_replace('+', '', $currentModes);
-                $currentModes = '+' . $currentModes;
-
-                if ($currentModes === '+') $currentModes = '';
+                $currentModes = self::arrayToModeString($currentModesArr);
 
                 ChannelRepository::updateModes($channel, $currentModes);
                 $modes = $currentModes;
             }
+        } else {
+            $chanModel = new Channel($channel, $requesterNick !== '' ? $requesterNick : 'System', null, null, $modes, time());
+            ChannelRepository::save($chanModel);
         }
 
         return ['success' => true, 'message' => "CHANSERV: Modes for {$channel} updated to {$modes}.", 'modes' => $modes];
@@ -215,39 +225,42 @@ class ChanServ extends IrcObject
      * Parse mode string into structured mode flags array
      *
      * @param string $modeStr
-     * @return array{n: bool, N: bool, S: bool, s: bool, k: bool, v: bool, o: bool, a: bool, m: bool, t: bool, no_t: bool, raw: bool, delta_modes: bool}
+     * @return array
      */
     public static function parseModeFlags(string $modeStr): array
     {
+        $arr = self::parseModeStringToArray($modeStr);
         $flags = [
-            'n' => str_contains($modeStr, 'n'),
-            'N' => str_contains($modeStr, 'N'),
-            'S' => str_contains($modeStr, 'S'),
-            's' => str_contains($modeStr, 's'),
-            'k' => str_contains($modeStr, 'k'),
-            'v' => str_contains($modeStr, 'v'),
-            'o' => str_contains($modeStr, 'o'),
-            'a' => str_contains($modeStr, 'a'),
-            'm' => str_contains($modeStr, 'm'),
-            'e' => str_contains($modeStr, 'e'),
-            'd' => str_contains($modeStr, 'd'),
-            't' => str_contains($modeStr, 't') && !str_contains($modeStr, '-t'),
-            'no_t' => str_contains($modeStr, '-t'),
-            'raw' => str_contains($modeStr, 'raw'),
-            'delta_modes' => str_contains($modeStr, 'Δmodes') || str_contains($modeStr, 'deltamodes') || str_contains($modeStr, 'Δ'),
+            'n' => isset($arr['n']),
+            'N' => isset($arr['N']),
+            'S' => isset($arr['S']),
+            's' => isset($arr['s']),
+            'k' => isset($arr['k']) ? $arr['k'] : false,
+            'v' => isset($arr['v']),
+            'V' => isset($arr['V']),
+            'o' => isset($arr['o']),
+            'O' => isset($arr['O']),
+            'a' => isset($arr['a']),
+            'A' => isset($arr['A']),
+            'm' => isset($arr['m']),
+            'e' => isset($arr['e']),
+            'd' => isset($arr['d']),
+            't' => isset($arr['t']),
+            'no_t' => !isset($arr['t']),
+            'i' => isset($arr['i']) || isset($arr['I']),
+            'I' => isset($arr['i']) || isset($arr['I']),
+            'r' => isset($arr['r']) || isset($arr['R']),
+            'R' => isset($arr['r']) || isset($arr['R']),
+            '$' => isset($arr['$']),
+            'raw' => isset($arr['raw']),
+            'delta_modes' => isset($arr['delta_modes']) || isset($arr['deltamodes']) || isset($arr['Δmodes']) || isset($arr['Δ']),
         ];
 
-        return $flags;
+        return array_merge($flags, $arr);
     }
 
     /**
-     * Parse target and attached mode suffixes (e.g. #channel+Δmodes, @object+bookmarks, #room+v+t)
-=======
-    // Modes logic is now inherited from IrcObject
-
-    /**
      * Parse target and attached mode suffixes (e.g. #channel+Δmodes, @object+r, #room+v+t)
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
      *
      * @param string $target
      * @return array{base_target: string, raw_target: string, modes: string, mode_flags: array}
@@ -263,12 +276,6 @@ class ChanServ extends IrcObject
         if (($pos = strpos($baseTarget, '+')) !== false) {
             $modes = substr($baseTarget, $pos);
             $baseTarget = substr($baseTarget, 0, $pos);
-<<<<<<< HEAD
-        } elseif (($pos = strpos($baseTarget, '-')) !== false) {
-            $modes = substr($baseTarget, $pos);
-            $baseTarget = substr($baseTarget, 0, $pos);
-=======
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
         }
 
         $flags = self::parseModeFlags($modes);
@@ -320,11 +327,6 @@ class ChanServ extends IrcObject
         return ['success' => true, 'message' => "CHANSERV: Removed VOICE status (-v) from '{$targetNick}' in {$channel}."];
     }
 
-<<<<<<< HEAD
-    public static function getInfo(string $channel): array
-    {
-        $channel = self::normalizeChannelName($channel);
-=======
     /**
      * Assign ADMIN role to user in channel
      */
@@ -522,7 +524,6 @@ class ChanServ extends IrcObject
         }
         $channel = $access['base_target'];
         
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
         $chanModel = ChannelRepository::findByChannelName($channel);
 
         if ($chanModel === null) {
@@ -563,8 +564,6 @@ class ChanServ extends IrcObject
     }
 
     /**
-<<<<<<< HEAD
-=======
      * Check if user has VOICE (+v) or higher in channel
      */
     public static function hasVoice(string $channel, string $nickname): bool
@@ -589,7 +588,6 @@ class ChanServ extends IrcObject
     }
 
     /**
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
      * Check if user is OP in channel
      */
     public static function isOp(string $channel, string $nickname): bool
@@ -634,7 +632,3 @@ class ChanServ extends IrcObject
         return $list;
     }
 }
-=======
-// Backward-compat alias. The class now lives in Fortress\IRC\Serv\ChanServ.
-class_alias(Fortress\IRC\Serv\ChanServ::class, "Fortress\IRC\ChanServ");
->>>>>>> 890a95f (rewrite of PHP class structure, imminent Port of models to TS/Java)

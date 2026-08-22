@@ -1,8 +1,10 @@
+
 import fs_pre from 'fs';
 if (!fs_pre.existsSync('./data')) fs_pre.mkdirSync('./data');
 import { PhpNode } from 'php-wasm/PhpNode.mjs';
 import fs from 'fs';
 import path from 'path';
+import Database from 'better-sqlite3';
 
 function formatParams(params) {
   if (!params) return {};
@@ -23,6 +25,8 @@ function formatParams(params) {
   }
   return res;
 }
+
+export const db = new Database('./data/ivc_irc.sqlite');
 
 // MongoDB-compatible Document Store implementation in Node.js
 class MongoCollectionStore {
@@ -58,9 +62,6 @@ class MongoCollectionStore {
 
   _matchField(docVal, filterVal) {
     if (filterVal === undefined) return true;
-    if (filterVal instanceof RegExp) {
-      return filterVal.test(String(docVal ?? ''));
-    }
     if (filterVal !== null && typeof filterVal === 'object' && !Array.isArray(filterVal)) {
       for (const op in filterVal) {
         const target = filterVal[op];
@@ -83,12 +84,8 @@ class MongoCollectionStore {
         } else if (op === '$nin') {
           if (Array.isArray(target) && target.some(t => String(t).toLowerCase() === String(docVal).toLowerCase())) return false;
         } else if (op === '$regex') {
-          const re = target instanceof RegExp ? target : new RegExp(target, filterVal.$options || 'i');
+          const re = new RegExp(target, filterVal.$options || 'i');
           if (!re.test(String(docVal ?? ''))) return false;
-        } else if (op === '$exists') {
-          const exists = docVal !== undefined && docVal !== null;
-          if (target && !exists) return false;
-          if (!target && exists) return false;
         }
       }
       return true;
@@ -235,11 +232,7 @@ class MongoDB {
   }
 }
 
-const defaultStorePath = process.env.PORT && process.env.PORT !== '3000'
-  ? `./data/mongodb_store_${process.env.PORT}.json`
-  : './data/mongodb_store.json';
-
-export const mongoDb = new MongoDB(defaultStorePath);
+export const mongoDb = new MongoDB();
 
 // Expose MongoDB global methods for PHP vrzno bridge
 global.mongoFind = function(collName, queryJson, optionsJson) {
@@ -286,7 +279,24 @@ global.mongoCount = function(collName, filterJson) {
   return mongoDb.collection(collName).countDocuments(filter);
 };
 
-// SQL endpoints removed in favor of purely MongoDB.
+global.executeSql = function(sql, params) {
+  try {
+    const stmt = db.prepare(sql);
+    const info = stmt.run(formatParams(params));
+    return info.changes;
+  } catch(e) {
+    if (sql.trim().toUpperCase().startsWith("CREATE ") || sql.trim().toUpperCase().startsWith("ALTER ")) {
+        try { db.exec(sql); } catch(ex) {}
+        return 0;
+    }
+    throw e;
+  }
+};
+
+global.fetchAllSql = function(sql, params) {
+  const stmt = db.prepare(sql);
+  return JSON.stringify(stmt.all(formatParams(params)));
+};
 
 let phpInstance = null;
 
@@ -294,7 +304,7 @@ async function copyDir(php, src, dest) {
   const entries = fs.readdirSync(src, { withFileTypes: true });
   for (const entry of entries) {
     const srcPath = path.join(src, entry.name);
-    const destPath = (dest === '/' ? '' : dest) + '/' + entry.name;
+    const destPath = path.join(dest, entry.name);
     if (entry.isDirectory()) {
       try { await php.mkdir(destPath); } catch(e){}
       await copyDir(php, srcPath, destPath);
@@ -313,15 +323,12 @@ export async function getPhp() {
 
   phpInstance = new PhpNode();
   phpInstance.addEventListener('error', e => console.error('PHP ERR:', e.detail[0]));
-  phpInstance.addEventListener('output', e => { if (e.detail && e.detail[0]) process.stdout.write(e.detail[0]); });
   
   try { await phpInstance.mkdir('/src'); } catch(e){}
   await copyDir(phpInstance, './src', '/src');
-  try { await phpInstance.mkdir('/tests'); } catch(e){}
-  await copyDir(phpInstance, './tests', '/tests');
 
-  // Write bootstrap
-  const bootstrap = `<?php
+  // Load classes
+  await phpInstance.run(`<?php
     spl_autoload_register(function ($class) {
         $prefix = 'Fortress\\\\';
         $base_dir = '/src/';
@@ -329,7 +336,7 @@ export async function getPhp() {
         if (strncmp($prefix, $class, $len) !== 0) return;
         $relative_class = substr($class, $len);
         $file = $base_dir . str_replace('\\\\', '/', $relative_class) . '.php';
-        if (file_exists($file)) require_once $file;
+        if (file_exists($file)) require $file;
     });
     
     if (!function_exists('mb_strpos')) {
@@ -369,9 +376,7 @@ export async function getPhp() {
     }
 
     Fortress\\Database\\Database::initialize();
-  `;
-  await phpInstance.writeFile('/bootstrap.php', bootstrap);
-  await phpInstance.run(`<?php require_once '/bootstrap.php';`);
+  `);
   
   return phpInstance;
 }
@@ -380,12 +385,9 @@ export async function processIrcCommand(senderNick, channel, text) {
   const php = await getPhp();
   
   global.ircCommandResult = null;
-  global.setIrcCommandResult = function(resJson) {
-    try {
-      global.ircCommandResult = typeof resJson === 'string' ? JSON.parse(resJson) : resJson;
-    } catch(e) {
-      global.ircCommandResult = null;
-    }
+  global.setIrcCommandResult = function(res) {
+    // res is a vrzno wrapper, convert to JS
+    global.ircCommandResult = JSON.parse(JSON.stringify(res));
   };
   
   const safeSender = JSON.stringify(senderNick || '');
@@ -393,11 +395,11 @@ export async function processIrcCommand(senderNick, channel, text) {
   const safeText = JSON.stringify(text || '');
 
   const code = `<?php
-    require_once '/bootstrap.php';
     $res = Fortress\\IRC\\IrcServices::processCommand(${safeSender}, ${safeChannel}, ${safeText});
     if ($res) {
         $js = new vrzno();
-        $js->setIrcCommandResult(json_encode($res));
+        // Convert to stdClass for JSON
+        $js->setIrcCommandResult(json_decode(json_encode($res)));
     }
   `;
   await php.run(code);

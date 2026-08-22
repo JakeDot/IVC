@@ -25,25 +25,13 @@ async function initApp() {
     if (tabNicks && tabGallery) {
         tabNicks.addEventListener('click', () => {
             tabNicks.classList.add('active');
-<<<<<<< HEAD
-            tabNicks.setAttribute('aria-selected', 'true');
             tabGallery.classList.remove('active');
-            tabGallery.setAttribute('aria-selected', 'false');
-=======
-            tabGallery.classList.remove('active');
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
             userListSidebar.classList.remove('hidden');
             gallerySidebar.classList.add('hidden');
         });
         tabGallery.addEventListener('click', () => {
             tabGallery.classList.add('active');
-<<<<<<< HEAD
-            tabGallery.setAttribute('aria-selected', 'true');
             tabNicks.classList.remove('active');
-            tabNicks.setAttribute('aria-selected', 'false');
-=======
-            tabNicks.classList.remove('active');
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
             gallerySidebar.classList.remove('hidden');
             userListSidebar.classList.add('hidden');
 
@@ -67,15 +55,9 @@ async function initApp() {
 
 document.addEventListener('DOMContentLoaded', initApp);
 
-<<<<<<< HEAD
-// Window Hashchange Listener
-window.addEventListener('hashchange', () => {
-    const chan = normalizeChannel(window.location.hash);
-=======
 // Navigation Listener (handles both hash and path changes from browser history)
 window.addEventListener('popstate', () => {
     const chan = parseChannelFromUrl() || '#';
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
     if (chan && chan !== activeTabId) {
         if (!openTabs[chan]) {
             openTab(chan, true);
@@ -96,25 +78,6 @@ btnOpenNewTab.addEventListener('click', () => {
     window.scrollTo({ top: roomLobby.offsetTop, behavior: 'smooth' });
 });
 
-<<<<<<< HEAD
-btnCreateRoom.addEventListener('click', async () => {
-    const randChan = '#room-' + Math.random().toString(36).substring(2, 8);
-    roomInput.value = randChan;
-    myNickname = nicknameInput.value.trim() || myNickname;
-    await openTab(randChan, true, keyInput.value.trim());
-    performIrcServiceCommands(randChan, nickPasswordInput.value, keyInput.value.trim(), true);
-});
-
-btnJoinRoom.addEventListener('click', async () => {
-    const chan = normalizeChannel(roomInput.value.trim());
-    if (!chan) {
-        alert('Please enter a channel name (e.g. #general).');
-        return;
-    }
-    myNickname = nicknameInput.value.trim() || myNickname;
-    await openTab(chan, true, keyInput.value.trim());
-    performIrcServiceCommands(chan, nickPasswordInput.value, keyInput.value.trim(), false);
-=======
 btnJoinCreateRoom.addEventListener('click', async () => {
     let chan = roomInput.value.trim();
     if (!chan) {
@@ -127,7 +90,6 @@ btnJoinCreateRoom.addEventListener('click', async () => {
     const chanKey = keyInput.value.trim();
     await openTab(chan, true, chanKey);
     performIrcServiceCommands(chan, nickPasswordInput.value, chanKey, !!chanKey);
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
 });
 
 btnCopyLink.addEventListener('click', () => {
@@ -135,6 +97,31 @@ btnCopyLink.addEventListener('click', () => {
     navigator.clipboard.writeText(shareUrlInput.value);
     btnCopyLink.textContent = '✅ Copied!';
     setTimeout(() => { btnCopyLink.textContent = '📋 Copy Channel Link'; }, 2000);
+});
+
+btnQrLink.addEventListener('click', () => {
+    if (qrCodeContainer.style.display === 'block') {
+        qrCodeContainer.style.display = 'none';
+        btnQrLink.textContent = '📱 QR Code';
+    } else {
+        qrCodeContainer.innerHTML = '';
+        let ivcUri = '';
+        if (typeof formatObjectUri === 'function' && activeTabId) {
+            ivcUri = formatObjectUri(activeTabId, window.location.host);
+        } else {
+            ivcUri = shareUrlInput.value;
+        }
+        new QRCode(qrCodeContainer, {
+            text: ivcUri,
+            width: 256,
+            height: 256,
+            colorDark : "#000000",
+            colorLight : "#ffffff",
+            correctLevel : QRCode.CorrectLevel.H
+        });
+        qrCodeContainer.style.display = 'block';
+        btnQrLink.textContent = '📱 Hide QR';
+    }
 });
 
 btnToggleMic.addEventListener('click', toggleMicrophone);

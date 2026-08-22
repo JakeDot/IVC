@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-<<<<<<< HEAD
 namespace Fortress\IRC;
 
 /**
@@ -24,15 +23,11 @@ class HelpServ
             'NICKSERV' => "NICKSERV Commands:\n" .
                           "• REGISTER <password> [email] — Registers your current nickname.\n" .
                           "• IDENTIFY <password> — Identifies you to your registered nickname.\n" .
-<<<<<<< HEAD
-                          "• INFO [nickname] — Displays information about a registered nickname.",
-=======
                           "• SET §domain=<custom.domain.com> — Sets your custom domain property (§domain).\n" .
                           "• INFO [nickname] — Displays information about a registered nickname.\n" .
                           "• /ident [user@custom.domain.com] — Identifies or sets custom domain.\n" .
                           "• /who [channel|nickname] — Shows users with their standardized user@domain format.\n" .
                           "• /whois <nickname> — Displays comprehensive user & domain identification info.",
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
 
             'CHANSERV' => "CHANSERV Commands:\n" .
                           "• REGISTER <#channel> [passkey] — Registers a channel under your nickname.\n" .
@@ -81,7 +76,3 @@ class HelpServ
         return ['success' => false, 'message' => "HELPSERV: No help available for topic '{$topic}'."];
     }
 }
-=======
-// Backward-compat alias. The class now lives in Fortress\IRC\Serv\HelpServ.
-class_alias(Fortress\IRC\Serv\HelpServ::class, "Fortress\IRC\HelpServ");
->>>>>>> 890a95f (rewrite of PHP class structure, imminent Port of models to TS/Java)

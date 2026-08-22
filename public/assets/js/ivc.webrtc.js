@@ -3,11 +3,7 @@
 function parseChannelFromUrl() {
     let hash = window.location.hash.trim();
     if (hash.startsWith('#')) {
-<<<<<<< HEAD
-        return normalizeChannel(hash);
-=======
         return normalizeChannel(hash.substring(1));
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
     }
     const params = new URLSearchParams(window.location.search);
     if (params.has('uri')) {
@@ -24,11 +20,7 @@ function parseChannelFromUrl() {
     if (window.FORTRESS_PRELOAD_ROOM) {
         return normalizeChannel(window.FORTRESS_PRELOAD_ROOM);
     }
-<<<<<<< HEAD
-    return '#lobby';
-=======
     return '#';
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
 }
 
 async function openTab(channelId, switchImmediately = true, key = '') {
@@ -89,10 +81,6 @@ function switchToTab(channelId) {
     activeTabId = channelId;
     openTabs[channelId].unreadCount = 0;
 
-<<<<<<< HEAD
-    if (window.location.hash !== channelId) {
-        window.location.hash = channelId;
-=======
     if (channelId.startsWith('#')) {
         if (window.location.hash !== channelId || window.location.pathname !== '/') {
             window.history.pushState(null, '', '/' + channelId);
@@ -102,7 +90,6 @@ function switchToTab(channelId) {
         if (window.location.pathname !== expectedPath || window.location.hash) {
             window.history.pushState(null, '', expectedPath);
         }
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
     }
 
     renderTabsNav();
@@ -111,39 +98,18 @@ function switchToTab(channelId) {
         videoStage.classList.add('hidden');
         chatPanel.classList.add('hidden');
         roomLobby.classList.add('hidden');
-<<<<<<< HEAD
-=======
-        if (window.dataStage) window.dataStage.classList.add('hidden');
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
         statsStage.classList.remove('hidden');
 
         loadConnectionStats();
         if (!statsInterval) {
             statsInterval = setInterval(loadConnectionStats, 2000);
         }
-<<<<<<< HEAD
-=======
-    } else if (channelId.includes('∆data')) {
-        videoStage.classList.add('hidden');
-        chatPanel.classList.add('hidden');
-        roomLobby.classList.add('hidden');
-        statsStage.classList.add('hidden');
-        if (window.dataStage) window.dataStage.classList.remove('hidden');
-
-        if (window.loadDataTelemetry) {
-            window.loadDataTelemetry(channelId);
-        }
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
     } else {
         if (statsInterval) {
             clearInterval(statsInterval);
             statsInterval = null;
         }
         statsStage.classList.add('hidden');
-<<<<<<< HEAD
-=======
-        if (window.dataStage) window.dataStage.classList.add('hidden');
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
 
         videoStage.classList.remove('hidden');
         chatPanel.classList.remove('hidden');
@@ -182,11 +148,7 @@ function closeTab(channelId) {
 
     const remainingTabIds = Object.keys(openTabs);
     if (remainingTabIds.length === 0) {
-<<<<<<< HEAD
-        openTab('#lobby', true);
-=======
         openTab('#', true);
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
     } else {
         const nextTab = remainingTabIds.includes(activeTabId) ? activeTabId : remainingTabIds[0];
         switchToTab(nextTab);
@@ -270,18 +232,12 @@ async function initRoomSession(channelId, key) {
     const tab = openTabs[channelId];
     if (!tab) return;
 
-<<<<<<< HEAD
-    try {
-        tab.localStream = await navigator.mediaDevices.getUserMedia({
-            video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-=======
     const parsedModes = parseModeFlagsJS(channelId);
     const isAudioOnly = !!parsedModes.a;
 
     try {
         tab.localStream = await navigator.mediaDevices.getUserMedia({
             video: isAudioOnly ? false : { width: { ideal: 1280 }, height: { ideal: 720 } },
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
             audio: true
         });
         setupAudioAnalyzer(tab.localStream, 'local', channelId);
@@ -433,8 +389,6 @@ async function handleIncomingSignal(channelId, signal) {
             }
             break;
 
-<<<<<<< HEAD
-=======
         case 'nick':
             if (peerId && signal.oldNick && signal.newNick) {
                 tab.peerNicks[peerId] = signal.newNick;
@@ -450,7 +404,6 @@ async function handleIncomingSignal(channelId, signal) {
             }
             break;
 
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
         case 'ice-candidate':
             if (tab.peerConnections[peerId] && signal.candidate) {
                 try {
@@ -463,16 +416,12 @@ async function handleIncomingSignal(channelId, signal) {
 
         case 'chat':
             const msgType = signal.is_bot ? 'bot' : 'peer';
-<<<<<<< HEAD
-            let senderName = signal.sender || 'Peer';
-=======
             let baseSender = signal.sender || 'Peer';
             if (tab.peerNicks[signal.sender]) baseSender = tab.peerNicks[signal.sender];
             if (window.objectNames && window.objectNames[signal.sender]) baseSender = window.objectNames[signal.sender];
             if (window.objectAliases && window.objectAliases[signal.sender]) baseSender = window.objectAliases[signal.sender];
 
             let senderName = baseSender;
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
             if (signal.super_room && signal.super_room !== channelId) {
                 senderName = `[${signal.super_room}] ${senderName}`;
             } else if (signal.room && signal.room !== channelId) {
@@ -483,10 +432,7 @@ async function handleIncomingSignal(channelId, signal) {
                 chatText = decompressTextMessage(chatText);
             }
             addMessageToTab(channelId, {
-<<<<<<< HEAD
-=======
                 senderId: signal.sender,
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
                 sender: senderName,
                 text: chatText,
                 type: msgType
@@ -497,13 +443,6 @@ async function handleIncomingSignal(channelId, signal) {
             if (signal.fileId && signal.encrypted_metadata) {
                 const meta = await decryptMetadataE2EE(signal.encrypted_metadata, channelId, tab.key);
                 if (meta && !tab.messages.some(m => m.type === 'file' && m.fileId === signal.fileId)) {
-<<<<<<< HEAD
-                    addMessageToTab(channelId, {
-                        type: 'file',
-                        fileId: signal.fileId,
-                        sharerClientId: signal.sharer_client_id || signal.sender,
-                        sharerNick: meta.sharerNick || signal.sender,
-=======
                     const actualSenderId = signal.sharer_client_id || signal.sender;
                     let resolvedSharerNick = meta.sharerNick || actualSenderId;
                     if (tab.peerNicks[actualSenderId]) resolvedSharerNick = tab.peerNicks[actualSenderId];
@@ -515,18 +454,12 @@ async function handleIncomingSignal(channelId, signal) {
                         fileId: signal.fileId,
                         sharerClientId: actualSenderId,
                         sharerNick: resolvedSharerNick,
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
                         fileName: meta.fileName || meta.name || 'Shared File',
                         fileSize: meta.fileSize || meta.size || 0,
                         fileType: meta.fileType || meta.type || '',
                         cloudLink: meta.cloudLink || signal.cloud_link || null,
-<<<<<<< HEAD
-                        sender: meta.sharerNick || signal.sender,
-                        isSelf: (signal.sharer_client_id || signal.sender) === myClientId,
-=======
                         sender: resolvedSharerNick,
                         isSelf: actualSenderId === myClientId,
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
                         createdAt: signal.created_at || Math.floor(Date.now() / 1000)
                     });
                 }
@@ -760,11 +693,7 @@ async function encryptMetadataE2EE(metadataObj, channelId, channelPasskey = '') 
         return btoa(String.fromCharCode(...combined));
     } catch (err) {
         console.error('Metadata encryption error:', err);
-<<<<<<< HEAD
-        throw new Error('E2EE Failed');
-=======
         return btoa(JSON.stringify(metadataObj));
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
     }
 }
 
@@ -772,11 +701,7 @@ async function decryptMetadataE2EE(encryptedBase64, channelId, channelPasskey = 
     try {
         const combined = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
         if (combined.length <= 12) {
-<<<<<<< HEAD
-            throw new Error('E2EE Failed');
-=======
             return JSON.parse(atob(encryptedBase64));
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
         }
         const iv = combined.slice(0, 12);
         const ciphertext = combined.slice(12);
@@ -789,17 +714,12 @@ async function decryptMetadataE2EE(encryptedBase64, channelId, channelPasskey = 
         const dec = new TextDecoder();
         return JSON.parse(dec.decode(decrypted));
     } catch (err) {
-<<<<<<< HEAD
-        console.error('Metadata decryption error:', err);
-        return null;
-=======
         try {
             return JSON.parse(atob(encryptedBase64));
         } catch (e) {
             console.error('Metadata decryption error:', err);
             return null;
         }
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
     }
 }
 
@@ -1087,32 +1007,6 @@ async function handleChatSubmit() {
         return;
     }
 
-<<<<<<< HEAD
-=======
-    if (text.startsWith('/data')) {
-        const parts = text.split(/\s+/);
-        let target = parts[1] || activeTabId;
-        
-        addMessageToTab(activeTabId, {
-            sender: myNickname,
-            text: text,
-            type: 'self'
-        });
-        
-        let dataTarget = `${target}∆data`;
-        if (target.includes('∆')) {
-            dataTarget = target;
-        }
-
-        if (!openTabs[dataTarget]) {
-            openTab(dataTarget, true);
-        } else {
-            switchToTab(dataTarget);
-        }
-        return;
-    }
-
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
     // Check if message is the IRC /theme command
     if (text.startsWith('/theme')) {
         addMessageToTab(activeTabId, {
@@ -1190,8 +1084,6 @@ async function handleChatSubmit() {
         return;
     }
 
-<<<<<<< HEAD
-=======
     // Check if message is a /name command
     if (text.startsWith('/name ') || text === '/name') {
         const parts = text.split(/\s+/);
@@ -1321,7 +1213,6 @@ async function handleChatSubmit() {
         return;
     }
 
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
     // Check if message is an IRC Service command (starts with /)
     if (text.startsWith('/')) {
         addMessageToTab(activeTabId, {
@@ -1344,17 +1235,6 @@ async function handleChatSubmit() {
                 })
             });
             const data = await res.json();
-<<<<<<< HEAD
-            if (data.status === 'ok' && data.is_service_command) {
-                addMessageToTab(activeTabId, {
-                    sender: data.service,
-                    text: data.response,
-                    type: 'bot'
-                });
-                if (data.service === 'CHANSERV' && text.toLowerCase().includes('topic')) {
-                    tab.topic = data.response;
-                    channelTopicBar.textContent = `Topic: ${data.response}`;
-=======
             if (data && (data.is_service_command || data.status === 'ok') && (data.response || data.message)) {
                 const botResponse = data.response || data.message;
                 addMessageToTab(activeTabId, {
@@ -1365,17 +1245,13 @@ async function handleChatSubmit() {
                 if (data.service === 'CHANSERV' && text.toLowerCase().includes('topic')) {
                     tab.topic = botResponse;
                     channelTopicBar.textContent = `Topic: ${botResponse}`;
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
                 }
                 return;
             }
         } catch (err) {
             console.error('Error sending IRC command:', err);
         }
-<<<<<<< HEAD
-=======
         return; // Always return after processing a command
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
     }
 
     // Bit-compress message for WebRTC transmission
@@ -1398,10 +1274,7 @@ async function handleChatSubmit() {
     });
 
     addMessageToTab(activeTabId, {
-<<<<<<< HEAD
-=======
         senderId: myClientId,
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
         sender: myNickname,
         text: text,
         type: 'self'
@@ -1432,15 +1305,9 @@ async function sendIrcCommand(channel, text) {
 
 async function performIrcServiceCommands(channel, password, roomKey, isCreate) {
     if (password) {
-<<<<<<< HEAD
-        const regRes = await sendIrcCommand('#lobby', `/msg NAMESERV REGISTER ${password}`);
-        if (regRes && regRes.status === 'error' && regRes.response.includes('already registered')) {
-            await sendIrcCommand('#lobby', `/msg NAMESERV IDENTIFY ${password}`);
-=======
         const regRes = await sendIrcCommand('#', `/msg NAMESERV REGISTER ${password}`);
         if (regRes && regRes.status === 'error' && regRes.response.includes('already registered')) {
             await sendIrcCommand('#', `/msg NAMESERV IDENTIFY ${password}`);
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
         }
     }
     if (isCreate) {
@@ -1521,16 +1388,11 @@ function setupDataChannel(channelId, peerId, channel) {
             }
         }
 
-<<<<<<< HEAD
-        const nick = tab.peerNicks[peerId] || peerId;
-        addMessageToTab(channelId, {
-=======
         let nick = tab.peerNicks[peerId] || peerId;
         if (window.objectNames && window.objectNames[peerId]) nick = window.objectNames[peerId];
         if (window.objectAliases && window.objectAliases[peerId]) nick = window.objectAliases[peerId];
         addMessageToTab(channelId, {
             senderId: peerId,
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
             sender: nick,
             text: rawMessage,
             type: 'peer'
@@ -1546,54 +1408,3 @@ function setupDataChannel(channelId, peerId, channel) {
     };
 }
 
-<<<<<<< HEAD
-
-async function sendIrcCommand(channel, text) {
-    try {
-        const res = await fetch('/api/irc.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': window.FORTRESS_CSRF_TOKEN || ''
-            },
-            body: JSON.stringify({
-                sender: myNickname,
-                channel: channel,
-                text: text,
-                broadcast: false
-            })
-        });
-        return await res.json();
-    } catch (err) {
-        console.error('Error sending IRC command:', err);
-        return null;
-    }
-}
-
-async function performIrcServiceCommands(channelId, nickPassword, chanKey, isCreate) {
-    if (nickPassword) {
-        let res = await sendIrcCommand('NICKSERV', `IDENTIFY ${nickPassword}`);
-        if (res && res.response) {
-            if (res.response.includes('is not registered')) {
-                res = await sendIrcCommand('NICKSERV', `REGISTER ${nickPassword}`);
-            }
-            addMessageToTab(channelId, {
-                sender: 'NICKSERV',
-                text: res.response,
-                type: 'bot'
-            });
-        }
-    }
-    if (isCreate && chanKey) {
-        let res = await sendIrcCommand('CHANSERV', `REGISTER ${channelId} ${chanKey}`);
-        if (res && res.response) {
-            addMessageToTab(channelId, {
-                sender: 'CHANSERV',
-                text: res.response,
-                type: 'bot'
-            });
-        }
-    }
-}
-=======
->>>>>>> f79f4cf (local state jakedot@petar-vivo)

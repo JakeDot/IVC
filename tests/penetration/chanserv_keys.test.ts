@@ -1,40 +1,19 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { spawn, ChildProcess } from 'child_process';
 import * as http from 'http';
-import * as fs from 'fs';
 
 describe('IRC Channel Modes Test: +k', () => {
   let serverProcess: ChildProcess;
   const PORT = 18082;
 
   beforeAll((done) => {
-    try {
-      if (fs.existsSync(`./data/mongodb_store_${PORT}.json`)) {
-        fs.unlinkSync(`./data/mongodb_store_${PORT}.json`);
-      }
-    } catch (e) {}
     serverProcess = spawn('node', ['server.js'], { env: { ...process.env, PORT: String(PORT) } });
-    let ready = false;
-    serverProcess.stdout?.on('data', (d) => {
-      if (d.toString().includes('PHP WASM Engine loaded and initialized') && !ready) {
-        ready = true;
-        done();
-      }
-    });
-    setTimeout(() => { if (!ready) { ready = true; done(); } }, 15000);
-  }, 20000);
+    setTimeout(done, 6000);
+  }, 10000);
 
-  afterAll((done) => {
-    try {
-      if (fs.existsSync(`./data/mongodb_store_${PORT}.json`)) {
-        fs.unlinkSync(`./data/mongodb_store_${PORT}.json`);
-      }
-    } catch (e) {}
+  afterAll(() => {
     if (serverProcess) {
-      serverProcess.on('exit', () => done());
       serverProcess.kill();
-    } else {
-      done();
     }
   });
 

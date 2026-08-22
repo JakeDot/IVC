@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { spawn, ChildProcess } from 'child_process';
 import * as http from 'http';
-import * as fs from 'fs';
+// @ts-ignore
+import Database from 'better-sqlite3';
 
 describe('IRC Channel Modes & Role Hierarchy: +i, +v, +a, +AON, Roles (+v/+o/+a/+n)', () => {
   let serverProcess: ChildProcess;
@@ -9,32 +10,19 @@ describe('IRC Channel Modes & Role Hierarchy: +i, +v, +a, +AON, Roles (+v/+o/+a/
 
   beforeAll((done) => {
     try {
-      if (fs.existsSync(`./data/mongodb_store_${PORT}.json`)) {
-        fs.unlinkSync(`./data/mongodb_store_${PORT}.json`);
-      }
-    } catch (e) {}
+      const db = new Database('./data/ivc_irc.sqlite');
+      db.prepare("DELETE FROM chanserv_channels WHERE channel_name IN ('#modechan', '#ident-channel')").run();
+      db.prepare("DELETE FROM channel_users WHERE channel_name IN ('#modechan', '#ident-channel')").run();
+      db.prepare("DELETE FROM nameserv_nicks WHERE nickname IN ('AliceOwner', 'BobUser', 'CharlieUser', 'DaveUnreg', 'DaveUnvoiced')").run();
+      db.close();
+    } catch(e) {}
     serverProcess = spawn('node', ['server.js'], { env: { ...process.env, PORT: String(PORT) } });
-    let ready = false;
-    serverProcess.stdout?.on('data', (d) => {
-      if (d.toString().includes('PHP WASM Engine loaded and initialized') && !ready) {
-        ready = true;
-        done();
-      }
-    });
-    setTimeout(() => { if (!ready) { ready = true; done(); } }, 15000);
-  }, 20000);
+    setTimeout(done, 6000);
+  }, 10000);
 
-  afterAll((done) => {
-    try {
-      if (fs.existsSync(`./data/mongodb_store_${PORT}.json`)) {
-        fs.unlinkSync(`./data/mongodb_store_${PORT}.json`);
-      }
-    } catch (e) {}
+  afterAll(() => {
     if (serverProcess) {
-      serverProcess.on('exit', () => done());
       serverProcess.kill();
-    } else {
-      done();
     }
   });
 

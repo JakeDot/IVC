@@ -16,31 +16,6 @@ export interface FieldSchema {
   bits: number;
 }
 
-<<<<<<< HEAD
-=======
-export interface DataViewMetrics {
-  active_nodes?: number;
-  peer_mesh_connections?: number;
-  bandwidth_kbps?: number;
-  latency_ms?: number;
-  health_score?: number;
-  memory_usage_mb?: number;
-  [key: string]: any;
-}
-
-export interface DataSubobjectPayload {
-  timestamp: number;
-  parent_object: string;
-  metrics: DataViewMetrics;
-  [key: string]: any;
-}
-
-export interface DataModePermissions {
-  isDataAuthorized(userModes: { d?: boolean }): boolean;
-  isDataSharingEnabled(objectModes: { optOutD?: boolean }): boolean;
-}
-
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
 export class BitBuffer {
   private buffer: Uint8Array;
   private _bitLength: number;

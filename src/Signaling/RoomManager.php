@@ -113,8 +113,6 @@ final class RoomManager
      */
     public static function joinRoom(string $roomId, string $clientId): array
     {
-<<<<<<< HEAD
-=======
         if (class_exists('\Fortress\IRC\ChanServ')) {
             $access = \Fortress\IRC\ChanServ::checkAccess($roomId, $clientId);
             if (!$access['success']) {
@@ -123,7 +121,6 @@ final class RoomManager
             $roomId = $access['base_target'];
         }
         
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
         $rooms = self::loadRooms() ?? [];
         $rooms = self::gcInternal($rooms);
 

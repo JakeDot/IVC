@@ -11,60 +11,12 @@ namespace Fortress\IRC;
  */
 class IrcServices
 {
-<<<<<<< HEAD
-=======
-    public const DELTA_SYMBOL = ReactionServ::DELTA_SYMBOL;
-    public const DELTA_SYMBOL_ALT = ReactionServ::DELTA_SYMBOL_ALT;
-    public const SECTION_SYMBOL = ReactionServ::SECTION_SYMBOL;
-    public const DELTA_SYMBOLS = ReactionServ::DELTA_SYMBOLS;
-
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
     /**
      * Parse subobjects (§prop property and ∆event event objects) and their modes (+mo-des) from a target or path.
      *
      * @param string $input
      * @return array{base_target: string, subobjects: array<int, array{symbol: string, type: string, name: string, value: string, modes: string, mode_flags: array}>, props: array<string, array{value: string, modes: string, mode_flags: array}>, events: array<string, array{value: string, modes: string, mode_flags: array}>}
      */
-    /**
-     * Parse query string into parameters array and search keys list.
-     *
-     * @param string $queryStr
-     * @param array $queryParams
-     * @param array $searchKeys
-     * @return void
-     */
-    public static function parseQueryString(string $queryStr, array &$queryParams, array &$searchKeys): void
-    {
-        $queryStr = trim($queryStr);
-        if ($queryStr === '') {
-            return;
-        }
-
-        $pairs = explode('&', $queryStr);
-        foreach ($pairs as $pair) {
-            if ($pair === '') {
-                continue;
-            }
-            $kv = explode('=', $pair, 2);
-            $key = urldecode(trim($kv[0]));
-            $val = isset($kv[1]) ? urldecode(trim($kv[1])) : 'true';
-
-            if (!isset($queryParams[$key])) {
-                $queryParams[$key] = $val;
-            } else {
-                if (!is_array($queryParams[$key])) {
-                    $queryParams[$key] = [$queryParams[$key], $val];
-                } else {
-                    $queryParams[$key][] = $val;
-                }
-            }
-
-            if ($key === 'search') {
-                $searchKeys[] = $val;
-            }
-        }
-    }
-
     public static function parseSubobjects(string $input): array
     {
         $input = trim($input);
@@ -73,42 +25,13 @@ class IrcServices
                 'base_target' => '',
                 'subobjects' => [],
                 'props' => [],
-                'events' => [],
-                'query' => '',
-                'query_params' => [],
-                'search' => []
+                'events' => []
             ];
         }
 
-        $queryStr = '';
-        $queryParams = [];
-        $searchKeys = [];
-
-        $qPos = strpos($input, '?');
-        if ($qPos !== false) {
-            $queryStr = substr($input, $qPos + 1);
-            $input = substr($input, 0, $qPos);
-            self::parseQueryString($queryStr, $queryParams, $searchKeys);
-        }
-
-        $posSec = mb_strpos($input, '§');
-<<<<<<< HEAD
-        $posDelta = mb_strpos($input, '∆');
-=======
-        $posDelta1 = mb_strpos($input, '∆');
-        $posDelta2 = mb_strpos($input, 'Δ');
-        $posDelta = ($posDelta1 !== false && $posDelta2 !== false)
-            ? min($posDelta1, $posDelta2)
-            : ($posDelta1 !== false ? $posDelta1 : $posDelta2);
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
-
         $firstSubPos = null;
-        if ($posSec !== false && $posDelta !== false) {
-            $firstSubPos = min($posSec, $posDelta);
-        } elseif ($posSec !== false) {
-            $firstSubPos = $posSec;
-        } elseif ($posDelta !== false) {
-            $firstSubPos = $posDelta;
+        if (preg_match('/[§∆Δ]/u', $input, $matches, PREG_OFFSET_CAPTURE)) {
+            $firstSubPos = mb_strlen(substr($input, 0, $matches[0][1]));
         }
 
         if ($firstSubPos === null) {
@@ -116,21 +39,14 @@ class IrcServices
                 'base_target' => $input,
                 'subobjects' => [],
                 'props' => [],
-                'events' => [],
-                'query' => $queryStr,
-                'query_params' => $queryParams,
-                'search' => $searchKeys
+                'events' => []
             ];
         }
 
         $baseTarget = mb_substr($input, 0, $firstSubPos);
         $subStr = mb_substr($input, $firstSubPos);
 
-<<<<<<< HEAD
-        $tokens = preg_split('/([§∆])/u', $subStr, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
-=======
         $tokens = preg_split('/([§∆Δ])/u', $subStr, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
 
         $subobjects = [];
         $props = [];
@@ -140,11 +56,7 @@ class IrcServices
             $symbol = $tokens[$i] ?? '';
             $segment = $tokens[$i + 1] ?? '';
 
-<<<<<<< HEAD
-            if ($symbol !== '§' && $symbol !== '∆') {
-=======
             if ($symbol !== '§' && $symbol !== '∆' && $symbol !== 'Δ') {
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
                 continue;
             }
 
@@ -199,10 +111,7 @@ class IrcServices
             'base_target' => $baseTarget,
             'subobjects' => $subobjects,
             'props' => $props,
-            'events' => $events,
-            'query' => $queryStr,
-            'query_params' => $queryParams,
-            'search' => $searchKeys
+            'events' => $events
         ];
     }
 
@@ -220,20 +129,6 @@ class IrcServices
             if (str_starts_with($objData, 'ivc://')) {
                 return $objData;
             }
-<<<<<<< HEAD
-            if (str_contains($objData, ' ') || str_contains($objData, ':')) {
-                $objData = preg_replace('/^\{|\}$/', '', $objData);
-                $parts = preg_split('/\s+/', $objData, 2);
-                $objName = $parts[0];
-                $kv = $parts[1] ?? '';
-                if ($kv !== '') {
-                    $kvParts = explode(':', $kv, 2);
-                    $propName = trim($kvParts[0]);
-                    $propVal = trim($kvParts[1] ?? 'true');
-                    return "ivc://{$host}/{$objName}§{$propName}={$propVal}";
-                }
-                return "ivc://{$host}/{$objName}";
-=======
             if (str_contains($objData, ' ') || str_contains($objData, ':') || str_starts_with($objData, '{')) {
                 $trimmed = trim(preg_replace('/^\{|\}$/', '', $objData));
                 $parts = preg_split('/\s+/', $trimmed);
@@ -249,7 +144,6 @@ class IrcServices
                     }
                 }
                 return "ivc://{$host}/{$objName}{$subs}";
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
             }
             return "ivc://{$host}/{$objData}";
         }
@@ -274,16 +168,7 @@ class IrcServices
         }
 
         $subStr = '';
-<<<<<<< HEAD
-        $queryPart = '';
-        $reservedKeys = ['object', 'name', 'host', 'protocol', 'scheme', 'subobjects', 'props', 'events', 'uri', 'asObject', 'query', 'query_params', 'search'];
-=======
-<<<<<<< HEAD
-        $reservedKeys = ['object', 'name', 'host', 'protocol', 'scheme', 'subobjects', 'props', 'events', 'uri', 'asObject'];
-=======
         $reservedKeys = ['object', 'name', 'host', 'protocol', 'scheme', 'subobjects', 'props', 'events', 'uri', 'asObject', 'modes'];
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
->>>>>>> 3242792 (merge??)
 
         foreach ($props as $k => $v) {
             if (in_array((string)$k, $reservedKeys, true)) {
@@ -299,12 +184,6 @@ class IrcServices
             } elseif (str_starts_with($keyName, '∆')) {
                 $symbol = '∆';
                 $keyName = mb_substr($keyName, 1);
-<<<<<<< HEAD
-=======
-            } elseif (str_starts_with($keyName, 'Δ')) {
-                $symbol = 'Δ';
-                $keyName = mb_substr($keyName, 1);
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
             }
 
             $valStr = 'true';
@@ -320,38 +199,8 @@ class IrcServices
             $subStr .= "{$symbol}{$keyName}={$valStr}{$modeStr}";
         }
 
-<<<<<<< HEAD
-        if (!empty($props['search']) && is_array($props['search'])) {
-            $qPairs = [];
-            foreach ($props['search'] as $sKey) {
-                $qPairs[] = 'search=' . urlencode((string)$sKey);
-            }
-            $queryPart = '?' . implode('&', $qPairs);
-        } elseif (!empty($props['query_params']) && is_array($props['query_params'])) {
-            $qPairs = [];
-            foreach ($props['query_params'] as $qk => $qv) {
-                if (is_array($qv)) {
-                    foreach ($qv as $subV) {
-                        $qPairs[] = urlencode((string)$qk) . '=' . urlencode((string)$subV);
-                    }
-                } else {
-                    $qPairs[] = urlencode((string)$qk) . '=' . urlencode((string)$qv);
-                }
-            }
-            $queryPart = '?' . implode('&', $qPairs);
-        } elseif (!empty($props['query']) && is_string($props['query'])) {
-            $queryPart = '?' . ltrim($props['query'], '?');
-        }
-
-        return "ivc://{$host}/{$baseObject}{$subStr}{$queryPart}";
-=======
-<<<<<<< HEAD
-        return "ivc://{$host}/{$baseObject}{$subStr}";
-=======
         $modesSuffix = !empty($objData['modes']) ? (string)$objData['modes'] : '';
         return "ivc://{$host}/{$baseObject}{$subStr}{$modesSuffix}";
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
->>>>>>> 3242792 (merge??)
     }
 
     /**
@@ -373,12 +222,6 @@ class IrcServices
             foreach ($subParsed['events'] as $k => $item) {
                 $asObject["∆{$k}"] = $item['value'];
             }
-            if (!empty($subParsed['search'])) {
-                $asObject['search'] = $subParsed['search'];
-            }
-            if (!empty($subParsed['query_params'])) {
-                $asObject['query_params'] = $subParsed['query_params'];
-            }
             return [
                 'scheme' => 'ivc',
                 'host' => '$me',
@@ -387,9 +230,6 @@ class IrcServices
                 'subobjects' => $subParsed['subobjects'],
                 'props' => $subParsed['props'],
                 'events' => $subParsed['events'],
-                'query' => $subParsed['query'] ?? '',
-                'query_params' => $subParsed['query_params'] ?? [],
-                'search' => $subParsed['search'] ?? [],
                 'asObject' => $asObject
             ];
         }
@@ -403,12 +243,6 @@ class IrcServices
         foreach ($parsedServer['events'] as $k => $item) {
             $asObject["∆{$k}"] = $item['value'];
         }
-        if (!empty($parsedServer['search'])) {
-            $asObject['search'] = $parsedServer['search'];
-        }
-        if (!empty($parsedServer['query_params'])) {
-            $asObject['query_params'] = $parsedServer['query_params'];
-        }
 
         return [
             'scheme' => strtolower($parsedServer['protocol']),
@@ -418,9 +252,6 @@ class IrcServices
             'subobjects' => $parsedServer['subobjects'],
             'props' => $parsedServer['props'],
             'events' => $parsedServer['events'],
-            'query' => $parsedServer['query'] ?? '',
-            'query_params' => $parsedServer['query_params'] ?? [],
-            'search' => $parsedServer['search'] ?? [],
             'asObject' => $asObject
         ];
     }
@@ -572,62 +403,6 @@ class IrcServices
     }
 
     /**
-<<<<<<< HEAD
-=======
-     * Add a reaction to an addressable IVC object.
-     */
-    public static function addReaction(string $objectUri, string $emoji, string $senderNick): array
-    {
-        return ReactionServ::react($objectUri, $emoji, $senderNick);
-    }
-
-    /**
-     * Get aggregated reaction data for an addressable IVC object.
-     */
-    public static function getReactions(string $objectUri): array
-    {
-        return ReactionServ::getReactions($objectUri);
-    }
-
-    /**
-     * Format an object's reaction metadata addressable URI (e.g. ivc://object/:idΔreactions).
-     */
-    public static function formatReactionsUri(string $objectUri, ?array $reactions = null): string
-    {
-        return ReactionServ::formatReactionsUri($objectUri, $reactions);
-    }
-
-    /**
-     * Extract reaction data from a reaction metadata URI (e.g. ivc://object/:idΔreactions).
-     */
-    public static function getReactionsFromUri(string $uri): ?array
-    {
-        if (!str_contains($uri, 'Δreactions') && !str_contains($uri, '∆reactions')) {
-            return null;
-        }
-        $subParsed = self::parseSubobjects($uri);
-        $baseTarget = $subParsed['base_target'];
-        return self::getReactions($baseTarget);
-    }
-
-    /**
-     * Get extended comment redirect URI with compact reaction representation.
-     */
-    public static function getRedirectUri(string $objectUri, ?array $reactions = null): string
-    {
-        return ReactionServ::getRedirectUri($objectUri, $reactions);
-    }
-
-    /**
-     * Handle HTTP PUT reaction request to ivc://objectΔreactions/<emoji>.
-     */
-    public static function handleHttpReaction(string $uri, string $senderNick = 'anonymous'): array
-    {
-        return ReactionServ::handleHttpReaction($uri, $senderNick);
-    }
-
-    /**
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
      * Parse server URI supporting https://, ivc://, and irc:// protocols.
      *
      * @param string $uri
@@ -636,24 +411,16 @@ class IrcServices
     public static function parseServerUri(string $uri): ?array
     {
         $uri = trim($uri);
-<<<<<<< HEAD
-        if (!preg_match('/^(https|ivc(?:-[a-zA-Z0-9_-]+)?|irc):\/\//i', $uri)) {
-            return null;
-        }
-
-=======
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
-        if (!preg_match('/^(https|ivc(?:-[a-zA-Z0-9_-]+)?|irc):\/\/([^\/:#?]+)(?::(\d+))?(?:[\/#](.*))?$/i', $uri, $matches)) {
+        if (!preg_match('/^(https|ivc(?:-[a-zA-Z0-9_-]+)?|irc):\/\/([^\/:#?]*)(?::(\d+))?(?:[\/#](.*))?$/i', $uri, $matches)) {
             return null;
         }
 
         $scheme = strtolower($matches[1]);
         $hostRaw = $matches[2];
-        
-        $hostModes = '';
+
         // Strip +modes from the host component
         $hostModes = '';
-        if (str_contains($hostRaw, '+')) {
+        if ($hostRaw !== '' && str_contains($hostRaw, '+')) {
             $parts = explode('+', $hostRaw);
             $hostRaw = $parts[0];
             array_shift($parts); // Remove the base host
@@ -672,11 +439,7 @@ class IrcServices
         $portStr = $matches[3] ?? '';
         $port = $portStr !== '' ? (int)$portStr : ($defaultPorts[$scheme] ?? 443);
 
-<<<<<<< HEAD
-        $channel = '#lobby';
-=======
         $channel = '#';
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
         $extractedModes = '';
 
         $processPrefix = function (string $input): string {
@@ -691,6 +454,11 @@ class IrcServices
 
         $subParsed = self::parseSubobjects($rawPathOrFragment);
         $chanRaw = $subParsed['base_target'];
+
+        if ($host === '' && $chanRaw === '') {
+            $channel = '£';
+        }
+
 
         if ($chanRaw !== '') {
             $plusPos = strpos($chanRaw, '+');
@@ -708,15 +476,6 @@ class IrcServices
         // Combine host modes and channel modes
         $allModes = trim($hostModes . $extractedModes, '+');
 
-        $queryStr = $subParsed['query'] ?? '';
-        $queryParams = $subParsed['query_params'] ?? [];
-        $searchKeys = $subParsed['search'] ?? [];
-
-        if (empty($queryStr) && !empty($parsed['query'])) {
-            $queryStr = $parsed['query'];
-            self::parseQueryString($queryStr, $queryParams, $searchKeys);
-        }
-
         return [
             'protocol' => strtoupper($scheme),
             'host'     => $host,
@@ -727,10 +486,7 @@ class IrcServices
             'uri'      => $uri,
             'subobjects' => $subParsed['subobjects'],
             'props'    => $subParsed['props'],
-            'events'   => $subParsed['events'],
-            'query'    => $queryStr,
-            'query_params' => $queryParams,
-            'search'   => $searchKeys
+            'events'   => $subParsed['events']
         ];
     }
 
@@ -756,7 +512,7 @@ class IrcServices
         $text = preg_replace('/(^|\s)@me(?=\s|$)/i', '$1' . $senderNick, $text);
         $text = preg_replace('/(^|\s)#me(?=\s|$)/i', '$1' . $channel, $text);
         $text = preg_replace('/(^|\s)\\$me(?=\s|$)/i', '$1server', $text);
-        $text = preg_replace('/(^|\s)£me(?=\s|$)/i', '$1' . ($channel ?: '£'), $text);
+
         // Calculate AppStatus block for injection into native clients
         $appModes = $senderNick;
         $chanInfo = ChanServ::getInfo($channel);
@@ -768,6 +524,31 @@ class IrcServices
 
         $parts = preg_split('/\s+/', $text);
         $first = strtolower($parts[0] ?? '');
+        $firstOriginal = $parts[0] ?? '';
+
+        // Check if the command is just an emoji (or emojis), alias to /REACT
+        if (str_starts_with($firstOriginal, '/') && preg_match('/^\/([\p{Emoji}\x{1F300}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{1F1E6}-\x{1F1FF}]+)$/u', $firstOriginal, $matches)) {
+            $emoji = $matches[1];
+            $reactArgs = array_slice($parts, 1);
+            if (empty($reactArgs)) {
+                $reactArgs[] = (empty($channel) || $channel === '#') ? '£' : $channel;
+            }
+            $reactText = '/REACT ' . $emoji . ' ' . implode(' ', $reactArgs);
+
+            \Fortress\Signaling\RoomManager::broadcastSignal($channel, $senderNick, [
+                'type' => 'chat',
+                'sender' => $senderNick,
+                'message' => $reactText
+            ], false);
+
+            return [
+                'is_service_command' => true,
+                'service' => 'REACT',
+                'response' => "[Reaction {$emoji} sent]",
+                'channel' => $channel,
+                'skip_bot_broadcast' => true
+            ];
+        }
 
         // Check for BOTSERV integration (External bot routing based on username)
         if ($first === '/msg' || $first === '/privmsg') {
@@ -798,61 +579,6 @@ class IrcServices
             }
         }
 
-<<<<<<< HEAD
-=======
-        // 0. Reaction Commands (❤️, <emoji>, HEART, /heart, /react, /reactserv)
-        if (
-            ReactionServ::isEmoji($parts[0] ?? '') ||
-            $first === 'heart' ||
-            $first === '/heart' ||
-            $first === '/react' ||
-            $first === '/reaction'
-        ) {
-            $emoji = '❤️';
-            $targetObj = '';
-
-            if ($first === '/heart') {
-                $emoji = '❤️';
-                $targetObj = $parts[1] ?? $channel;
-            } elseif ($first === '/react' || $first === '/reaction') {
-                $p1 = $parts[1] ?? '';
-                $p2 = $parts[2] ?? '';
-                if (ReactionServ::isEmoji($p1)) {
-                    $emoji = ReactionServ::normalizeEmoji($p1);
-                    $targetObj = !empty($p2) ? $p2 : $channel;
-                } elseif (ReactionServ::isEmoji($p2)) {
-                    $emoji = ReactionServ::normalizeEmoji($p2);
-                    $targetObj = !empty($p1) ? $p1 : $channel;
-                } else {
-                    $emoji = '❤️';
-                    $targetObj = !empty($p1) ? $p1 : $channel;
-                }
-            } else {
-                $emoji = ReactionServ::normalizeEmoji($parts[0]);
-                $targetObj = $parts[1] ?? $channel;
-            }
-
-            $res = ReactionServ::react($targetObj, $emoji, $senderNick);
-            return [
-                'is_service_command' => true,
-                'service' => ReactionServ::SERVICE_NAME,
-                'response' => $res['message'],
-                'channel' => $channel,
-                'reaction' => $res['reaction'],
-                'object' => $res['object'],
-                'reactions_uri' => $res['reactions_uri'],
-                'data' => $res['data'] ?? [],
-                'appstatus' => $appModes
-            ];
-        }
-
-        if ($first === '/reactserv' || $first === '/reactionserv') {
-            $cmd = strtoupper($parts[1] ?? '');
-            $args = array_slice($parts, 2);
-            return self::handleReactServCommand($senderNick, $channel, $cmd, $args);
-        }
-
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
         // Server Management Commands: /connect and /disconnect
         if ($first === '/connect') {
             $uri = $parts[1] ?? '';
@@ -878,8 +604,6 @@ class IrcServices
             $targetObj = $parsed['channel'];
             $reqModes = $parsed['modes'] ?? '';
 
-<<<<<<< HEAD
-=======
             $access = ChanServ::checkAccess($parsed['uri'] ?? $targetObj, $senderNick);
             if (!$access['success']) {
                 return [
@@ -890,7 +614,6 @@ class IrcServices
                 ];
             }
 
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
             if ($reqModes !== '') {
                 $prefix = mb_substr($targetObj, 0, 1);
 
@@ -922,70 +645,6 @@ class IrcServices
                 'response' => "SERVERSERV: Connected to server '{$parsed['host']}:{$parsed['port']}' via {$parsed['protocol']} (Channel: {$parsed['channel']}).",
                 'channel' => $parsed['channel'],
                 'appstatus' => $appModes
-            ];
-        }
-
-        if ($first === '/join') {
-            $target = $parts[1] ?? '';
-            if (empty($target)) {
-                return [
-                    'is_service_command' => true,
-                    'service' => 'SERVERSERV',
-                    'response' => 'SERVERSERV: Usage: /join <#channel>',
-                    'channel' => $channel
-                ];
-            }
-            $parsedTarget = ChanServ::parseTargetAndModes($target);
-            $cleanChan = \Fortress\Security\Sanitizer::sanitizeRoomId($parsedTarget['base_target']);
-            return [
-                'is_service_command' => true,
-                'service' => 'SERVERSERV',
-                'response' => "SERVERSERV: Joined channel {$cleanChan}.",
-                'channel' => $cleanChan,
-                'appstatus' => $appModes
-            ];
-        }
-
-        if ($first === '/part') {
-            $target = $parts[1] ?? $channel;
-            return [
-                'is_service_command' => true,
-                'service' => 'SERVERSERV',
-                'response' => "SERVERSERV: Left channel {$target}.",
-                'channel' => $channel,
-                'appstatus' => $appModes
-            ];
-        }
-
-        if ($first === '/mode') {
-            $target = $parts[1] ?? $channel;
-            $modes = $parts[2] ?? '';
-            $res = ChanServ::setModes($target, $modes, $senderNick);
-            return [
-                'is_service_command' => true,
-                'service' => ChanServ::SERVICE_NAME,
-                'response' => $res['message'],
-                'channel' => $channel
-            ];
-        }
-
-        if ($first === '/raw') {
-            $rawPayload = trim(substr($text, strlen($parts[0])));
-            return [
-                'is_service_command' => true,
-                'service' => 'SERVERSERV',
-                'response' => "[RAW OUTPUT] {$rawPayload}",
-                'channel' => $channel
-            ];
-        }
-
-        if ($first === '/delta') {
-            $target = $parts[1] ?? $channel;
-            return [
-                'is_service_command' => true,
-                'service' => ChanServ::SERVICE_NAME,
-                'response' => "CHANSERV: Δmodes active for {$target}.",
-                'channel' => $channel
             ];
         }
 
@@ -1043,13 +702,6 @@ class IrcServices
                 return self::handleServServCommand($senderNick, $channel, $cmd, $args);
             }
 
-<<<<<<< HEAD
-=======
-            if ($targetService === ReactionServ::SERVICE_NAME || $targetService === ReactionServ::ALIAS_SERVICE_NAME) {
-                return self::handleReactServCommand($senderNick, $channel, $cmd, $args);
-            }
-
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
             // Check if $targetService is a registered foreign service operating under a different host
             $foreignService = ServiceRegistry::getService($targetService);
             if ($foreignService) {
@@ -1182,8 +834,36 @@ class IrcServices
         }
 
         // 4. Convenience Slash Commands
-<<<<<<< HEAD
-=======
+        if ($first === '/react') {
+            $reactArgs = array_slice($parts, 1);
+            if (empty($reactArgs)) {
+                return [
+                    'is_service_command' => true,
+                    'service' => 'REACT',
+                    'response' => 'REACT: Usage: /react <reaction> [<object-uri|[prefix]me>]',
+                    'channel' => $channel
+                ];
+            }
+            if (count($reactArgs) === 1) {
+                $reactArgs[] = (empty($channel) || $channel === '#') ? '£' : $channel;
+            }
+            $reactText = '/REACT ' . implode(' ', $reactArgs);
+
+            \Fortress\Signaling\RoomManager::broadcastSignal($channel, $senderNick, [
+                'type' => 'chat',
+                'sender' => $senderNick,
+                'message' => $reactText
+            ], false);
+
+            return [
+                'is_service_command' => true,
+                'service' => 'REACT',
+                'response' => "[Reaction sent]",
+                'channel' => $channel,
+                'skip_bot_broadcast' => true
+            ];
+        }
+
         if ($first === '/join') {
             $rawTarget = $parts[1] ?? '';
             if (empty($rawTarget)) {
@@ -1204,11 +884,12 @@ class IrcServices
                 ];
             }
             $targetChan = $access['base_target'];
+            $modesStr = $access['modes'] ?? '';
             return [
                 'is_service_command' => true,
                 'service' => 'SERVERSERV',
-                'response' => "SERVERSERV: Joined channel {$targetChan}.",
-                'channel' => $targetChan,
+                'response' => "SERVERSERV: Joined channel {$targetChan}{$modesStr}.",
+                'channel' => $targetChan . $modesStr,
                 'appstatus' => $appModes
             ];
         }
@@ -1255,13 +936,8 @@ class IrcServices
                 $targetChan = $channel;
             }
             if ($modeStr === '') {
-                if (str_starts_with($targetChan, '@')) {
-                    $info = NameServ::getInfo(ltrim($targetChan, '@'));
-                    $resp = $info['success'] ? "Modes for {$targetChan}: " . ($info['data']['modes'] ?? '+i') : "No modes set for {$targetChan}.";
-                } else {
-                    $info = ChanServ::getInfo($targetChan);
-                    $resp = $info['success'] ? "Modes for {$targetChan}: " . ($info['data']['modes'] ?? '+t') : "No modes set for {$targetChan}.";
-                }
+                $info = ChanServ::getInfo($targetChan);
+                $resp = $info['success'] ? "Modes for {$targetChan}: " . ($info['data']['modes'] ?? '+t') : "No modes set for {$targetChan}.";
             } elseif (!empty($targetUser)) {
                 if ($modeStr === '+o') {
                     $res = ChanServ::op($targetChan, $targetUser, $senderNick);
@@ -1288,19 +964,11 @@ class IrcServices
                     $res = ChanServ::denetadmin($targetChan, $targetUser, $senderNick);
                     $resp = $res['message'];
                 } else {
-                    if (str_starts_with($targetChan, '@')) {
-                        $res = NameServ::setModes($targetChan, $modeStr, $senderNick);
-                    } else {
-                        $res = ChanServ::setModes($targetChan, $modeStr, $senderNick);
-                    }
+                    $res = ChanServ::setModes($targetChan, $modeStr, $senderNick);
                     $resp = $res['message'];
                 }
             } else {
-                if (str_starts_with($targetChan, '@')) {
-                    $res = NameServ::setModes($targetChan, $modeStr, $senderNick);
-                } else {
-                    $res = ChanServ::setModes($targetChan, $modeStr, $senderNick);
-                }
+                $res = ChanServ::setModes($targetChan, $modeStr, $senderNick);
                 $resp = $res['message'];
             }
             return [
@@ -1311,7 +979,6 @@ class IrcServices
             ];
         }
 
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
         if ($first === '/memo') {
             $sub = strtoupper($parts[1] ?? 'LIST');
             if ($sub === 'SEND') {
@@ -1373,69 +1040,6 @@ class IrcServices
             ];
         }
 
-<<<<<<< HEAD
-        if ($first === '/join') {
-            $target = $parts[1] ?? $channel;
-            $parsedTarget = ChanServ::parseTargetAndModes($target);
-            $baseChannel = $parsedTarget['base_target'];
-            return [
-                'is_service_command' => true,
-                'service' => 'SERVERSERV',
-                'response' => "SERVERSERV: Joined channel {$baseChannel}",
-                'channel' => $baseChannel
-            ];
-        }
-
-        if ($first === '/part') {
-            $target = $parts[1] ?? $channel;
-            return [
-                'is_service_command' => true,
-                'service' => 'SERVERSERV',
-                'response' => "SERVERSERV: Left channel {$target}",
-                'channel' => $target
-            ];
-        }
-
-        if ($first === '/mode') {
-            $chan = (!empty($parts[1]) && str_starts_with($parts[1], '#')) ? $parts[1] : $channel;
-            $modes = (!empty($parts[1]) && !str_starts_with($parts[1], '#')) ? $parts[1] : ($parts[2] ?? '');
-            if (empty($modes)) {
-                $info = ChanServ::getInfo($chan);
-                $resp = $info['message'];
-            } else {
-                $res = ChanServ::setModes($chan, $modes, $senderNick);
-                $resp = $res['message'];
-            }
-            return [
-                'is_service_command' => true,
-                'service' => ChanServ::SERVICE_NAME,
-                'response' => $resp,
-                'channel' => $chan
-            ];
-        }
-
-        if ($first === '/raw') {
-            $payload = implode(' ', array_slice($parts, 1));
-            return [
-                'is_service_command' => true,
-                'service' => 'SERVERSERV',
-                'response' => "[RAW OUTPUT] {$payload}",
-                'channel' => $channel
-            ];
-        }
-
-        if ($first === '/delta') {
-            $target = $parts[1] ?? $channel;
-            return [
-                'is_service_command' => true,
-                'service' => ChanServ::SERVICE_NAME,
-                'response' => "CHANSERV: Δmodes active for {$target}",
-                'channel' => $target
-            ];
-        }
-
-=======
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
         if ($first === '/op') {
             $target = $parts[1] ?? '';
             $chan = (!empty($parts[2]) ? $parts[2] : $channel);
@@ -1460,8 +1064,6 @@ class IrcServices
             ];
         }
 
-<<<<<<< HEAD
-=======
         if ($first === '/voice') {
             $target = $parts[1] ?? '';
             $chan = (!empty($parts[2]) ? $parts[2] : $channel);
@@ -1534,7 +1136,6 @@ class IrcServices
             ];
         }
 
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
         if ($first === '/topic') {
             $newTopic = trim(substr($text, strlen($parts[0])));
             if ($newTopic === '') {
@@ -1572,17 +1173,6 @@ class IrcServices
             ];
         }
 
-<<<<<<< HEAD
-        if ($first === '/identify') {
-            $pass = $parts[1] ?? '';
-            $res = NameServ::identify($senderNick, $pass);
-            return [
-                'is_service_command' => true,
-                'service' => NameServ::SERVICE_NAME,
-                'response' => $res['message'],
-                'channel' => $channel
-            ];
-=======
         if ($first === '/ident' || $first === '/identify') {
             return self::handleIdentCommand($senderNick, $channel, $parts);
         }
@@ -1607,7 +1197,6 @@ class IrcServices
                     'channel' => $channel
                 ];
             }
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
         }
 
         if ($first === '/setting' || $first === '/settings') {
@@ -1701,8 +1290,6 @@ class IrcServices
             ];
         }
 
-<<<<<<< HEAD
-=======
         // Enforce channel text restrictions (+v video-only / +m moderated)
         if (str_starts_with($channel, '#') || str_starts_with($channel, '&')) {
             $chanInfo = ChanServ::getInfo($channel);
@@ -1720,7 +1307,6 @@ class IrcServices
             }
         }
 
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
         return null;
     }
 
@@ -1767,8 +1353,6 @@ class IrcServices
         ];
     }
 
-<<<<<<< HEAD
-=======
     public static function handleIdentCommand(string $senderNick, string $channel, array $parts): array
     {
         $arg = trim($parts[1] ?? '');
@@ -1933,7 +1517,6 @@ class IrcServices
         ];
     }
 
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
     private static function handleNameServCommand(string $senderNick, string $channel, string $cmd, array $args): array
     {
         switch ($cmd) {
@@ -1943,11 +1526,6 @@ class IrcServices
                 $res = NameServ::register($senderNick, $pass, $email);
                 break;
 
-<<<<<<< HEAD
-            case 'IDENTIFY':
-                $pass = $args[0] ?? '';
-                $res = NameServ::identify($senderNick, $pass);
-=======
             case 'IDENT':
             case 'IDENTIFY':
                 $arg0 = $args[0] ?? '';
@@ -1975,7 +1553,6 @@ class IrcServices
                 } else {
                     $res = ['message' => "NICKSERV: Usage: /msg NICKSERV SET §domain=<custom.domain.com>"];
                 }
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
                 break;
 
             case 'SUBSCRIBE':
@@ -1988,10 +1565,6 @@ class IrcServices
                 $res = NameServ::getInfo($target);
                 break;
 
-<<<<<<< HEAD
-            default:
-                $res = ['message' => "NAMESERV: Unknown command '{$cmd}'. Use REGISTER, IDENTIFY, SUBSCRIBE, or INFO."];
-=======
             case 'WHOIS':
                 return self::handleWhoisCommand($senderNick, $channel, ['/whois', $args[0] ?? $senderNick]);
 
@@ -2000,7 +1573,6 @@ class IrcServices
 
             default:
                 $res = ['message' => "NAMESERV: Unknown command '{$cmd}'. Use REGISTER, IDENTIFY, SET, SUBSCRIBE, INFO, WHOIS, or WHO."];
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
                 break;
         }
 
@@ -2065,8 +1637,6 @@ class IrcServices
                 $res = ChanServ::devoice($chan, $target, $senderNick);
                 break;
 
-<<<<<<< HEAD
-=======
             case 'ADMIN':
                 $chan = !empty($args[0]) && str_starts_with($args[0], '#') ? $args[0] : $channel;
                 $target = !empty($args[0]) && !str_starts_with($args[0], '#') ? $args[0] : ($args[1] ?? '');
@@ -2091,7 +1661,6 @@ class IrcServices
                 $res = ChanServ::denetadmin($chan, $target, $senderNick);
                 break;
 
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
             case 'MODE':
             case 'MODES':
                 $chan = !empty($args[0]) && str_starts_with($args[0], '#') ? $args[0] : $channel;
@@ -2116,11 +1685,7 @@ class IrcServices
                 break;
 
             default:
-<<<<<<< HEAD
-                $res = ['message' => "CHANSERV: Unknown command '{$cmd}'. Use REGISTER, SUBSCRIBE, OP, DEOP, VOICE, DEVOICE, MODE, TOPIC, or INFO."];
-=======
                 $res = ['message' => "CHANSERV: Unknown command '{$cmd}'. Use REGISTER, SUBSCRIBE, OP, DEOP, VOICE, DEVOICE, ADMIN, DEADMIN, NETADMIN, DENETADMIN, MODE, TOPIC, or INFO."];
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
                 break;
         }
 
@@ -2312,65 +1877,4 @@ class IrcServices
             'channel' => $channel
         ];
     }
-<<<<<<< HEAD
-=======
-
-    private static function handleReactServCommand(string $senderNick, string $channel, string $cmd, array $args): array
-    {
-        switch ($cmd) {
-            case 'REACT':
-            case 'ADD':
-                $target = $args[0] ?? $channel;
-                $emoji = $args[1] ?? '❤️';
-                $res = ReactionServ::react($target, $emoji, $senderNick);
-                break;
-
-            case 'GET':
-            case 'LIST':
-            case 'INFO':
-                $target = $args[0] ?? $channel;
-                $summary = ReactionServ::getReactions($target);
-                $lines = ["REACTSERV Reactions for {$target}: (Total: {$summary['total_count']})"];
-                foreach ($summary['reactions'] as $em => $info) {
-                    $uList = implode(', ', $info['users'] ?? []);
-                    $lines[] = "  {$em}: {$info['count']} ({$uList})";
-                }
-                $res = [
-                    'success' => true,
-                    'message' => implode("\n", $lines),
-                    'summary' => $summary,
-                    'reactions_uri' => $summary['reactions_uri']
-                ];
-                break;
-
-            case 'CLEAR':
-                $target = $args[0] ?? $channel;
-                \Fortress\Database\ObjectReactionRepository::clear($target);
-                $res = [
-                    'success' => true,
-                    'message' => "REACTSERV: Cleared all reactions for {$target}."
-                ];
-                break;
-
-            case 'HELP':
-            default:
-                $res = [
-                    'success' => true,
-                    'message' => "REACTSERV: Commands: REACT <object> <emoji>, LIST <object>, CLEAR <object>. Shortcut: HEART|<emoji> ivc://object/:id"
-                ];
-                break;
-        }
-
-        return [
-            'is_service_command' => true,
-            'service' => ReactionServ::SERVICE_NAME,
-            'response' => $res['message'],
-            'channel' => $channel,
-            'reaction' => $res['reaction'] ?? null,
-            'object' => $res['object'] ?? ($args[0] ?? $channel),
-            'reactions_uri' => $res['reactions_uri'] ?? null,
-            'data' => $res['data'] ?? []
-        ];
-    }
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
 }

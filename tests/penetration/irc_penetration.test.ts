@@ -1,86 +1,18 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { spawn, ChildProcess } from 'child_process';
-<<<<<<< HEAD
-import * as net from 'net';
-
-/**
- * @Service("irc-daemon")
- */
-=======
 import * as http from 'http';
 
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
 describe('IRC Penetration Tests', () => {
   let serverProcess: ChildProcess;
 
   beforeAll((done) => {
-<<<<<<< HEAD
-    // Start the IRC server in background
-    serverProcess = spawn('php', ['bin/irc-server.php'], { stdio: 'pipe' });
-    setTimeout(done, 1000); // give it a sec to start
+    serverProcess = spawn('node', ['server.js'], { env: { ...process.env, PORT: '18081' } });
+    setTimeout(done, 1500);
   });
 
   afterAll(() => {
     if (serverProcess) {
       serverProcess.kill();
-    }
-  });
-
-  it('should block unauthorized users from becoming OP', (done) => {
-    const client = new net.Socket();
-    client.connect(6667, '127.0.0.1', () => {
-      client.write('NICK HackerBot\r\n');
-      client.write('USER hacker hacker server :Hacker\r\n');
-      client.write('JOIN #fortress\r\n');
-      // Malicious attempt to OP oneself
-      client.write('MODE #fortress +o HackerBot\r\n');
-    });
-
-    let output = '';
-    let isDone = false;
-    let timeoutId: any;
-
-    client.on('data', (data) => {
-      output += data.toString();
-
-      // We know the server should explicitly deny this request.
-      if (!isDone && (output.includes('Cant change mode for other users') || output.includes('502 HackerBot'))) {
-         isDone = true;
-         clearTimeout(timeoutId);
-         client.destroy();
-         expect(output).toContain('Cant change mode');
-         expect(output).not.toContain('+o HackerBot');
-         done();
-      }
-    });
-
-    // Safety fallback just in case it doesn't respond
-    timeoutId = setTimeout(() => {
-      if (!isDone) {
-        isDone = true;
-        client.destroy();
-        expect(output).not.toContain('+o HackerBot');
-        done();
-      }
-    }, 4000);
-=======
-    serverProcess = spawn('node', ['server.js'], { env: { ...process.env, PORT: '18081' } });
-    let ready = false;
-    serverProcess.stdout?.on('data', (d) => {
-      if (d.toString().includes('PHP WASM Engine loaded and initialized') && !ready) {
-        ready = true;
-        done();
-      }
-    });
-    setTimeout(() => { if (!ready) { ready = true; done(); } }, 15000);
-  }, 20000);
-
-  afterAll((done) => {
-    if (serverProcess) {
-      serverProcess.on('exit', () => done());
-      serverProcess.kill();
-    } else {
-      done();
     }
   });
 
@@ -177,6 +109,5 @@ describe('IRC Penetration Tests', () => {
     const body5 = JSON.parse(res5.data);
     expect(res5.status).toBe(200);
     expect(body5.response).toContain('testuser@cyber.domain.org');
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
   });
 });

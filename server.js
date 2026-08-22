@@ -5,6 +5,10 @@ import fs from 'fs';
 import os from 'os';
 import crypto from 'crypto';
 import { getPhp, processIrcCommand, mongoDb } from './php_engine.js';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const bitbuffer = require('./public/assets/js/ivc.bitbuffer.js');
+const { decompressTextMessage } = bitbuffer || {};
 getPhp().then(() => console.log('PHP WASM Engine loaded and initialized.')).catch(console.error);
 
 
@@ -83,10 +87,12 @@ function roleSatisfies(userRole, requiredRole) {
     return (hierarchy[userRole] || 0) >= (hierarchy[requiredRole] || 0);
 }
 
-app.get('/api/signal.php', (req, res) => {
-    const rawRoom = req.query.room;
-    const clientId = req.query.client;
+app.all('/api/signal.php', (req, res) => {
+    const rawRoom = req.query.room || (req.body && req.body.room);
+    const clientId = req.query.client || (req.body && (req.body.client || req.body.sender));
     const mode = req.query.mode;
+    const type = (req.body && req.body.type) || req.query.type;
+    const roomId = rawRoom;
 
     if (!rawRoom || !clientId) return res.status(400).json({ error: 'Missing room or client' });
 
@@ -129,12 +135,37 @@ app.get('/api/signal.php', (req, res) => {
                 return res.status(473).json({ error: 'Cannot send signal to channel (+N) - Network admin / owner (+n) status required' });
             }
 
-            const isChatMessage = type === 'chat' || !!req.body.message || !!req.body.text;
+            const isChatMessage = type === 'chat' || !!(req.body && (req.body.message || req.body.text));
             if (isVoiceRestricted && isChatMessage && !roleSatisfies(userRole, 'VOICE')) {
                 return res.status(403).json({ error: 'Cannot send text message to channel (+v/+m) - Voice (+v) or operator (+o) required' });
             }
         }
     } catch (e) { }
+
+    if (mode === 'sse') {
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive'
+        });
+        res.write(': connected\n\n');
+        
+        if (!rooms.has(roomId)) rooms.set(roomId, { peers: new Map() });
+        rooms.get(roomId).peers.set(clientId, res);
+        
+        req.on('close', () => {
+            if (rooms.has(roomId)) {
+                rooms.get(roomId).peers.delete(clientId);
+            }
+        });
+        return;
+    }
+
+    if (type === 'join' && req.body.nickname) {
+        if (!rooms.has(roomId)) rooms.set(roomId, { peers: new Map() });
+        const peer = rooms.get(roomId).peers.get(clientId);
+        if (peer) peer.nickname = req.body.nickname;
+    }
 
     if (type === 'leave') {
         if (rooms.has(roomId)) {
@@ -143,12 +174,14 @@ app.get('/api/signal.php', (req, res) => {
         return res.json({ status: 'left' });
     }
 
-    // Broadcast
-    const broadcastPayload = { ...req.body };
-    if (!broadcastPayload.sender && clientId) {
-        broadcastPayload.sender = clientId;
-    }
+    let senderRole = 'MEMBER';
+    try {
+        if (clientId) {
+            senderRole = getUserChannelRole(baseRoom, clientId);
+        }
+    } catch (e) {}
 
+    // Broadcast to Web peers
     if (rooms.has(roomId)) {
         rooms.get(roomId).peers.forEach((peerRes, peerId) => {
             if (peerId !== clientId) {
@@ -156,7 +189,119 @@ app.get('/api/signal.php', (req, res) => {
             }
         });
     }
-    res.json({ status: 'sent' });
+
+    // Bridge to IRC clients
+    const nick = req.body.nickname || req.body.sender || clientId;
+    if (type === 'join') {
+        for (const [ircId, ircClient] of ircClients.entries()) {
+            if (ircClient.registered && ircClient.channels.has(baseRoom)) {
+                ircClient.socket.write(`:${nick}!${clientId}@web.client JOIN ${baseRoom}\r\n`);
+            }
+        }
+        
+        // Bootstrap Web client with existing IRC clients
+        const peerRes = rooms.has(roomId) ? rooms.get(roomId).peers.get(clientId) : null;
+        if (peerRes) {
+            for (const [ircId, ircClient] of ircClients.entries()) {
+                if (ircClient.registered && ircClient.channels.has(baseRoom)) {
+                    const ircRole = getUserChannelRole(baseRoom, ircClient.nick);
+                    let prefix = '';
+                    if (ircRole === 'OWNER' || ircRole === 'NETADMIN') prefix = '~';
+                    else if (ircRole === 'ADMIN') prefix = '&';
+                    else if (ircRole === 'OPERATOR' || ircRole === 'OP') prefix = '@';
+                    else if (ircRole === 'VOICE') prefix = '+';
+                    
+                    peerRes.write(`data: ${JSON.stringify({ type: 'join', nickname: ircClient.nick, sender: ircId, role: ircRole, prefix: prefix })}\n\n`);
+                }
+            }
+        }
+    } else if (type === 'leave') {
+        for (const [ircId, ircClient] of ircClients.entries()) {
+            if (ircClient.registered && ircClient.channels.has(baseRoom)) {
+                ircClient.socket.write(`:${nick}!${clientId}@web.client PART ${baseRoom}\r\n`);
+            }
+        }
+    } else if (type === 'file') {
+        const fileUrl = `https://${req.headers.host || 'localhost'}/file/${req.body.fileId}`;
+        for (const [ircId, ircClient] of ircClients.entries()) {
+            if (ircClient.registered && ircClient.channels.has(baseRoom)) {
+                ircClient.socket.write(`:${nick}!${clientId}@web.client NOTICE ${baseRoom} :Shared a file: ${req.body.fileName} - ${fileUrl}\r\n`);
+            }
+        }
+    } else if (type === 'whois') {
+        const targetNick = req.body.target;
+        let found = false;
+        let html = '';
+        
+        for (const [ircId, ircClient] of ircClients.entries()) {
+            if (ircClient.registered && ircClient.nick === targetNick) {
+                found = true;
+                const chans = Array.from(ircClient.channels).map(chan => {
+                    const role = getUserChannelRole(chan, targetNick);
+                    let prefix = '';
+                    if (role === 'OWNER' || role === 'NETADMIN') prefix = '~';
+                    else if (role === 'ADMIN') prefix = '&';
+                    else if (role === 'OPERATOR' || role === 'OP') prefix = '@';
+                    else if (role === 'VOICE') prefix = '+';
+                    return prefix + chan;
+                }).join(' ');
+                
+                html = `
+                    <div style="padding: 20px; font-family: monospace; color: var(--text-color);">
+                        <h2 style="margin-top: 0;">WHOIS: ${targetNick}</h2>
+                        <p><strong>User:</strong> ${ircClient.user || targetNick}</p>
+                        <p><strong>Host:</strong> localhost</p>
+                        <p><strong>Server:</strong> IVC Server</p>
+                        <p><strong>Channels:</strong> ${chans}</p>
+                        <p><strong>Client Type:</strong> IRC Native Client</p>
+                    </div>
+                `;
+                break;
+            }
+        }
+        
+        if (!found) {
+            const webChans = [];
+            for (const [chan, room] of rooms.entries()) {
+                for (const [peerId, peer] of room.peers.entries()) {
+                    if (!peerId.startsWith('irc-') && (peer.nickname === targetNick || peerId === targetNick)) {
+                        found = true;
+                        if (!webChans.includes(chan)) {
+                            const role = getUserChannelRole(chan, targetNick);
+                            let prefix = '';
+                            if (role === 'OWNER' || role === 'NETADMIN') prefix = '~';
+                            else if (role === 'ADMIN') prefix = '&';
+                            else if (role === 'OPERATOR' || role === 'OP') prefix = '@';
+                            else if (role === 'VOICE') prefix = '+';
+                            webChans.push(prefix + chan);
+                        }
+                    }
+                }
+            }
+            if (found) {
+                html = `
+                    <div style="padding: 20px; font-family: monospace; color: var(--text-color);">
+                        <h2 style="margin-top: 0;">WHOIS: ${targetNick}</h2>
+                        <p><strong>User:</strong> ${targetNick}</p>
+                        <p><strong>Host:</strong> web.client</p>
+                        <p><strong>Server:</strong> IVC Server</p>
+                        <p><strong>Channels:</strong> ${webChans.join(' ')}</p>
+                        <p><strong>Client Type:</strong> WebRTC Client</p>
+                    </div>
+                `;
+            }
+        }
+
+        if (found) {
+            const peerRes = rooms.has(roomId) ? rooms.get(roomId).peers.get(clientId) : null;
+            if (peerRes) {
+                peerRes.write(`data: ${JSON.stringify({ type: 'whois_response', target: targetNick, html: html })}\n\n`);
+            }
+            return res.json({ status: 'sent', role: senderRole });
+        }
+    }
+
+    res.json({ status: 'sent', role: senderRole });
 });
 
 app.post('/api/irc.php', async (req, res) => {
@@ -360,18 +505,53 @@ const ircServer = net.createServer((socket) => {
                         isFirst = true;
                     }
 
-                    // Add to rooms map to bridge SSE
+                    // Add channel if doesn't exist
                     if (!rooms.has(channel)) rooms.set(channel, { peers: new Map() });
-                    rooms.get(channel).peers.set(`irc-${clientState.nick}`, {
-                        write: (dataStr) => {
-                            try {
-                                const data = JSON.parse(dataStr.replace(/^data:\s*/, '').trim());
-                                if (data.sender !== clientState.nick && data.message) {
-                                    send(`:${data.sender}!user@localhost PRIVMSG ${channel} :${data.message}`);
-                                }
-                            } catch (e) { }
+
+                    // Broadcast to Web users that IRC user joined
+                    const ircRole = getUserChannelRole(channel, clientState.nick);
+                    let rolePrefix = '';
+                    if (ircRole === 'OWNER' || ircRole === 'NETADMIN') rolePrefix = '~';
+                    else if (ircRole === 'ADMIN') rolePrefix = '&';
+                    else if (ircRole === 'OPERATOR' || ircRole === 'OP') rolePrefix = '@';
+                    else if (ircRole === 'VOICE') rolePrefix = '+';
+
+                    const joinMsg = JSON.stringify({ type: 'join', sender: `irc-${clientState.nick}`, nickname: clientState.nick, prefix: rolePrefix });
+                    rooms.get(channel).peers.forEach((peer, peerId) => {
+                        if (!peerId.startsWith('irc-')) {
+                            peer.write(`data: ${joinMsg}\n\n`);
                         }
                     });
+
+                    // Synthesize RPL_NAMREPLY
+                    const names = [];
+                    // Add Web clients
+                    for (const [pid, peer] of rooms.get(channel).peers.entries()) {
+                        if (!pid.startsWith('irc-')) {
+                            const webNick = peer.nickname || pid;
+                            const webRole = getUserChannelRole(channel, webNick);
+                            let webPrefix = '';
+                            if (webRole === 'OWNER' || webRole === 'NETADMIN') webPrefix = '~';
+                            else if (webRole === 'ADMIN') webPrefix = '&';
+                            else if (webRole === 'OPERATOR' || webRole === 'OP') webPrefix = '@';
+                            else if (webRole === 'VOICE') webPrefix = '+';
+                            names.push(webPrefix + webNick);
+                        }
+                    }
+                    // Add IRC clients
+                    for (const [ircId, ircClient] of ircClients.entries()) {
+                        if (ircClient.registered && ircClient.channels.has(channel)) {
+                            const iRole = getUserChannelRole(channel, ircClient.nick);
+                            let iPrefix = '';
+                            if (iRole === 'OWNER' || iRole === 'NETADMIN') iPrefix = '~';
+                            else if (iRole === 'ADMIN') iPrefix = '&';
+                            else if (iRole === 'OPERATOR' || iRole === 'OP') iPrefix = '@';
+                            else if (iRole === 'VOICE') iPrefix = '+';
+                            names.push(iPrefix + ircClient.nick);
+                        }
+                    }
+                    send(`:${serverHost} 353 ${clientState.nick} = ${channel} :${names.join(' ')}`);
+                    send(`:${serverHost} 366 ${clientState.nick} ${channel} :End of /NAMES list`);
 
                     if (isFirst) {
                         let giveFounder = true;
@@ -404,7 +584,12 @@ const ircServer = net.createServer((socket) => {
                     }
 
                     if (rooms.has(channel)) {
-                        rooms.get(channel).peers.delete(`irc-${clientState.nick}`);
+                        const partMsg = JSON.stringify({ type: 'leave', sender: `irc-${clientState.nick}`, nickname: clientState.nick });
+                        rooms.get(channel).peers.forEach((peer, peerId) => {
+                            if (!peerId.startsWith('irc-')) {
+                                peer.write(`data: ${partMsg}\n\n`);
+                            }
+                        });
                     }
                     send(`:${clientState.nick}!${clientState.user}@localhost PART ${channel}`);
                 });
@@ -423,7 +608,8 @@ const ircServer = net.createServer((socket) => {
                     }
                     // Broadcast to SSE
                     if (rooms.has(target)) {
-                        const payload = { type: 'chat', sender: clientState.nick, message: msg };
+                        const senderRole = getUserChannelRole(target, clientState.nick);
+                        const payload = { type: 'chat', sender: clientState.nick, message: msg, role: senderRole };
                         rooms.get(target).peers.forEach((peerRes, peerId) => {
                             if (!peerId.startsWith('irc-')) {
                                 peerRes.write(`data: ${JSON.stringify(payload)}\n\n`);
@@ -455,6 +641,68 @@ const ircServer = net.createServer((socket) => {
                         }
                     } catch (e) { }
                 }
+            } else if (cmd === 'WHOIS') {
+                const targetNick = parts[1];
+                let found = false;
+                
+                // Check IRC clients
+                for (const c of ircClients.values()) {
+                    if (c.registered && c.nick === targetNick) {
+                        found = true;
+                        send(`:${serverHost} 311 ${clientState.nick} ${targetNick} ${c.user || targetNick} localhost * :${c.user || targetNick}`);
+                        
+                        const chans = Array.from(c.channels).map(chan => {
+                            const role = getUserChannelRole(chan, targetNick);
+                            let prefix = '';
+                            if (role === 'OWNER' || role === 'NETADMIN') prefix = '~';
+                            else if (role === 'ADMIN') prefix = '&';
+                            else if (role === 'OPERATOR' || role === 'OP') prefix = '@';
+                            else if (role === 'VOICE') prefix = '+';
+                            return prefix + chan;
+                        }).join(' ');
+                        
+                        if (chans) {
+                            send(`:${serverHost} 319 ${clientState.nick} ${targetNick} :${chans}`);
+                        }
+                        
+                        send(`:${serverHost} 312 ${clientState.nick} ${targetNick} ${serverHost} :IVC Server`);
+                        break;
+                    }
+                }
+                
+                // Check Web clients if not found
+                if (!found) {
+                    const webChans = [];
+                    for (const [chan, room] of rooms.entries()) {
+                        for (const [peerId, peer] of room.peers.entries()) {
+                            if (!peerId.startsWith('irc-') && (peer.nickname === targetNick || peerId === targetNick)) {
+                                found = true;
+                                if (!webChans.includes(chan)) {
+                                    const role = getUserChannelRole(chan, targetNick);
+                                    let prefix = '';
+                                    if (role === 'OWNER' || role === 'NETADMIN') prefix = '~';
+                                    else if (role === 'ADMIN') prefix = '&';
+                                    else if (role === 'OPERATOR' || role === 'OP') prefix = '@';
+                                    else if (role === 'VOICE') prefix = '+';
+                                    webChans.push(prefix + chan);
+                                }
+                            }
+                        }
+                    }
+                    if (found) {
+                        send(`:${serverHost} 311 ${clientState.nick} ${targetNick} ${targetNick} web.client * :Web User`);
+                        if (webChans.length > 0) {
+                            send(`:${serverHost} 319 ${clientState.nick} ${targetNick} :${webChans.join(' ')}`);
+                        }
+                        send(`:${serverHost} 312 ${clientState.nick} ${targetNick} ${serverHost} :IVC Server`);
+                    }
+                }
+                
+                if (found) {
+                    send(`:${serverHost} 318 ${clientState.nick} ${targetNick} :End of /WHOIS list`);
+                } else {
+                    send(`:${serverHost} 401 ${clientState.nick} ${targetNick} :No such nick/channel`);
+                }
             } else if (cmd === 'QUIT') {
                 socket.end();
             } else {
@@ -466,6 +714,14 @@ const ircServer = net.createServer((socket) => {
                         const serviceName = result.service || cmd;
                         send(`:${serviceName}!service@localhost PRIVMSG ${clientState.nick} :${result.response}`);
                     }
+                    if (result && result.mode_broadcast && result.channel) {
+                        const broadcastMsg = `:${clientState.nick}!${clientState.user}@localhost MODE ${result.channel} ${result.mode_broadcast}\r\n`;
+                        for (const [s, c] of ircClients.entries()) {
+                            if (c.registered && c.channels.has(result.channel)) {
+                                s.write(broadcastMsg);
+                            }
+                        }
+                    }
                 } catch (e) { }
             }
         }
@@ -474,7 +730,12 @@ const ircServer = net.createServer((socket) => {
     socket.on('close', () => {
         for (const chan of clientState.channels) {
             if (rooms.has(chan)) {
-                rooms.get(chan).peers.delete(`irc-${clientState.nick}`);
+                const partMsg = JSON.stringify({ type: 'leave', sender: `irc-${clientState.nick}`, nickname: clientState.nick });
+                rooms.get(chan).peers.forEach((peer, peerId) => {
+                    if (!peerId.startsWith('irc-')) {
+                        peer.write(`data: ${partMsg}\n\n`);
+                    }
+                });
             }
         }
         ircClients.delete(socket);

@@ -34,7 +34,7 @@ public interface IvcUri {
         return fetcher.fetch(uri(), method, headers, body);
     }
 
-    public char prefix() {
+    default public char prefix() {
         String path = uri().getPath();
         String lastElement = path.substring(path.lastIndexOf('/')+1);
         return lastElement.charAt(0);

@@ -1,4 +1,4 @@
-package cx.ivc;
+package ivc;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -8,7 +8,7 @@ import java.util.concurrent.CompletableFuture;
  *
  * Mirrors PHP Fortress\IRC\Serv\ChanServ object semantics.
  */
-public class Channel extends AbstractIvcObject {
+public class Channel extends IrcObject {
 
     private final String name;
 
@@ -45,7 +45,7 @@ public class Channel extends AbstractIvcObject {
     public static Channel fromBody(Map<String, Object> body) {
         String bt  = body.getOrDefault("base_target", "").toString();
         Channel ch = new Channel(bt.isEmpty() ? "#unknown" : bt);
-        return AbstractIvcObject.applyBody(ch, body);
+        return IrcObject.applyBody(ch, body);
     }
 
     /**

@@ -1,9 +1,12 @@
 
 import fs_pre from 'fs';
-if (!fs_pre.existsSync('./data')) fs_pre.mkdirSync('./data');
+import path from 'path';
+
+const DATA_DIR = process.env.NODE_ENV === 'production' ? '/tmp/data' : './data';
+if (!fs_pre.existsSync(DATA_DIR)) fs_pre.mkdirSync(DATA_DIR, { recursive: true });
+
 import { PhpNode } from 'php-wasm/PhpNode.mjs';
 import fs from 'fs';
-import path from 'path';
 import Database from 'better-sqlite3';
 
 function formatParams(params) {
@@ -26,7 +29,7 @@ function formatParams(params) {
   return res;
 }
 
-export const db = new Database('./data/ivc_irc.sqlite');
+export const db = new Database(path.join(DATA_DIR, 'ivc_irc.sqlite'));
 
 // MongoDB-compatible Document Store implementation in Node.js
 class MongoCollectionStore {
@@ -219,7 +222,7 @@ class MongoCollectionStore {
 }
 
 class MongoDB {
-  constructor(dataFilePath = './data/mongodb_store.json') {
+  constructor(dataFilePath = path.join(DATA_DIR, 'mongodb_store.json')) {
     this.dataFilePath = dataFilePath;
     this.collections = new Map();
   }
@@ -317,8 +320,8 @@ async function copyDir(php, src, dest) {
 export async function getPhp() {
   if (phpInstance) return phpInstance;
   
-  if (!fs.existsSync('./data')) {
-    fs.mkdirSync('./data');
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
   }
 
   phpInstance = new PhpNode();

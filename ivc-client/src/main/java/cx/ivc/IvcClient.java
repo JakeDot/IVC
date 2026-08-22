@@ -1,4 +1,4 @@
-package ivc;
+package cx.ivc;
 
 import java.io.IOException;
 import java.net.URI;
@@ -106,7 +106,7 @@ public final class IvcClient {
         if (sh.isEmpty()) sh = res.headers().firstValue("X-IVC-Status");
         if (sh.isPresent()) status = IvcMarshaller.parseStatusHeader(sh.get());
 
-        IrcObject object = IvcMarshaller.fromResponse(body);
+        AbstractIvcObject object = IvcMarshaller.fromResponse(body);
         return new IvcRawResult(body, status, object);
     }
 
@@ -161,5 +161,5 @@ public final class IvcClient {
     // Raw result container
     // ---------------------------------------------------------------
 
-    public record IvcRawResult(Map<String, Object> body, IvcStatus status, IrcObject object) {}
+    public record IvcRawResult(Map<String, Object> body, IvcStatus status, AbstractIvcObject object) {}
 }

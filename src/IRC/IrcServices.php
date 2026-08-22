@@ -984,6 +984,15 @@ class IrcServices
             $modeStr = $modeArgs['modeStr'];
             $targetUser = $modeArgs['targetUser'];
 
+            $targetChan = $parts[1] ?? $channel;
+            $modeStr = $parts[2] ?? '';
+            $targetUser = $parts[3] ?? '';
+            if (str_starts_with($targetChan, '+') || str_starts_with($targetChan, '-')) {
+                $targetUser = $parts[2] ?? '';
+                $modeStr = $targetChan;
+                $targetChan = $channel;
+            }
+            $modeBroadcast = null;
             if ($modeStr === '') {
                 $info = ChanServ::getInfo($targetChan);
                 $resp = $info['success'] ? "Modes for {$targetChan}: " . ($info['data']['modes'] ?? '+t') : "No modes set for {$targetChan}.";
@@ -1016,15 +1025,22 @@ class IrcServices
                     $res = ChanServ::setModes($targetChan, $modeStr, $senderNick);
                     $resp = $res['message'];
                 }
+                if (isset($res['success']) && $res['success']) {
+                    $modeBroadcast = "{$modeStr} {$targetUser}";
+                }
             } else {
                 $res = ChanServ::setModes($targetChan, $modeStr, $senderNick);
                 $resp = $res['message'];
+                if (isset($res['success']) && $res['success']) {
+                    $modeBroadcast = "{$modeStr}";
+                }
             }
             return [
                 'is_service_command' => true,
                 'service' => ChanServ::SERVICE_NAME,
                 'response' => $resp,
-                'channel' => $targetChan
+                'channel' => $targetChan,
+                'mode_broadcast' => $modeBroadcast
             ];
         }
 

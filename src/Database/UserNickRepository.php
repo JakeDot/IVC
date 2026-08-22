@@ -40,7 +40,8 @@ class UserNickRepository
             'subscription_tier' => $userNick->getSubscriptionTier(),
             'subscription_status' => $userNick->getSubscriptionStatus(),
             'subscription_expires_at' => $userNick->getSubscriptionExpiresAt(),
-            'custom_domain' => $userNick->getCustomDomain()
+            'vhost' => $userNick->getVhost(),
+            'saved_channels' => $userNick->getSavedChannels()
         ];
         
         if ($exists) {
@@ -66,13 +67,36 @@ class UserNickRepository
                     ['nickname' => ['$regex' => '^' . preg_quote($cleanNick, '/') . '$', '$options' => 'i']],
                     ['nickname' => ['$regex' => '^' . preg_quote($baseNick, '/') . '$', '$options' => 'i']]
                 ]],
-                ['$set' => ['custom_domain' => $cleanDomain, 'is_identified' => 1, 'last_seen' => time()]]
+                ['$set' => ['vhost' => $cleanDomain, 'is_identified' => 1, 'last_seen' => time()]]
             );
-            return true;
+        } else {
+            $userNick = new UserNick($baseNick, UserNick::hashPassword('auto_pass_' . bin2hex(random_bytes(4))), null, time(), time(), true, null, 'none', 0, $cleanDomain);
+            self::save($userNick);
         }
-        
-        $userNick = new UserNick($baseNick, UserNick::hashPassword('auto_pass_' . bin2hex(random_bytes(4))), null, time(), time(), true, null, 'none', 0, $cleanDomain);
-        return self::save($userNick);
+
+        if (str_starts_with($baseNick, '$') && $cleanDomain !== null) {
+            $aliasesColl = Database::getCollection('object_aliases');
+            $objectsColl = Database::getCollection('ivc_objects');
+            $aliasName = '$' . $cleanDomain;
+
+            $aliasDoc = $aliasesColl->findOne(['alias_name' => $aliasName]);
+            if ($aliasDoc !== null) {
+                $objectsColl->updateOne(['guid' => $aliasDoc['target_guid']], ['$set' => ['vhost' => $cleanDomain]]);
+            } else {
+                $guid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x', mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000, mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff));
+                $aliasesColl->insertOne([
+                    'alias_name' => $aliasName,
+                    'target_guid' => $guid,
+                    'object_type' => '$'
+                ]);
+                $objectsColl->insertOne([
+                    'guid' => $guid,
+                    'vhost' => $cleanDomain
+                ]);
+            }
+        }
+
+        return true;
     }
 
     public static function getStandardizedUsername(string $nickname): string
@@ -131,5 +155,43 @@ class UserNickRepository
     {
         Database::getCollection('nameserv_nicks')->deleteOne(['nickname' => ['$regex' => '^' . preg_quote(trim($nickname), '/') . '$', '$options' => 'i']]);
         return true;
+    }
+
+    public static function addSavedChannel(string $nickname, string $channel): bool
+    {
+        $user = self::findByNickname($nickname);
+        if ($user !== null) {
+            $channels = $user->getSavedChannels();
+            if (!in_array($channel, $channels, true)) {
+                $channels[] = $channel;
+                $user->setSavedChannels($channels);
+                return self::save($user);
+            }
+        }
+        return false;
+    }
+
+    public static function removeSavedChannel(string $nickname, string $channel): bool
+    {
+        $user = self::findByNickname($nickname);
+        if ($user !== null) {
+            $channels = $user->getSavedChannels();
+            $index = array_search($channel, $channels, true);
+            if ($index !== false) {
+                unset($channels[$index]);
+                $user->setSavedChannels(array_values($channels));
+                return self::save($user);
+            }
+        }
+        return false;
+    }
+
+    public static function getSavedChannels(string $nickname): array
+    {
+        $user = self::findByNickname($nickname);
+        if ($user !== null) {
+            return $user->getSavedChannels();
+        }
+        return [];
     }
 }

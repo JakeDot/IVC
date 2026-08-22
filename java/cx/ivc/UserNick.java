@@ -1,4 +1,4 @@
-package ivc;
+package cx.ivc;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -8,7 +8,7 @@ import java.util.concurrent.CompletableFuture;
  *
  * Mirrors PHP Fortress\IRC\Serv\NameServ object semantics.
  */
-public class UserNick extends IrcObject {
+public class UserNick extends AbstractIvcObject {
 
     private final String nick;
 
@@ -43,7 +43,7 @@ public class UserNick extends IrcObject {
     public static UserNick fromBody(Map<String, Object> body) {
         String bt   = body.getOrDefault("base_target", "@unknown").toString();
         UserNick un = new UserNick(bt.replaceFirst("^@", ""));
-        return IrcObject.applyBody(un, body);
+        return AbstractIvcObject.applyBody(un, body);
     }
 
     /**

@@ -18,7 +18,8 @@ class UserNick
     private ?string $subscriptionTier;
     private string $subscriptionStatus;
     private int $subscriptionExpiresAt;
-    private ?string $customDomain;
+    private ?string $vhost;
+    private array $savedChannels;
 
     public function __construct(
         string $nickname,
@@ -30,7 +31,8 @@ class UserNick
         ?string $subscriptionTier = null,
         string $subscriptionStatus = 'none',
         int $subscriptionExpiresAt = 0,
-        ?string $customDomain = null
+        ?string $vhost = null,
+        array $savedChannels = []
     ) {
         $this->nickname = trim($nickname);
         $this->passwordHash = $passwordHash;
@@ -41,7 +43,8 @@ class UserNick
         $this->subscriptionTier = $subscriptionTier;
         $this->subscriptionStatus = strtolower(trim($subscriptionStatus));
         $this->subscriptionExpiresAt = $subscriptionExpiresAt;
-        $this->customDomain = $customDomain !== null ? trim($customDomain) : null;
+        $this->vhost = $vhost !== null ? trim($vhost) : null;
+        $this->savedChannels = $savedChannels;
     }
 
     public function getNickname(): string
@@ -54,14 +57,24 @@ class UserNick
         $this->nickname = trim($nickname);
     }
 
-    public function getCustomDomain(): ?string
+    public function getVhost(): ?string
     {
-        return $this->customDomain;
+        return $this->vhost;
     }
 
-    public function setCustomDomain(?string $customDomain): void
+    public function setVhost(?string $vhost): void
     {
-        $this->customDomain = $customDomain !== null ? trim($customDomain) : null;
+        $this->vhost = $vhost !== null ? trim($vhost) : null;
+    }
+
+    public function getSavedChannels(): array
+    {
+        return $this->savedChannels;
+    }
+
+    public function setSavedChannels(array $savedChannels): void
+    {
+        $this->savedChannels = $savedChannels;
     }
 
     public function getBaseUser(): string
@@ -75,8 +88,8 @@ class UserNick
 
     public function getDomain(): string
     {
-        if (!empty($this->customDomain)) {
-            return $this->customDomain;
+        if (!empty($this->vhost)) {
+            return $this->vhost;
         }
         $atPos = strrpos($this->nickname, '@');
         if ($atPos !== false && $atPos > 0) {
@@ -242,9 +255,10 @@ class UserNick
             'subscription_status' => $this->subscriptionStatus,
             'subscription_expires_at' => $this->subscriptionExpiresAt,
             'is_premium' => $this->isPremium() ? 1 : 0,
-            'custom_domain' => $this->customDomain,
+            'vhost' => $this->vhost,
             'domain' => $this->getDomain(),
             'standardized_username' => $this->getStandardizedUsername(),
+            'saved_channels' => $this->savedChannels,
         ];
     }
 
@@ -260,7 +274,8 @@ class UserNick
             isset($data['subscription_tier']) ? (string)$data['subscription_tier'] : null,
             (string)($data['subscription_status'] ?? 'none'),
             isset($data['subscription_expires_at']) ? (int)$data['subscription_expires_at'] : 0,
-            isset($data['custom_domain']) ? (string)$data['custom_domain'] : (isset($data['domain']) ? (string)$data['domain'] : null)
+            isset($data['vhost']) ? (string)$data['vhost'] : (isset($data['domain']) ? (string)$data['domain'] : null),
+            isset($data['saved_channels']) && is_array($data['saved_channels']) ? $data['saved_channels'] : []
         );
     }
 

@@ -1,81 +1,58 @@
 <?php
-
 declare(strict_types=1);
-
 namespace Fortress\Database;
 
-use Fortress\Models\IrcSetting;
-
-/**
- * Data Access Repository for serverwide IRC settings (irc_settings).
- */
 class SettingRepository
 {
-    /**
-     * Find setting by key.
-     */
-    public static function findByKey(string $key): ?IrcSetting
+    public static function getSetting(string $key, ?string $default = null): ?string
     {
-        $row = Database::fetchOne(
-            "SELECT setting_key, setting_value, description, updated_at FROM irc_settings WHERE setting_key = :key",
-            [':key' => trim($key)]
-        );
-
-        return $row !== null ? IrcSetting::fromArray($row) : null;
+        $coll = Database::getCollection('irc_settings');
+        $row = $coll->findOne(['setting_key' => $key]);
+        if ($row !== null && isset($row['setting_value'])) {
+            return (string)$row['setting_value'];
+        }
+        return $default;
     }
 
-    /**
-     * Save (insert or update) setting.
-     */
-    public static function save(IrcSetting $setting): bool
+    public static function getBool(string $key, bool $default = false): bool
     {
-        $existing = self::findByKey($setting->getSettingKey());
+        $val = self::getSetting($key);
+        if ($val === null) return $default;
+        return in_array(strtolower($val), ['1', 'true', 'yes', 'on'], true);
+    }
+
+    public static function getInt(string $key, int $default = 0): int
+    {
+        $val = self::getSetting($key);
+        if ($val === null) return $default;
+        return (int)$val;
+    }
+
+    public static function setSetting(string $key, string $value, ?string $description = null): bool
+    {
+        $coll = Database::getCollection('irc_settings');
         $now = time();
-
-        if ($existing !== null) {
-            $sql = "UPDATE irc_settings SET setting_value = :val, updated_at = :time"
-                 . ($setting->getDescription() !== null ? ", description = :desc" : "")
-                 . " WHERE setting_key = :key";
-
-            $params = [
-                ':val' => $setting->getSettingValue(),
-                ':time' => $now,
-                ':key' => $setting->getSettingKey()
-            ];
-            if ($setting->getDescription() !== null) {
-                $params[':desc'] = $setting->getDescription();
+        $existing = $coll->findOne(['setting_key' => $key]);
+        if ($existing) {
+            $update = ['setting_value' => $value, 'updated_at' => $now];
+            if ($description !== null) {
+                $update['description'] = $description;
             }
-
-            $stmt = Database::execute($sql, $params);
+            $coll->updateOne(['setting_key' => $key], ['$set' => $update]);
         } else {
-            $stmt = Database::execute(
-                "INSERT INTO irc_settings (setting_key, setting_value, description, updated_at) VALUES (:key, :val, :desc, :time)",
-                [
-                    ':key' => $setting->getSettingKey(),
-                    ':val' => $setting->getSettingValue(),
-                    ':desc' => $setting->getDescription(),
-                    ':time' => $now
-                ]
-            );
+            $coll->insertOne([
+                'setting_key' => $key,
+                'setting_value' => $value,
+                'description' => $description,
+                'updated_at' => $now
+            ]);
         }
-
-        return $stmt->rowCount() > 0;
+        return true;
     }
 
-    /**
-     * Fetch all serverwide settings.
-     *
-     * @return array<string, IrcSetting>
-     */
-    public static function findAll(): array
+    public static function getAllSettings(): array
     {
-        $rows = Database::fetchAll("SELECT setting_key, setting_value, description, updated_at FROM irc_settings");
-        $settings = [];
-        foreach ($rows as $row) {
-            $setting = IrcSetting::fromArray($row);
-            $settings[$setting->getSettingKey()] = $setting;
-        }
-
-        return $settings;
+        $coll = Database::getCollection('irc_settings');
+        return $coll->find([]);
     }
 }

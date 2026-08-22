@@ -9,7 +9,7 @@ describe('WebRTC Penetration Tests', () => {
   let serverProcess: ChildProcess;
 
   beforeAll((done) => {
-    serverProcess = spawn('php', ['-S', '127.0.0.1:8080', '-t', 'public']);
+    serverProcess = spawn('node', ['server.js'], { env: { ...process.env, PORT: '18080' } });
     setTimeout(done, 1500);
   });
 
@@ -24,7 +24,7 @@ describe('WebRTC Penetration Tests', () => {
       const data = JSON.stringify(bodyObj);
       const req = http.request({
         hostname: '127.0.0.1',
-        port: 8080,
+        port: 18080,
         path: path,
         method: 'POST',
         headers: {
@@ -77,5 +77,5 @@ describe('WebRTC Penetration Tests', () => {
     }
 
     expect(blocked).toBe(true);
-  }, 30000);
+  });
 });

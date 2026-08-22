@@ -26,7 +26,7 @@ class ChanServ
         if ($channel === '') {
             return '';
         }
-        if (!str_starts_with($channel, '#') && !str_starts_with($channel, '&')) {
+        if (!str_starts_with($channel, '#') && !str_starts_with($channel, '&') && !str_starts_with($channel, '@') && !str_starts_with($channel, '£') && !str_starts_with($channel, '$')) {
             $channel = '#' . $channel;
         }
         return $channel;
@@ -99,6 +99,90 @@ class ChanServ
         return Channel::setTopicCommand($channel, $topic, $requesterNick);
     }
 
+    public static function parseModeStringToArray(string $modeStr): array {
+        $modes = [];
+        $add = true;
+        $i = 0;
+        $len = strlen($modeStr);
+        $singleCharModes = 'nNsSOoAaIiVvkmMedtiplbrR$';
+        $knownWords = ['operators', 'network', 'raw', 'deltamodes', 'Δmodes', 'modes'];
+        
+        while ($i < $len) {
+            $char = $modeStr[$i];
+            if ($char === '+') {
+                $add = true;
+                $i++;
+            } elseif ($char === '-') {
+                $add = false;
+                $i++;
+            } else {
+                $nextSign = strcspn($modeStr, "+-", $i);
+                $part = substr($modeStr, $i, $nextSign);
+                
+                if (str_contains($part, '=')) {
+                    list($key, $val) = explode('=', $part, 2);
+                    if ($add) {
+                        $modes[$key] = $val;
+                    } else {
+                        $modes[$key] = false;
+                    }
+                } else {
+                    $isCluster = true;
+                    if (strlen($part) === 1) {
+                        $isCluster = true;
+                    } else {
+                        for ($j = 0; $j < strlen($part); $j++) {
+                            if (!str_contains($singleCharModes, $part[$j])) {
+                                $isCluster = false;
+                                break;
+                            }
+                        }
+                    }
+                    if (in_array(strtolower($part), $knownWords)) {
+                        $isCluster = false;
+                    }
+                    
+                    if ($isCluster) {
+                        for ($j = 0; $j < strlen($part); $j++) {
+                             $modes[$part[$j]] = $add ? true : false;
+                        }
+                    } else {
+                        $modes[$part] = $add ? true : false;
+                    }
+                }
+                $i += $nextSign;
+            }
+        }
+        return $modes;
+    }
+
+    public static function arrayToModeString(array $modes): string {
+        $singleTrue = '';
+        $singleFalse = '';
+        $wordTrue = '';
+        $wordFalse = '';
+        $valModes = '';
+        
+        foreach ($modes as $k => $v) {
+            $isWord = strlen($k) > 1;
+            if ($v === false) {
+                if ($isWord) $wordFalse .= '-' . $k;
+                else $singleFalse .= $k;
+            } elseif ($v === true) {
+                if ($isWord) $wordTrue .= '+' . $k;
+                else $singleTrue .= $k;
+            } else {
+                $valModes .= '+' . $k . '=' . $v;
+            }
+        }
+        
+        $res = '';
+        if ($singleTrue !== '') $res .= '+' . $singleTrue;
+        if ($singleFalse !== '') $res .= '-' . $singleFalse;
+        $res .= $wordTrue . $wordFalse . $valModes;
+        return $res;
+    }
+
     /**
      * Set modes for a channel
      */
@@ -113,55 +197,25 @@ class ChanServ
         if (self::isRegistered($channel)) {
             $chanModel = ChannelRepository::findByChannelName($channel);
             if ($chanModel) {
-                $currentModes = $chanModel->getModes();
-
-                // Allow specific multibyte/string modes
-                $specialModes = ['Δmodes', 'deltamodes', 'raw'];
-
-                $add = true;
-
-                // Handle special modes first
-                foreach ($specialModes as $sm) {
-                    if (str_contains($modes, "+$sm")) {
-                        if (!str_contains($currentModes, $sm)) {
-                            $currentModes .= $sm;
-                        }
-                        $modes = str_replace("+$sm", "", $modes);
-                    }
-                    if (str_contains($modes, "-$sm")) {
-                        $currentModes = str_replace($sm, '', $currentModes);
-                        $modes = str_replace("-$sm", "", $modes);
+                $currentModesArr = self::parseModeStringToArray($chanModel->getModes());
+                $newOperations = self::parseModeStringToArray($modes);
+                
+                foreach ($newOperations as $k => $v) {
+                    if ($v === false) {
+                        unset($currentModesArr[$k]);
+                    } else {
+                        $currentModesArr[$k] = $v;
                     }
                 }
 
-                // Handle single character modes
-                for ($i = 0; $i < mb_strlen($modes); $i++) {
-                    $char = mb_substr($modes, $i, 1);
-                    if ($char === '+') {
-                        $add = true;
-                    } elseif ($char === '-') {
-                        $add = false;
-                    } elseif (preg_match('/[a-zA-ZΔ]/u', $char)) {
-                        if ($add && !str_contains($currentModes, $char)) {
-                            $currentModes .= $char;
-                        } elseif (!$add && str_contains($currentModes, $char)) {
-                            $currentModes = str_replace($char, '', $currentModes);
-                        }
-                    }
-                }
-                // Ensure there is a + at the start if not empty, otherwise default to +t
-                if (!empty($currentModes) && !str_starts_with($currentModes, '+')) {
-                    $currentModes = '+' . $currentModes;
-                }
-
-                $currentModes = str_replace('+', '', $currentModes);
-                $currentModes = '+' . $currentModes;
-
-                if ($currentModes === '+') $currentModes = '';
+                $currentModes = self::arrayToModeString($currentModesArr);
 
                 ChannelRepository::updateModes($channel, $currentModes);
                 $modes = $currentModes;
             }
+        } else {
+            $chanModel = new Channel($channel, $requesterNick !== '' ? $requesterNick : 'System', null, null, $modes, time());
+            ChannelRepository::save($chanModel);
         }
 
         return ['success' => true, 'message' => "CHANSERV: Modes for {$channel} updated to {$modes}.", 'modes' => $modes];
@@ -171,33 +225,42 @@ class ChanServ
      * Parse mode string into structured mode flags array
      *
      * @param string $modeStr
-     * @return array{n: bool, N: bool, S: bool, s: bool, k: bool, v: bool, o: bool, a: bool, m: bool, t: bool, no_t: bool, raw: bool, delta_modes: bool}
+     * @return array
      */
     public static function parseModeFlags(string $modeStr): array
     {
+        $arr = self::parseModeStringToArray($modeStr);
         $flags = [
-            'n' => str_contains($modeStr, 'n'),
-            'N' => str_contains($modeStr, 'N'),
-            'S' => str_contains($modeStr, 'S'),
-            's' => str_contains($modeStr, 's'),
-            'k' => str_contains($modeStr, 'k'),
-            'v' => str_contains($modeStr, 'v'),
-            'o' => str_contains($modeStr, 'o'),
-            'a' => str_contains($modeStr, 'a'),
-            'm' => str_contains($modeStr, 'm'),
-            'e' => str_contains($modeStr, 'e'),
-            'd' => str_contains($modeStr, 'd'),
-            't' => str_contains($modeStr, 't') && !str_contains($modeStr, '-t'),
-            'no_t' => str_contains($modeStr, '-t'),
-            'raw' => str_contains($modeStr, 'raw'),
-            'delta_modes' => str_contains($modeStr, 'Δmodes') || str_contains($modeStr, 'deltamodes') || str_contains($modeStr, 'Δ'),
+            'n' => isset($arr['n']),
+            'N' => isset($arr['N']),
+            'S' => isset($arr['S']),
+            's' => isset($arr['s']),
+            'k' => isset($arr['k']) ? $arr['k'] : false,
+            'v' => isset($arr['v']),
+            'V' => isset($arr['V']),
+            'o' => isset($arr['o']),
+            'O' => isset($arr['O']),
+            'a' => isset($arr['a']),
+            'A' => isset($arr['A']),
+            'm' => isset($arr['m']),
+            'e' => isset($arr['e']),
+            'd' => isset($arr['d']),
+            't' => isset($arr['t']),
+            'no_t' => !isset($arr['t']),
+            'i' => isset($arr['i']) || isset($arr['I']),
+            'I' => isset($arr['i']) || isset($arr['I']),
+            'r' => isset($arr['r']) || isset($arr['R']),
+            'R' => isset($arr['r']) || isset($arr['R']),
+            '$' => isset($arr['$']),
+            'raw' => isset($arr['raw']),
+            'delta_modes' => isset($arr['delta_modes']) || isset($arr['deltamodes']) || isset($arr['Δmodes']) || isset($arr['Δ']),
         ];
 
-        return $flags;
+        return array_merge($flags, $arr);
     }
 
     /**
-     * Parse target and attached mode suffixes (e.g. #channel+Δmodes, @object+bookmarks, #room+v+t)
+     * Parse target and attached mode suffixes (e.g. #channel+Δmodes, @object+r, #room+v+t)
      *
      * @param string $target
      * @return array{base_target: string, raw_target: string, modes: string, mode_flags: array}
@@ -211,9 +274,6 @@ class ChanServ
         $modes = '';
 
         if (($pos = strpos($baseTarget, '+')) !== false) {
-            $modes = substr($baseTarget, $pos);
-            $baseTarget = substr($baseTarget, 0, $pos);
-        } elseif (($pos = strpos($baseTarget, '-')) !== false) {
             $modes = substr($baseTarget, $pos);
             $baseTarget = substr($baseTarget, 0, $pos);
         }
@@ -267,9 +327,203 @@ class ChanServ
         return ['success' => true, 'message' => "CHANSERV: Removed VOICE status (-v) from '{$targetNick}' in {$channel}."];
     }
 
+    /**
+     * Assign ADMIN role to user in channel
+     */
+    public static function admin(string $channel, string $targetNick, string $requesterNick = ''): array
+    {
+        return Channel::admin($channel, $targetNick, $requesterNick);
+    }
+
+    /**
+     * Remove ADMIN role from user in channel
+     */
+    public static function deadmin(string $channel, string $targetNick, string $requesterNick = ''): array
+    {
+        return Channel::deadmin($channel, $targetNick, $requesterNick);
+    }
+
+    /**
+     * Assign NETADMIN role to user in channel
+     */
+    public static function netadmin(string $channel, string $targetNick, string $requesterNick = ''): array
+    {
+        return Channel::netadmin($channel, $targetNick, $requesterNick);
+    }
+
+    /**
+     * Remove NETADMIN role from user in channel
+     */
+    public static function denetadmin(string $channel, string $targetNick, string $requesterNick = ''): array
+    {
+        return Channel::denetadmin($channel, $targetNick, $requesterNick);
+    }
+
+    /**
+     * Check access to any channel or object, enforcing +k (key), +r (registered), +i (identified), and +AON modes.
+     *
+     * @param string $target Target channel, object, or URI
+     * @param string|null $user Requester nickname or client ID
+     * @return array{success: bool, code?: int, message?: string, base_target: string, target?: string, modes?: string, mode_flags?: array}
+     */
+    public static function checkAccess(string $target, ?string $user = null): array
+    {
+        $parsed = self::parseTargetAndModes($target);
+        $baseTarget = $parsed['base_target'];
+        $firstChar = mb_substr($baseTarget, 0, 1);
+
+        $channel = in_array($firstChar, ['#', '&', '@', '£', '$'], true)
+            ? $baseTarget
+            : self::normalizeChannelName($baseTarget);
+
+        $suppliedKey = $parsed['mode_flags']['k'] ?? null;
+        $targetFlags = $parsed['mode_flags'];
+
+        $isKeyProtected = !empty($targetFlags['k']);
+        $requiredKey = $targetFlags['k'] ?? null;
+        $isRegisteredOnly = !empty($targetFlags['r']);
+        $isIdentifiedOnly = !empty($targetFlags['i']);
+        $isAdminOnly = !empty($targetFlags['A']);
+        $isOpOnly = !empty($targetFlags['O']);
+        $isNetAdminOnly = !empty($targetFlags['N']);
+
+        // Check channel record in DB if target is a channel
+        if (str_starts_with($channel, '#') || str_starts_with($channel, '&')) {
+            $chanModel = ChannelRepository::findByChannelName($channel);
+            if ($chanModel !== null) {
+                $currentModes = self::parseModeStringToArray($chanModel->getModes());
+                $chanFlags = self::parseModeFlags($chanModel->getModes());
+                if (!empty($currentModes['k'])) {
+                    $isKeyProtected = true;
+                    $requiredKey = $currentModes['k'];
+                }
+                if (!empty($chanFlags['r'])) {
+                    $isRegisteredOnly = true;
+                }
+                if (!empty($chanFlags['i'])) {
+                    $isIdentifiedOnly = true;
+                }
+                if (!empty($chanFlags['A'])) {
+                    $isAdminOnly = true;
+                }
+                if (!empty($chanFlags['O'])) {
+                    $isOpOnly = true;
+                }
+                if (!empty($chanFlags['N'])) {
+                    $isNetAdminOnly = true;
+                }
+            }
+        }
+
+        // Also check if any attached subobject has +r or +i mode
+        if (!empty($parsed['subobjects'])) {
+            foreach ($parsed['subobjects'] as $sub) {
+                if (!empty($sub['mode_flags']['r'])) {
+                    $isRegisteredOnly = true;
+                }
+                if (!empty($sub['mode_flags']['i'])) {
+                    $isIdentifiedOnly = true;
+                }
+            }
+        }
+
+        $cleanUser = null;
+        if ($user !== null && trim($user) !== '') {
+            $cleanUser = explode('@', explode(':', trim($user))[0])[0];
+        }
+
+        // 1. Key protection (+k) check
+        if ($isKeyProtected) {
+            if ($suppliedKey !== $requiredKey) {
+                return [
+                    'success' => false,
+                    'code' => 475,
+                    'message' => "CHANSERV: Channel '{$channel}' is protected. Query mode +k=pass is required.",
+                    'base_target' => $channel
+                ];
+            }
+        }
+
+        // 2. Registered-only (+r) access check
+        if ($isRegisteredOnly) {
+            $isReg = $cleanUser !== null && (NameServ::isIdentified($cleanUser) || NameServ::isRegistered($cleanUser));
+            if (!$isReg) {
+                return [
+                    'success' => false,
+                    'code' => 477,
+                    'message' => "CHANSERV: Object/Channel '{$channel}' is restricted to registered (+r) users.",
+                    'base_target' => $channel
+                ];
+            }
+        }
+
+        // 3. Identified-only (+i) access check
+        if ($isIdentifiedOnly) {
+            $isIdent = $cleanUser !== null && NameServ::isIdentified($cleanUser);
+            if (!$isIdent) {
+                return [
+                    'success' => false,
+                    'code' => 477,
+                    'message' => "CHANSERV: Object/Channel '{$channel}' is restricted to identified (+i) users.",
+                    'base_target' => $channel
+                ];
+            }
+        }
+
+        // 4. Require Channel Admin (+A) mode
+        if ($isAdminOnly) {
+            if ($cleanUser === null || !self::isAdmin($channel, $cleanUser)) {
+                return [
+                    'success' => false,
+                    'code' => 473,
+                    'message' => "CHANSERV: Cannot join channel '{$channel}' (+A) - Channel admin (+a) status required.",
+                    'base_target' => $channel
+                ];
+            }
+        }
+
+        // 5. Require Channel Operator (+O) mode
+        if ($isOpOnly) {
+            if ($cleanUser === null || !self::isOp($channel, $cleanUser)) {
+                return [
+                    'success' => false,
+                    'code' => 473,
+                    'message' => "CHANSERV: Cannot join channel '{$channel}' (+O) - Channel operator (+o) status required.",
+                    'base_target' => $channel
+                ];
+            }
+        }
+
+        // 6. Require Network Admin / Owner (+N) mode
+        if ($isNetAdminOnly) {
+            if ($cleanUser === null || !self::isNetAdmin($channel, $cleanUser)) {
+                return [
+                    'success' => false,
+                    'code' => 473,
+                    'message' => "CHANSERV: Cannot join channel '{$channel}' (+N) - Network admin / owner (+n) status required.",
+                    'base_target' => $channel
+                ];
+            }
+        }
+
+        return [
+            'success' => true,
+            'code' => 200,
+            'base_target' => $channel,
+            'target' => $target,
+            'modes' => $parsed['modes'],
+            'mode_flags' => $targetFlags
+        ];
+    }
+
     public static function getInfo(string $channel): array
     {
-        $channel = self::normalizeChannelName($channel);
+        $access = self::checkAccess($channel);
+        if (!$access['success']) {
+            return $access;
+        }
+        $channel = $access['base_target'];
+        
         $chanModel = ChannelRepository::findByChannelName($channel);
 
         if ($chanModel === null) {
@@ -307,6 +561,30 @@ class ChanServ
     public static function setRole(string $channel, string $nickname, string $role): void
     {
         Channel::setRole($channel, $nickname, $role);
+    }
+
+    /**
+     * Check if user has VOICE (+v) or higher in channel
+     */
+    public static function hasVoice(string $channel, string $nickname): bool
+    {
+        return Channel::hasVoice($channel, $nickname);
+    }
+
+    /**
+     * Check if user has ADMIN (+a) or higher in channel
+     */
+    public static function isAdmin(string $channel, string $nickname): bool
+    {
+        return Channel::isAdmin($channel, $nickname);
+    }
+
+    /**
+     * Check if user has NETADMIN/OWNER (+n) in channel
+     */
+    public static function isNetAdmin(string $channel, string $nickname): bool
+    {
+        return Channel::isNetAdmin($channel, $nickname);
     }
 
     /**

@@ -52,7 +52,7 @@ class PayServ
         }
 
         if (empty($targetName)) {
-            $targetName = ($level === 'user') ? $senderNick : '#lobby';
+            $targetName = ($level === 'user') ? $senderNick : '#';
         }
 
         if ($level === 'channel' && !str_starts_with($targetName, '#') && !str_starts_with($targetName, '&')) {

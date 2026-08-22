@@ -69,14 +69,24 @@ class ChannelUser
         $this->role = strtoupper(trim($role));
     }
 
+    public function isNetAdmin(): bool
+    {
+        return in_array($this->role, ['NETADMIN', 'NETWORK_ADMIN', 'NETOP', 'OWNER'], true);
+    }
+
+    public function isAdmin(): bool
+    {
+        return in_array($this->role, ['ADMIN', 'PROTECT', 'CHANADMIN', 'OWNER', 'NETADMIN', 'NETWORK_ADMIN', 'NETOP'], true);
+    }
+
     public function isOp(): bool
     {
-        return $this->role === 'OP';
+        return in_array($this->role, ['OP', 'ADMIN', 'PROTECT', 'CHANADMIN', 'OWNER', 'NETADMIN', 'NETWORK_ADMIN', 'NETOP'], true);
     }
 
     public function isVoice(): bool
     {
-        return $this->role === 'VOICE' || $this->role === 'OP';
+        return in_array($this->role, ['VOICE', 'OP', 'ADMIN', 'PROTECT', 'CHANADMIN', 'OWNER', 'NETADMIN', 'NETWORK_ADMIN', 'NETOP'], true);
     }
 
     public function getAddedAt(): int

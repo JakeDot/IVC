@@ -29,16 +29,9 @@ class IrcServices
             ];
         }
 
-        $posSec = mb_strpos($input, '§');
-        $posDelta = mb_strpos($input, '∆');
-
         $firstSubPos = null;
-        if ($posSec !== false && $posDelta !== false) {
-            $firstSubPos = min($posSec, $posDelta);
-        } elseif ($posSec !== false) {
-            $firstSubPos = $posSec;
-        } elseif ($posDelta !== false) {
-            $firstSubPos = $posDelta;
+        if (preg_match('/[§∆Δ]/u', $input, $matches, PREG_OFFSET_CAPTURE)) {
+            $firstSubPos = mb_strlen(substr($input, 0, $matches[0][1]));
         }
 
         if ($firstSubPos === null) {
@@ -53,7 +46,7 @@ class IrcServices
         $baseTarget = mb_substr($input, 0, $firstSubPos);
         $subStr = mb_substr($input, $firstSubPos);
 
-        $tokens = preg_split('/([§∆])/u', $subStr, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
+        $tokens = preg_split('/([§∆Δ])/u', $subStr, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
 
         $subobjects = [];
         $props = [];
@@ -63,7 +56,7 @@ class IrcServices
             $symbol = $tokens[$i] ?? '';
             $segment = $tokens[$i + 1] ?? '';
 
-            if ($symbol !== '§' && $symbol !== '∆') {
+            if ($symbol !== '§' && $symbol !== '∆' && $symbol !== 'Δ') {
                 continue;
             }
 
@@ -136,18 +129,21 @@ class IrcServices
             if (str_starts_with($objData, 'ivc://')) {
                 return $objData;
             }
-            if (str_contains($objData, ' ') || str_contains($objData, ':')) {
-                $objData = preg_replace('/^\{|\}$/', '', $objData);
-                $parts = preg_split('/\s+/', $objData, 2);
-                $objName = $parts[0];
-                $kv = $parts[1] ?? '';
-                if ($kv !== '') {
-                    $kvParts = explode(':', $kv, 2);
-                    $propName = trim($kvParts[0]);
-                    $propVal = trim($kvParts[1] ?? 'true');
-                    return "ivc://{$host}/{$objName}§{$propName}={$propVal}";
+            if (str_contains($objData, ' ') || str_contains($objData, ':') || str_starts_with($objData, '{')) {
+                $trimmed = trim(preg_replace('/^\{|\}$/', '', $objData));
+                $parts = preg_split('/\s+/', $trimmed);
+                $objName = array_shift($parts) ?: 'object';
+                $subs = '';
+                foreach ($parts as $part) {
+                    if (str_contains($part, ':')) {
+                        list($k, $v) = explode(':', $part, 2);
+                        $subs .= "§{$k}={$v}";
+                    } elseif (str_contains($part, '=')) {
+                        list($k, $v) = explode('=', $part, 2);
+                        $subs .= "§{$k}={$v}";
+                    }
                 }
-                return "ivc://{$host}/{$objName}";
+                return "ivc://{$host}/{$objName}{$subs}";
             }
             return "ivc://{$host}/{$objData}";
         }
@@ -172,7 +168,7 @@ class IrcServices
         }
 
         $subStr = '';
-        $reservedKeys = ['object', 'name', 'host', 'protocol', 'scheme', 'subobjects', 'props', 'events', 'uri', 'asObject'];
+        $reservedKeys = ['object', 'name', 'host', 'protocol', 'scheme', 'subobjects', 'props', 'events', 'uri', 'asObject', 'modes'];
 
         foreach ($props as $k => $v) {
             if (in_array((string)$k, $reservedKeys, true)) {
@@ -203,7 +199,8 @@ class IrcServices
             $subStr .= "{$symbol}{$keyName}={$valStr}{$modeStr}";
         }
 
-        return "ivc://{$host}/{$baseObject}{$subStr}";
+        $modesSuffix = !empty($objData['modes']) ? (string)$objData['modes'] : '';
+        return "ivc://{$host}/{$baseObject}{$subStr}{$modesSuffix}";
     }
 
     /**
@@ -414,11 +411,7 @@ class IrcServices
     public static function parseServerUri(string $uri): ?array
     {
         $uri = trim($uri);
-        if (!preg_match('/^(https|ivc(?:-[a-zA-Z0-9_-]+)?|irc):\/\//i', $uri)) {
-            return null;
-        }
-
-        if (!preg_match('/^(https|ivc(?:-[a-zA-Z0-9_-]+)?|irc):\/\/([^\/:#?]+)(?::(\d+))?(?:[\/#](.*))?$/i', $uri, $matches)) {
+        if (!preg_match('/^(https|ivc(?:-[a-zA-Z0-9_-]+)?|irc):\/\/([^\/:#?]*)(?::(\d+))?(?:[\/#](.*))?$/i', $uri, $matches)) {
             return null;
         }
 
@@ -427,7 +420,7 @@ class IrcServices
 
         // Strip +modes from the host component
         $hostModes = '';
-        if (str_contains($hostRaw, '+')) {
+        if ($hostRaw !== '' && str_contains($hostRaw, '+')) {
             $parts = explode('+', $hostRaw);
             $hostRaw = $parts[0];
             array_shift($parts); // Remove the base host
@@ -446,7 +439,7 @@ class IrcServices
         $portStr = $matches[3] ?? '';
         $port = $portStr !== '' ? (int)$portStr : ($defaultPorts[$scheme] ?? 443);
 
-        $channel = '#lobby';
+        $channel = '#';
         $extractedModes = '';
 
         $processPrefix = function (string $input): string {
@@ -461,6 +454,11 @@ class IrcServices
 
         $subParsed = self::parseSubobjects($rawPathOrFragment);
         $chanRaw = $subParsed['base_target'];
+
+        if ($host === '' && $chanRaw === '') {
+            $channel = '£';
+        }
+
 
         if ($chanRaw !== '') {
             $plusPos = strpos($chanRaw, '+');
@@ -507,6 +505,14 @@ class IrcServices
             return null;
         }
 
+        // Standardize & automatically IDENT user@domain users or default to user@<anonymous>
+        NameServ::autoIdent($senderNick);
+
+        // Apply global "me" aliases
+        $text = preg_replace('/(^|\s)@me(?=\s|$)/i', '$1' . $senderNick, $text);
+        $text = preg_replace('/(^|\s)#me(?=\s|$)/i', '$1' . $channel, $text);
+        $text = preg_replace('/(^|\s)\\$me(?=\s|$)/i', '$1server', $text);
+
         // Calculate AppStatus block for injection into native clients
         $appModes = $senderNick;
         $chanInfo = ChanServ::getInfo($channel);
@@ -518,6 +524,31 @@ class IrcServices
 
         $parts = preg_split('/\s+/', $text);
         $first = strtolower($parts[0] ?? '');
+        $firstOriginal = $parts[0] ?? '';
+
+        // Check if the command is just an emoji (or emojis), alias to /REACT
+        if (str_starts_with($firstOriginal, '/') && preg_match('/^\/([\p{Emoji}\x{1F300}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{1F1E6}-\x{1F1FF}]+)$/u', $firstOriginal, $matches)) {
+            $emoji = $matches[1];
+            $reactArgs = array_slice($parts, 1);
+            if (empty($reactArgs)) {
+                $reactArgs[] = (empty($channel) || $channel === '#') ? '£' : $channel;
+            }
+            $reactText = '/REACT ' . $emoji . ' ' . implode(' ', $reactArgs);
+
+            \Fortress\Signaling\RoomManager::broadcastSignal($channel, $senderNick, [
+                'type' => 'chat',
+                'sender' => $senderNick,
+                'message' => $reactText
+            ], false);
+
+            return [
+                'is_service_command' => true,
+                'service' => 'REACT',
+                'response' => "[Reaction {$emoji} sent]",
+                'channel' => $channel,
+                'skip_bot_broadcast' => true
+            ];
+        }
 
         // Check for BOTSERV integration (External bot routing based on username)
         if ($first === '/msg' || $first === '/privmsg') {
@@ -572,6 +603,16 @@ class IrcServices
 
             $targetObj = $parsed['channel'];
             $reqModes = $parsed['modes'] ?? '';
+
+            $access = ChanServ::checkAccess($parsed['uri'] ?? $targetObj, $senderNick);
+            if (!$access['success']) {
+                return [
+                    'is_service_command' => true,
+                    'service' => 'SERVERSERV',
+                    'response' => "SERVERSERV: " . $access['message'],
+                    'channel' => $channel
+                ];
+            }
 
             if ($reqModes !== '') {
                 $prefix = mb_substr($targetObj, 0, 1);
@@ -793,6 +834,151 @@ class IrcServices
         }
 
         // 4. Convenience Slash Commands
+        if ($first === '/react') {
+            $reactArgs = array_slice($parts, 1);
+            if (empty($reactArgs)) {
+                return [
+                    'is_service_command' => true,
+                    'service' => 'REACT',
+                    'response' => 'REACT: Usage: /react <reaction> [<object-uri|[prefix]me>]',
+                    'channel' => $channel
+                ];
+            }
+            if (count($reactArgs) === 1) {
+                $reactArgs[] = (empty($channel) || $channel === '#') ? '£' : $channel;
+            }
+            $reactText = '/REACT ' . implode(' ', $reactArgs);
+
+            \Fortress\Signaling\RoomManager::broadcastSignal($channel, $senderNick, [
+                'type' => 'chat',
+                'sender' => $senderNick,
+                'message' => $reactText
+            ], false);
+
+            return [
+                'is_service_command' => true,
+                'service' => 'REACT',
+                'response' => "[Reaction sent]",
+                'channel' => $channel,
+                'skip_bot_broadcast' => true
+            ];
+        }
+
+        if ($first === '/join') {
+            $rawTarget = $parts[1] ?? '';
+            if (empty($rawTarget)) {
+                return [
+                    'is_service_command' => true,
+                    'service' => 'SERVERSERV',
+                    'response' => 'SERVERSERV: Usage: /join <#channel[+modes]>',
+                    'channel' => $channel
+                ];
+            }
+            $access = ChanServ::checkAccess($rawTarget, $senderNick);
+            if (!$access['success']) {
+                return [
+                    'is_service_command' => true,
+                    'service' => 'SERVERSERV',
+                    'response' => "SERVERSERV: " . $access['message'],
+                    'channel' => $channel
+                ];
+            }
+            $targetChan = $access['base_target'];
+            $modesStr = $access['modes'] ?? '';
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "SERVERSERV: Joined channel {$targetChan}{$modesStr}.",
+                'channel' => $targetChan . $modesStr,
+                'appstatus' => $appModes
+            ];
+        }
+
+        if ($first === '/part') {
+            $targetChan = $parts[1] ?? $channel;
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "SERVERSERV: Left channel {$targetChan}.",
+                'channel' => $targetChan,
+                'appstatus' => $appModes
+            ];
+        }
+
+        if ($first === '/raw') {
+            $rawLine = trim(substr($text, strlen($parts[0])));
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "[RAW OUTPUT] {$rawLine}",
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/delta') {
+            $targetChan = $parts[1] ?? $channel;
+            ChanServ::setModes($targetChan, '+Δmodes', $senderNick);
+            return [
+                'is_service_command' => true,
+                'service' => ChanServ::SERVICE_NAME,
+                'response' => "CHANSERV: Δmodes active for {$targetChan}.",
+                'channel' => $targetChan
+            ];
+        }
+
+        if ($first === '/mode') {
+            $targetChan = $parts[1] ?? $channel;
+            $modeStr = $parts[2] ?? '';
+            $targetUser = $parts[3] ?? '';
+            if (str_starts_with($targetChan, '+') || str_starts_with($targetChan, '-')) {
+                $targetUser = $parts[2] ?? '';
+                $modeStr = $targetChan;
+                $targetChan = $channel;
+            }
+            if ($modeStr === '') {
+                $info = ChanServ::getInfo($targetChan);
+                $resp = $info['success'] ? "Modes for {$targetChan}: " . ($info['data']['modes'] ?? '+t') : "No modes set for {$targetChan}.";
+            } elseif (!empty($targetUser)) {
+                if ($modeStr === '+o') {
+                    $res = ChanServ::op($targetChan, $targetUser, $senderNick);
+                    $resp = $res['message'];
+                } elseif ($modeStr === '-o') {
+                    $res = ChanServ::deop($targetChan, $targetUser, $senderNick);
+                    $resp = $res['message'];
+                } elseif ($modeStr === '+v') {
+                    $res = ChanServ::voice($targetChan, $targetUser, $senderNick);
+                    $resp = $res['message'];
+                } elseif ($modeStr === '-v') {
+                    $res = ChanServ::devoice($targetChan, $targetUser, $senderNick);
+                    $resp = $res['message'];
+                } elseif ($modeStr === '+a') {
+                    $res = ChanServ::admin($targetChan, $targetUser, $senderNick);
+                    $resp = $res['message'];
+                } elseif ($modeStr === '-a') {
+                    $res = ChanServ::deadmin($targetChan, $targetUser, $senderNick);
+                    $resp = $res['message'];
+                } elseif ($modeStr === '+n') {
+                    $res = ChanServ::netadmin($targetChan, $targetUser, $senderNick);
+                    $resp = $res['message'];
+                } elseif ($modeStr === '-n') {
+                    $res = ChanServ::denetadmin($targetChan, $targetUser, $senderNick);
+                    $resp = $res['message'];
+                } else {
+                    $res = ChanServ::setModes($targetChan, $modeStr, $senderNick);
+                    $resp = $res['message'];
+                }
+            } else {
+                $res = ChanServ::setModes($targetChan, $modeStr, $senderNick);
+                $resp = $res['message'];
+            }
+            return [
+                'is_service_command' => true,
+                'service' => ChanServ::SERVICE_NAME,
+                'response' => $resp,
+                'channel' => $targetChan
+            ];
+        }
+
         if ($first === '/memo') {
             $sub = strtoupper($parts[1] ?? 'LIST');
             if ($sub === 'SEND') {
@@ -854,66 +1040,6 @@ class IrcServices
             ];
         }
 
-        if ($first === '/join') {
-            $target = $parts[1] ?? $channel;
-            $parsedTarget = ChanServ::parseTargetAndModes($target);
-            $baseChannel = $parsedTarget['base_target'];
-            return [
-                'is_service_command' => true,
-                'service' => 'SERVERSERV',
-                'response' => "SERVERSERV: Joined channel {$baseChannel}",
-                'channel' => $baseChannel
-            ];
-        }
-
-        if ($first === '/part') {
-            $target = $parts[1] ?? $channel;
-            return [
-                'is_service_command' => true,
-                'service' => 'SERVERSERV',
-                'response' => "SERVERSERV: Left channel {$target}",
-                'channel' => $target
-            ];
-        }
-
-        if ($first === '/mode') {
-            $chan = (!empty($parts[1]) && str_starts_with($parts[1], '#')) ? $parts[1] : $channel;
-            $modes = (!empty($parts[1]) && !str_starts_with($parts[1], '#')) ? $parts[1] : ($parts[2] ?? '');
-            if (empty($modes)) {
-                $info = ChanServ::getInfo($chan);
-                $resp = $info['message'];
-            } else {
-                $res = ChanServ::setModes($chan, $modes, $senderNick);
-                $resp = $res['message'];
-            }
-            return [
-                'is_service_command' => true,
-                'service' => ChanServ::SERVICE_NAME,
-                'response' => $resp,
-                'channel' => $chan
-            ];
-        }
-
-        if ($first === '/raw') {
-            $payload = implode(' ', array_slice($parts, 1));
-            return [
-                'is_service_command' => true,
-                'service' => 'SERVERSERV',
-                'response' => "[RAW OUTPUT] {$payload}",
-                'channel' => $channel
-            ];
-        }
-
-        if ($first === '/delta') {
-            $target = $parts[1] ?? $channel;
-            return [
-                'is_service_command' => true,
-                'service' => ChanServ::SERVICE_NAME,
-                'response' => "CHANSERV: Δmodes active for {$target}",
-                'channel' => $target
-            ];
-        }
-
         if ($first === '/op') {
             $target = $parts[1] ?? '';
             $chan = (!empty($parts[2]) ? $parts[2] : $channel);
@@ -930,6 +1056,78 @@ class IrcServices
             $target = $parts[1] ?? '';
             $chan = (!empty($parts[2]) ? $parts[2] : $channel);
             $res = ChanServ::deop($chan, $target, $senderNick);
+            return [
+                'is_service_command' => true,
+                'service' => ChanServ::SERVICE_NAME,
+                'response' => $res['message'],
+                'channel' => $chan
+            ];
+        }
+
+        if ($first === '/voice') {
+            $target = $parts[1] ?? '';
+            $chan = (!empty($parts[2]) ? $parts[2] : $channel);
+            $res = ChanServ::voice($chan, $target, $senderNick);
+            return [
+                'is_service_command' => true,
+                'service' => ChanServ::SERVICE_NAME,
+                'response' => $res['message'],
+                'channel' => $chan
+            ];
+        }
+
+        if ($first === '/devoice') {
+            $target = $parts[1] ?? '';
+            $chan = (!empty($parts[2]) ? $parts[2] : $channel);
+            $res = ChanServ::devoice($chan, $target, $senderNick);
+            return [
+                'is_service_command' => true,
+                'service' => ChanServ::SERVICE_NAME,
+                'response' => $res['message'],
+                'channel' => $chan
+            ];
+        }
+
+        if ($first === '/admin') {
+            $target = $parts[1] ?? '';
+            $chan = (!empty($parts[2]) ? $parts[2] : $channel);
+            $res = ChanServ::admin($chan, $target, $senderNick);
+            return [
+                'is_service_command' => true,
+                'service' => ChanServ::SERVICE_NAME,
+                'response' => $res['message'],
+                'channel' => $chan
+            ];
+        }
+
+        if ($first === '/deadmin') {
+            $target = $parts[1] ?? '';
+            $chan = (!empty($parts[2]) ? $parts[2] : $channel);
+            $res = ChanServ::deadmin($chan, $target, $senderNick);
+            return [
+                'is_service_command' => true,
+                'service' => ChanServ::SERVICE_NAME,
+                'response' => $res['message'],
+                'channel' => $chan
+            ];
+        }
+
+        if ($first === '/netadmin') {
+            $target = $parts[1] ?? '';
+            $chan = (!empty($parts[2]) ? $parts[2] : $channel);
+            $res = ChanServ::netadmin($chan, $target, $senderNick);
+            return [
+                'is_service_command' => true,
+                'service' => ChanServ::SERVICE_NAME,
+                'response' => $res['message'],
+                'channel' => $chan
+            ];
+        }
+
+        if ($first === '/denetadmin') {
+            $target = $parts[1] ?? '';
+            $chan = (!empty($parts[2]) ? $parts[2] : $channel);
+            $res = ChanServ::denetadmin($chan, $target, $senderNick);
             return [
                 'is_service_command' => true,
                 'service' => ChanServ::SERVICE_NAME,
@@ -975,15 +1173,30 @@ class IrcServices
             ];
         }
 
-        if ($first === '/identify') {
-            $pass = $parts[1] ?? '';
-            $res = NameServ::identify($senderNick, $pass);
-            return [
-                'is_service_command' => true,
-                'service' => NameServ::SERVICE_NAME,
-                'response' => $res['message'],
-                'channel' => $channel
-            ];
+        if ($first === '/ident' || $first === '/identify') {
+            return self::handleIdentCommand($senderNick, $channel, $parts);
+        }
+
+        if ($first === '/whois') {
+            return self::handleWhoisCommand($senderNick, $channel, $parts);
+        }
+
+        if ($first === '/who') {
+            return self::handleWhoCommand($senderNick, $channel, $parts);
+        }
+
+        if ($first === '/set') {
+            $argStr = trim(substr($text, strlen($parts[0])));
+            if (preg_match('/^(?:§|\$)?domain\s*=\s*(.+)$/iu', $argStr, $m) || preg_match('/^(?:§|\$)?domain\s+(.+)$/iu', $argStr, $m)) {
+                $domainVal = trim($m[1]);
+                $res = NameServ::setDomain($senderNick, $domainVal);
+                return [
+                    'is_service_command' => true,
+                    'service' => NameServ::SERVICE_NAME,
+                    'response' => $res['message'],
+                    'channel' => $channel
+                ];
+            }
         }
 
         if ($first === '/setting' || $first === '/settings') {
@@ -1077,6 +1290,23 @@ class IrcServices
             ];
         }
 
+        // Enforce channel text restrictions (+v video-only / +m moderated)
+        if (str_starts_with($channel, '#') || str_starts_with($channel, '&')) {
+            $chanInfo = ChanServ::getInfo($channel);
+            if ($chanInfo['success']) {
+                $modes = $chanInfo['data']['modes'] ?? '';
+                $flags = ChanServ::parseModeFlags($modes);
+                if (($flags['v'] || $flags['m']) && !ChanServ::hasVoice($channel, $senderNick)) {
+                    return [
+                        'is_service_command' => true,
+                        'service' => 'CHANSERV',
+                        'response' => "CHANSERV: Cannot send message to {$channel} - Channel is video-only (+v) / moderated (+m). You need voice (+v) or operator (+o) status to send text messages.",
+                        'channel' => $channel
+                    ];
+                }
+            }
+        }
+
         return null;
     }
 
@@ -1123,6 +1353,170 @@ class IrcServices
         ];
     }
 
+    public static function handleIdentCommand(string $senderNick, string $channel, array $parts): array
+    {
+        $arg = trim($parts[1] ?? '');
+
+        // If no arguments, show current ident for sender
+        if ($arg === '') {
+            $std = \Fortress\Database\UserNickRepository::getStandardizedUsername($senderNick);
+            $userNick = \Fortress\Database\UserNickRepository::findByNickname($senderNick);
+            $dom = $userNick ? $userNick->getDomain() : (str_contains($senderNick, '@') ? explode('@', $senderNick, 2)[1] : '<anonymous>');
+            $base = $userNick ? $userNick->getBaseUser() : (str_contains($senderNick, '@') ? explode('@', $senderNick, 2)[0] : $senderNick);
+            $isIdent = ($userNick && $userNick->isIdentified()) || str_contains($senderNick, '@') ? 'Identified' : 'Unidentified';
+            return [
+                'is_service_command' => true,
+                'service' => NameServ::SERVICE_NAME,
+                'response' => "IDENT: User '{$base}' identified from domain '{$dom}' ({$std}). Status: {$isIdent}.",
+                'channel' => $channel
+            ];
+        }
+
+        // Check if argument is in user@domain format
+        if (str_contains($arg, '@')) {
+            $parsed = \Fortress\Models\UserNick::parseIdent($arg);
+            $targetUser = $parsed['user'];
+            $targetDomain = $parsed['domain'];
+            $res = NameServ::setDomain($targetUser, $targetDomain);
+            return [
+                'is_service_command' => true,
+                'service' => NameServ::SERVICE_NAME,
+                'response' => "IDENT: User '{$targetUser}' identified from domain '{$targetDomain}' ({$parsed['standardized']}).",
+                'channel' => $channel
+            ];
+        }
+
+        // Check if argument is a domain format (e.g. custom.test.com)
+        if (str_contains($arg, '.') && !str_starts_with($arg, '#')) {
+            $base = str_contains($senderNick, '@') ? explode('@', $senderNick, 2)[0] : $senderNick;
+            $res = NameServ::setDomain($base, $arg);
+            $std = "{$base}@{$arg}";
+            return [
+                'is_service_command' => true,
+                'service' => NameServ::SERVICE_NAME,
+                'response' => "IDENT: User '{$base}' identified from domain '{$arg}' ({$std}).",
+                'channel' => $channel
+            ];
+        }
+
+        // Check if it's password identification
+        $userNick = \Fortress\Database\UserNickRepository::findByNickname($senderNick);
+        if ($userNick !== null && $userNick->verifyPassword($arg)) {
+            $res = NameServ::identify($senderNick, $arg);
+            return [
+                'is_service_command' => true,
+                'service' => NameServ::SERVICE_NAME,
+                'response' => $res['message'],
+                'channel' => $channel
+            ];
+        }
+
+        // Target lookup
+        $targetUser = \Fortress\Database\UserNickRepository::findByNickname($arg);
+        $targetStd = \Fortress\Database\UserNickRepository::getStandardizedUsername($arg);
+        $targetDom = $targetUser ? $targetUser->getDomain() : (str_contains($arg, '@') ? explode('@', $arg, 2)[1] : '<anonymous>');
+        $targetBase = $targetUser ? $targetUser->getBaseUser() : (str_contains($arg, '@') ? explode('@', $arg, 2)[0] : $arg);
+        return [
+            'is_service_command' => true,
+            'service' => NameServ::SERVICE_NAME,
+            'response' => "IDENT: User '{$targetBase}' is identified from domain '{$targetDom}' ({$targetStd}).",
+            'channel' => $channel
+        ];
+    }
+
+    public static function handleWhoisCommand(string $senderNick, string $channel, array $parts): array
+    {
+        $target = trim($parts[1] ?? '');
+        if ($target === '') {
+            $target = $senderNick;
+        }
+
+        $userNick = \Fortress\Database\UserNickRepository::findByNickname($target);
+        $parsed = \Fortress\Models\UserNick::parseIdent($target);
+        $baseUser = $userNick ? $userNick->getBaseUser() : $parsed['user'];
+        $domain = $userNick ? $userNick->getDomain() : $parsed['domain'];
+        $stdUser = $userNick ? $userNick->getStandardizedUsername() : $parsed['standardized'];
+        $isIdent = ($userNick && $userNick->isIdentified()) || str_contains($target, '@') ? 'Yes' : 'No';
+
+        $userChannels = \Fortress\Database\ChannelUserRepository::getUserChannels($baseUser);
+        $chanList = !empty($userChannels)
+            ? implode(', ', array_map(fn($c) => "{$c['channel_name']} (+{$c['role']})", $userChannels))
+            : ($channel !== '' ? "{$channel}" : 'None');
+
+        $vhostInfo = HostServ::getVhostInfo($baseUser);
+        $vhostStr = $vhostInfo['success'] && !empty($vhostInfo['data']['vhost']) ? $vhostInfo['data']['vhost'] : 'None';
+
+        $resp = "WHOIS for {$target}:\n" .
+                "• User: {$baseUser}\n" .
+                "• Domain: {$domain}\n" .
+                "• §domain: {$domain}\n" .
+                "• Standardized Username: {$stdUser}\n" .
+                "• Currently Identified: {$isIdent}\n" .
+                "• Virtual Host: {$vhostStr}\n" .
+                "• Channels: {$chanList}\n" .
+                "• Server: fortress.ivc.local (IVC-IRC Network)";
+
+        return [
+            'is_service_command' => true,
+            'service' => NameServ::SERVICE_NAME,
+            'response' => $resp,
+            'channel' => $channel
+        ];
+    }
+
+    public static function handleWhoCommand(string $senderNick, string $channel, array $parts): array
+    {
+        $target = trim($parts[1] ?? '');
+        if ($target === '') {
+            $target = $channel !== '' ? $channel : '#fortress';
+        }
+
+        if (str_starts_with($target, '#') || str_starts_with($target, '&')) {
+            $members = \Fortress\Database\ChannelUserRepository::getMembers($target);
+            if (empty($members)) {
+                $chanInfo = ChanServ::getInfo($target);
+                $owner = $chanInfo['success'] ? ($chanInfo['data']['owner_nick'] ?? $senderNick) : $senderNick;
+                $members = [
+                    ['nickname' => $owner, 'role' => 'OP'],
+                ];
+                if (strtolower($owner) !== strtolower($senderNick)) {
+                    $members[] = ['nickname' => $senderNick, 'role' => 'MEMBER'];
+                }
+            }
+
+            $lines = ["WHO list for {$target}:"];
+            foreach ($members as $m) {
+                $nick = $m['nickname'];
+                $role = $m['role'] ?? 'MEMBER';
+                $roleTag = $role === 'OP' || $role === 'OWNER' ? '+o' : ($role === 'VOICE' ? '+v' : 'user');
+                $std = \Fortress\Database\UserNickRepository::getStandardizedUsername($nick);
+                $uObj = \Fortress\Database\UserNickRepository::findByNickname($nick);
+                $dom = $uObj ? $uObj->getDomain() : (str_contains($nick, '@') ? explode('@', $nick, 2)[1] : '<anonymous>');
+                $lines[] = "• {$nick} ({$std}) [{$roleTag}] (Domain: {$dom})";
+            }
+
+            return [
+                'is_service_command' => true,
+                'service' => ChanServ::SERVICE_NAME,
+                'response' => implode("\n", $lines),
+                'channel' => $target
+            ];
+        }
+
+        // Single user WHO
+        $userNick = \Fortress\Database\UserNickRepository::findByNickname($target);
+        $std = \Fortress\Database\UserNickRepository::getStandardizedUsername($target);
+        $dom = $userNick ? $userNick->getDomain() : (str_contains($target, '@') ? explode('@', $target, 2)[1] : '<anonymous>');
+        $base = $userNick ? $userNick->getBaseUser() : (str_contains($target, '@') ? explode('@', $target, 2)[0] : $target);
+
+        return [
+            'is_service_command' => true,
+            'service' => NameServ::SERVICE_NAME,
+            'response' => "WHO for {$target}: {$base} is {$std} (Domain: {$dom}, §domain: {$dom})",
+            'channel' => $channel
+        ];
+    }
+
     private static function handleNameServCommand(string $senderNick, string $channel, string $cmd, array $args): array
     {
         switch ($cmd) {
@@ -1132,9 +1526,33 @@ class IrcServices
                 $res = NameServ::register($senderNick, $pass, $email);
                 break;
 
+            case 'IDENT':
             case 'IDENTIFY':
-                $pass = $args[0] ?? '';
-                $res = NameServ::identify($senderNick, $pass);
+                $arg0 = $args[0] ?? '';
+                if (str_contains($arg0, '@') || (str_contains($arg0, '.') && !str_starts_with($arg0, '#'))) {
+                    return self::handleIdentCommand($senderNick, $channel, ['/ident', $arg0]);
+                }
+                $res = NameServ::identify($senderNick, $arg0);
+                break;
+
+            case 'SET':
+                $fullArg = implode(' ', $args);
+                if (preg_match('/^(?:§|\$)?domain\s*=\s*(.+)$/iu', $fullArg, $m) ||
+                    preg_match('/^(?:§|\$)?domain\s+(.+)$/iu', $fullArg, $m)) {
+                    $domainVal = trim($m[1]);
+                    $res = NameServ::setDomain($senderNick, $domainVal);
+                } elseif (!empty($args[0]) && str_contains($args[0], '=')) {
+                    $kv = explode('=', $args[0], 2);
+                    $k = ltrim($kv[0], '§$');
+                    $v = $kv[1];
+                    if (strtolower($k) === 'domain') {
+                        $res = NameServ::setDomain($senderNick, $v);
+                    } else {
+                        $res = ['message' => "NICKSERV: Property §{$k} set to '{$v}' for user '{$senderNick}'."];
+                    }
+                } else {
+                    $res = ['message' => "NICKSERV: Usage: /msg NICKSERV SET §domain=<custom.domain.com>"];
+                }
                 break;
 
             case 'SUBSCRIBE':
@@ -1147,8 +1565,14 @@ class IrcServices
                 $res = NameServ::getInfo($target);
                 break;
 
+            case 'WHOIS':
+                return self::handleWhoisCommand($senderNick, $channel, ['/whois', $args[0] ?? $senderNick]);
+
+            case 'WHO':
+                return self::handleWhoCommand($senderNick, $channel, ['/who', $args[0] ?? $channel]);
+
             default:
-                $res = ['message' => "NAMESERV: Unknown command '{$cmd}'. Use REGISTER, IDENTIFY, SUBSCRIBE, or INFO."];
+                $res = ['message' => "NAMESERV: Unknown command '{$cmd}'. Use REGISTER, IDENTIFY, SET, SUBSCRIBE, INFO, WHOIS, or WHO."];
                 break;
         }
 
@@ -1213,6 +1637,30 @@ class IrcServices
                 $res = ChanServ::devoice($chan, $target, $senderNick);
                 break;
 
+            case 'ADMIN':
+                $chan = !empty($args[0]) && str_starts_with($args[0], '#') ? $args[0] : $channel;
+                $target = !empty($args[0]) && !str_starts_with($args[0], '#') ? $args[0] : ($args[1] ?? '');
+                $res = ChanServ::admin($chan, $target, $senderNick);
+                break;
+
+            case 'DEADMIN':
+                $chan = !empty($args[0]) && str_starts_with($args[0], '#') ? $args[0] : $channel;
+                $target = !empty($args[0]) && !str_starts_with($args[0], '#') ? $args[0] : ($args[1] ?? '');
+                $res = ChanServ::deadmin($chan, $target, $senderNick);
+                break;
+
+            case 'NETADMIN':
+                $chan = !empty($args[0]) && str_starts_with($args[0], '#') ? $args[0] : $channel;
+                $target = !empty($args[0]) && !str_starts_with($args[0], '#') ? $args[0] : ($args[1] ?? '');
+                $res = ChanServ::netadmin($chan, $target, $senderNick);
+                break;
+
+            case 'DENETADMIN':
+                $chan = !empty($args[0]) && str_starts_with($args[0], '#') ? $args[0] : $channel;
+                $target = !empty($args[0]) && !str_starts_with($args[0], '#') ? $args[0] : ($args[1] ?? '');
+                $res = ChanServ::denetadmin($chan, $target, $senderNick);
+                break;
+
             case 'MODE':
             case 'MODES':
                 $chan = !empty($args[0]) && str_starts_with($args[0], '#') ? $args[0] : $channel;
@@ -1237,7 +1685,7 @@ class IrcServices
                 break;
 
             default:
-                $res = ['message' => "CHANSERV: Unknown command '{$cmd}'. Use REGISTER, SUBSCRIBE, OP, DEOP, VOICE, DEVOICE, MODE, TOPIC, or INFO."];
+                $res = ['message' => "CHANSERV: Unknown command '{$cmd}'. Use REGISTER, SUBSCRIBE, OP, DEOP, VOICE, DEVOICE, ADMIN, DEADMIN, NETADMIN, DENETADMIN, MODE, TOPIC, or INFO."];
                 break;
         }
 

@@ -20,9 +20,22 @@ function parseModeFlagsJS(modeStr) {
     return {
         m: modeStr.includes('m'),
         v: modeStr.includes('v'),
+        V: modeStr.includes('V'),
         o: modeStr.includes('o'),
+        O: modeStr.includes('O'),
+        a: modeStr.includes('a'),
+        A: modeStr.includes('A'),
         e: modeStr.includes('e'),
         d: modeStr.includes('d'),
+        k: modeStr.includes('k'),
+        r: modeStr.includes('r') || modeStr.includes('R'),
+        R: modeStr.includes('r') || modeStr.includes('R'),
+        i: modeStr.includes('i') || modeStr.includes('I'),
+        I: modeStr.includes('i') || modeStr.includes('I'),
+        s: modeStr.includes('s') || modeStr.includes('S'),
+        n: modeStr.includes('n'),
+        N: modeStr.includes('N'),
+        t: modeStr.includes('t'),
         raw: modeStr.includes('raw'),
         deltaModes: modeStr.includes('Δmodes') || modeStr.includes('deltamodes') || modeStr.includes('∆')
     };
@@ -34,16 +47,10 @@ function parseSubobjects(input) {
     }
     input = String(input).trim();
 
-    const posSec = input.indexOf('§');
-    const posDelta = input.indexOf('∆');
-
     let firstSubPos = null;
-    if (posSec !== -1 && posDelta !== -1) {
-        firstSubPos = Math.min(posSec, posDelta);
-    } else if (posSec !== -1) {
-        firstSubPos = posSec;
-    } else if (posDelta !== -1) {
-        firstSubPos = posDelta;
+    const match = input.match(/[§∆Δ]/u);
+    if (match) {
+        firstSubPos = match.index;
     }
 
     if (firstSubPos === null) {
@@ -53,7 +60,7 @@ function parseSubobjects(input) {
     const baseTarget = input.substring(0, firstSubPos);
     const subStr = input.substring(firstSubPos);
 
-    const tokens = subStr.split(/([§∆])/g).filter(Boolean);
+    const tokens = subStr.split(/([§∆Δ])/u).filter(Boolean);
 
     const subobjects = [];
     const props = {};
@@ -63,7 +70,7 @@ function parseSubobjects(input) {
         const symbol = tokens[i];
         const segment = tokens[i + 1] || '';
 
-        if (symbol !== '§' && symbol !== '∆') continue;
+        if (symbol !== '§' && symbol !== '∆' && symbol !== 'Δ') continue;
 
         const type = (symbol === '§') ? 'property' : 'event';
         let name = '';
@@ -354,7 +361,7 @@ function getTraceDataStream(objUriOrData) {
 function parseServerUri(uri) {
     if (!uri) return null;
     uri = uri.trim();
-    const match = uri.match(/^(https|ivc(?:-[a-zA-Z0-9_-]+)?|irc):\/\/([^\/:#?]+)(?::(\d+))?(?:[\/#](.*))?$/i);
+    const match = uri.match(/^(https|ivc(?:-[a-zA-Z0-9_-]+)?|irc):\/\/([^\/:#?]*)(?::(\d+))?(?:[\/#](.*))?$/i);
     if (!match) return null;
 
     const protocol = match[1].toUpperCase();
@@ -367,14 +374,20 @@ function parseServerUri(uri) {
     }
     const port = match[3] ? parseInt(match[3], 10) : defaultPort;
 
-    let channelRaw = match[4] || '#lobby';
+    let channelRaw = match[4] || '';
 
     const subParsed = parseSubobjects(channelRaw);
-    let baseChanRaw = subParsed.baseTarget || '#lobby';
+    let baseChanRaw = subParsed.baseTarget || '';
+    
+    if (host === '' && baseChanRaw === '') {
+        baseChanRaw = '£';
+    } else if (baseChanRaw === '') {
+        baseChanRaw = '#';
+    }
 
     if (baseChanRaw.includes('#')) {
         baseChanRaw = '#' + baseChanRaw.split('#').pop();
-    } else if (baseChanRaw && !baseChanRaw.startsWith('#')) {
+    } else if (baseChanRaw && !/^[#&$£@!+~%]/.test(baseChanRaw)) {
         baseChanRaw = '#' + baseChanRaw;
     }
 
@@ -406,13 +419,13 @@ function generateAnonymousName() {
 
 // Helper: Normalize channel name
 function normalizeChannel(name) {
-    if (!name) return '#lobby';
+    if (!name) return '#';
     name = name.trim();
     if (name === 'stats' || name === '#stats') return '#stats';
-    if (!name.startsWith('#') && !name.startsWith('&')) {
+    if (!/^[#&$£@!+~%]/.test(name)) {
         name = '#' + name;
     }
-    return name.replace(/[^a-zA-Z0-9\-_#&\/]/g, '').replace(/\/+/g, '/').replace(/\/$/, '');
+    return name.replace(/[^a-zA-Z0-9\-_#&$£@!+~%\/]/g, '').replace(/\/+/g, '/').replace(/\/$/, '');
 }
 
 // Global Client ID

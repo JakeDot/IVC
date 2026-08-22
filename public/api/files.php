@@ -32,11 +32,22 @@ $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 if ($method === 'GET') {
     $channel = Sanitizer::sanitizeRoomId($_GET['channel'] ?? $_GET['room'] ?? '');
+    $client = $_GET['client'] ?? $_GET['user'] ?? $_GET['nick'] ?? '';
 
     if (empty($channel)) {
         http_response_code(400);
         echo json_encode(['error' => 'Channel parameter required'], JSON_THROW_ON_ERROR);
         exit;
+    }
+
+    if (class_exists('\Fortress\IRC\ChanServ')) {
+        $access = \Fortress\IRC\ChanServ::checkAccess($channel, $client);
+        if (!$access['success']) {
+            http_response_code($access['code'] ?? 477);
+            echo json_encode(['error' => $access['message']], JSON_THROW_ON_ERROR);
+            exit;
+        }
+        $channel = $access['base_target'];
     }
 
     $files = SharedFileRepository::findByChannel($channel);
@@ -75,6 +86,16 @@ if ($method === 'POST') {
         http_response_code(400);
         echo json_encode(['error' => 'Missing required fields: id, channel, sharer_client_id, encrypted_metadata'], JSON_THROW_ON_ERROR);
         exit;
+    }
+
+    if (class_exists('\Fortress\IRC\ChanServ')) {
+        $access = \Fortress\IRC\ChanServ::checkAccess($channel, $sharerClientId);
+        if (!$access['success']) {
+            http_response_code($access['code'] ?? 477);
+            echo json_encode(['error' => $access['message']], JSON_THROW_ON_ERROR);
+            exit;
+        }
+        $channel = $access['base_target'];
     }
 
     $file = new SharedFile(

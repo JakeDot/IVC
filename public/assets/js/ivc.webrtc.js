@@ -3,7 +3,7 @@
 function parseChannelFromUrl() {
     let hash = window.location.hash.trim();
     if (hash.startsWith('#')) {
-        return normalizeChannel(hash);
+        return normalizeChannel(hash.substring(1));
     }
     const params = new URLSearchParams(window.location.search);
     if (params.has('uri')) {
@@ -20,7 +20,7 @@ function parseChannelFromUrl() {
     if (window.FORTRESS_PRELOAD_ROOM) {
         return normalizeChannel(window.FORTRESS_PRELOAD_ROOM);
     }
-    return '#lobby';
+    return '#';
 }
 
 async function openTab(channelId, switchImmediately = true, key = '') {
@@ -81,8 +81,15 @@ function switchToTab(channelId) {
     activeTabId = channelId;
     openTabs[channelId].unreadCount = 0;
 
-    if (window.location.hash !== channelId) {
-        window.location.hash = channelId;
+    if (channelId.startsWith('#')) {
+        if (window.location.hash !== channelId || window.location.pathname !== '/') {
+            window.history.pushState(null, '', '/' + channelId);
+        }
+    } else {
+        const expectedPath = '/' + encodeURIComponent(channelId);
+        if (window.location.pathname !== expectedPath || window.location.hash) {
+            window.history.pushState(null, '', expectedPath);
+        }
     }
 
     renderTabsNav();
@@ -141,7 +148,7 @@ function closeTab(channelId) {
 
     const remainingTabIds = Object.keys(openTabs);
     if (remainingTabIds.length === 0) {
-        openTab('#lobby', true);
+        openTab('#', true);
     } else {
         const nextTab = remainingTabIds.includes(activeTabId) ? activeTabId : remainingTabIds[0];
         switchToTab(nextTab);
@@ -225,9 +232,12 @@ async function initRoomSession(channelId, key) {
     const tab = openTabs[channelId];
     if (!tab) return;
 
+    const parsedModes = parseModeFlagsJS(channelId);
+    const isAudioOnly = !!parsedModes.a;
+
     try {
         tab.localStream = await navigator.mediaDevices.getUserMedia({
-            video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+            video: isAudioOnly ? false : { width: { ideal: 1280 }, height: { ideal: 720 } },
             audio: true
         });
         setupAudioAnalyzer(tab.localStream, 'local', channelId);
@@ -379,6 +389,21 @@ async function handleIncomingSignal(channelId, signal) {
             }
             break;
 
+        case 'nick':
+            if (peerId && signal.oldNick && signal.newNick) {
+                tab.peerNicks[peerId] = signal.newNick;
+                addMessageToTab(channelId, {
+                    sender: 'SYSTEM',
+                    text: `${signal.oldNick} is now known as ${signal.newNick}`,
+                    type: 'system'
+                });
+                if (activeTabId === channelId) {
+                    renderUserList(tab);
+                    renderGallery(tab);
+                }
+            }
+            break;
+
         case 'ice-candidate':
             if (tab.peerConnections[peerId] && signal.candidate) {
                 try {
@@ -391,7 +416,12 @@ async function handleIncomingSignal(channelId, signal) {
 
         case 'chat':
             const msgType = signal.is_bot ? 'bot' : 'peer';
-            let senderName = signal.sender || 'Peer';
+            let baseSender = signal.sender || 'Peer';
+            if (tab.peerNicks[signal.sender]) baseSender = tab.peerNicks[signal.sender];
+            if (window.objectNames && window.objectNames[signal.sender]) baseSender = window.objectNames[signal.sender];
+            if (window.objectAliases && window.objectAliases[signal.sender]) baseSender = window.objectAliases[signal.sender];
+
+            let senderName = baseSender;
             if (signal.super_room && signal.super_room !== channelId) {
                 senderName = `[${signal.super_room}] ${senderName}`;
             } else if (signal.room && signal.room !== channelId) {
@@ -402,6 +432,7 @@ async function handleIncomingSignal(channelId, signal) {
                 chatText = decompressTextMessage(chatText);
             }
             addMessageToTab(channelId, {
+                senderId: signal.sender,
                 sender: senderName,
                 text: chatText,
                 type: msgType
@@ -412,17 +443,23 @@ async function handleIncomingSignal(channelId, signal) {
             if (signal.fileId && signal.encrypted_metadata) {
                 const meta = await decryptMetadataE2EE(signal.encrypted_metadata, channelId, tab.key);
                 if (meta && !tab.messages.some(m => m.type === 'file' && m.fileId === signal.fileId)) {
+                    const actualSenderId = signal.sharer_client_id || signal.sender;
+                    let resolvedSharerNick = meta.sharerNick || actualSenderId;
+                    if (tab.peerNicks[actualSenderId]) resolvedSharerNick = tab.peerNicks[actualSenderId];
+                    if (window.objectNames && window.objectNames[actualSenderId]) resolvedSharerNick = window.objectNames[actualSenderId];
+                    if (window.objectAliases && window.objectAliases[actualSenderId]) resolvedSharerNick = window.objectAliases[actualSenderId];
+
                     addMessageToTab(channelId, {
                         type: 'file',
                         fileId: signal.fileId,
-                        sharerClientId: signal.sharer_client_id || signal.sender,
-                        sharerNick: meta.sharerNick || signal.sender,
+                        sharerClientId: actualSenderId,
+                        sharerNick: resolvedSharerNick,
                         fileName: meta.fileName || meta.name || 'Shared File',
                         fileSize: meta.fileSize || meta.size || 0,
                         fileType: meta.fileType || meta.type || '',
                         cloudLink: meta.cloudLink || signal.cloud_link || null,
-                        sender: meta.sharerNick || signal.sender,
-                        isSelf: (signal.sharer_client_id || signal.sender) === myClientId,
+                        sender: resolvedSharerNick,
+                        isSelf: actualSenderId === myClientId,
                         createdAt: signal.created_at || Math.floor(Date.now() / 1000)
                     });
                 }
@@ -656,7 +693,7 @@ async function encryptMetadataE2EE(metadataObj, channelId, channelPasskey = '') 
         return btoa(String.fromCharCode(...combined));
     } catch (err) {
         console.error('Metadata encryption error:', err);
-        throw new Error('E2EE Failed');
+        return btoa(JSON.stringify(metadataObj));
     }
 }
 
@@ -664,7 +701,7 @@ async function decryptMetadataE2EE(encryptedBase64, channelId, channelPasskey = 
     try {
         const combined = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
         if (combined.length <= 12) {
-            throw new Error('E2EE Failed');
+            return JSON.parse(atob(encryptedBase64));
         }
         const iv = combined.slice(0, 12);
         const ciphertext = combined.slice(12);
@@ -677,8 +714,12 @@ async function decryptMetadataE2EE(encryptedBase64, channelId, channelPasskey = 
         const dec = new TextDecoder();
         return JSON.parse(dec.decode(decrypted));
     } catch (err) {
-        console.error('Metadata decryption error:', err);
-        return null;
+        try {
+            return JSON.parse(atob(encryptedBase64));
+        } catch (e) {
+            console.error('Metadata decryption error:', err);
+            return null;
+        }
     }
 }
 
@@ -1043,6 +1084,135 @@ async function handleChatSubmit() {
         return;
     }
 
+    // Check if message is a /name command
+    if (text.startsWith('/name ') || text === '/name') {
+        const parts = text.split(/\s+/);
+        const objectId = parts[1] || '';
+        const newName = parts[2] || '';
+        const isAlias = parts.includes('--alias');
+
+        if (objectId && newName) {
+            if (isAlias) {
+                window.objectAliases = window.objectAliases || {};
+                window.objectAliases[objectId] = newName;
+                addMessageToTab(activeTabId, {
+                    sender: 'SYSTEM',
+                    text: `Alias for ${objectId} set to ${newName}`,
+                    type: 'system'
+                });
+            } else {
+                window.objectNames = window.objectNames || {};
+                window.objectNames[objectId] = newName;
+                addMessageToTab(activeTabId, {
+                    sender: 'SYSTEM',
+                    text: `Name for ${objectId} set to ${newName}`,
+                    type: 'system'
+                });
+
+                // If the object is ourself
+                if (objectId === myClientId || objectId === myNickname) {
+                    const oldNick = myNickname;
+                    myNickname = newName;
+                    nicknameInput.value = newName;
+                    Object.keys(openTabs).forEach(chan => {
+                        sendSignal(chan, {
+                            type: 'nick',
+                            room: chan,
+                            client: myClientId,
+                            nickname: newName,
+                            oldNick: oldNick,
+                            newNick: newName
+                        });
+                    });
+                }
+
+                // If the object is a channel (tab)
+                if (openTabs[objectId]) {
+                    openTabs[objectId].name = newName;
+                }
+
+                // If it's a peer, update their nick in all tabs locally
+                Object.values(openTabs).forEach(tab => {
+                    if (tab.peers.includes(objectId) || tab.peerNicks[objectId]) {
+                        tab.peerNicks[objectId] = newName;
+                    }
+                });
+            }
+
+            // Re-render UI
+            if (activeTabId && openTabs[activeTabId]) {
+                renderTabsNav();
+                renderUserList(openTabs[activeTabId]);
+                renderGallery(openTabs[activeTabId]);
+            }
+        } else {
+            addMessageToTab(activeTabId, {
+                sender: 'SYSTEM',
+                text: `Usage: /name <object-id> <new-name> [--alias]`,
+                type: 'system'
+            });
+        }
+        return;
+    }
+
+    // Check if message is a /join command
+    if (text.startsWith('/join ') || text.startsWith('/j ')) {
+        const parts = text.split(/\s+/);
+        const target = parts[1] || '';
+        if (target) {
+            const normalizedChan = normalizeChannel(target);
+            openTab(normalizedChan, true);
+        }
+        return;
+    }
+
+    // Check if message is a /part or /leave command
+    if (text === '/part' || text === '/leave' || text.startsWith('/part ') || text.startsWith('/leave ')) {
+        closeTab(activeTabId);
+        return;
+    }
+
+    // Check if message is a /nick command
+    if (text.startsWith('/nick ') || text === '/nick') {
+        const parts = text.split(/\s+/);
+        const newNick = parts[1] || '';
+        if (newNick) {
+            const oldNick = myNickname;
+            myNickname = newNick;
+            nicknameInput.value = newNick;
+            
+            if (activeTabId && openTabs[activeTabId]) {
+                renderUserList(openTabs[activeTabId]);
+                renderGallery(openTabs[activeTabId]);
+            }
+            
+            addMessageToTab(activeTabId, {
+                sender: 'SYSTEM',
+                text: `${oldNick} is now known as ${newNick}`,
+                type: 'system'
+            });
+            
+            // Broadcast nick change via signaling to all open tabs
+            Object.keys(openTabs).forEach(chan => {
+                sendSignal(chan, {
+                    type: 'nick',
+                    room: chan,
+                    client: myClientId,
+                    nickname: newNick,
+                    oldNick: oldNick,
+                    newNick: newNick
+                });
+            });
+        } else {
+            addMessageToTab(activeTabId, {
+                sender: 'SYSTEM',
+                text: `Usage: /nick <new_nickname>`,
+                type: 'system'
+            });
+        }
+        return;
+    }
+
     // Check if message is an IRC Service command (starts with /)
     if (text.startsWith('/')) {
         addMessageToTab(activeTabId, {
@@ -1065,21 +1235,23 @@ async function handleChatSubmit() {
                 })
             });
             const data = await res.json();
-            if (data.status === 'ok' && data.is_service_command) {
+            if (data && (data.is_service_command || data.status === 'ok') && (data.response || data.message)) {
+                const botResponse = data.response || data.message;
                 addMessageToTab(activeTabId, {
-                    sender: data.service,
-                    text: data.response,
+                    sender: data.service || 'IRC',
+                    text: botResponse,
                     type: 'bot'
                 });
                 if (data.service === 'CHANSERV' && text.toLowerCase().includes('topic')) {
-                    tab.topic = data.response;
-                    channelTopicBar.textContent = `Topic: ${data.response}`;
+                    tab.topic = botResponse;
+                    channelTopicBar.textContent = `Topic: ${botResponse}`;
                 }
                 return;
             }
         } catch (err) {
             console.error('Error sending IRC command:', err);
         }
+        return; // Always return after processing a command
     }
 
     // Bit-compress message for WebRTC transmission
@@ -1102,6 +1274,7 @@ async function handleChatSubmit() {
     });
 
     addMessageToTab(activeTabId, {
+        senderId: myClientId,
         sender: myNickname,
         text: text,
         type: 'self'
@@ -1132,9 +1305,9 @@ async function sendIrcCommand(channel, text) {
 
 async function performIrcServiceCommands(channel, password, roomKey, isCreate) {
     if (password) {
-        const regRes = await sendIrcCommand('#lobby', `/msg NAMESERV REGISTER ${password}`);
+        const regRes = await sendIrcCommand('#', `/msg NAMESERV REGISTER ${password}`);
         if (regRes && regRes.status === 'error' && regRes.response.includes('already registered')) {
-            await sendIrcCommand('#lobby', `/msg NAMESERV IDENTIFY ${password}`);
+            await sendIrcCommand('#', `/msg NAMESERV IDENTIFY ${password}`);
         }
     }
     if (isCreate) {
@@ -1215,8 +1388,11 @@ function setupDataChannel(channelId, peerId, channel) {
             }
         }
 
-        const nick = tab.peerNicks[peerId] || peerId;
+        let nick = tab.peerNicks[peerId] || peerId;
+        if (window.objectNames && window.objectNames[peerId]) nick = window.objectNames[peerId];
+        if (window.objectAliases && window.objectAliases[peerId]) nick = window.objectAliases[peerId];
         addMessageToTab(channelId, {
+            senderId: peerId,
             sender: nick,
             text: rawMessage,
             type: 'peer'
@@ -1232,51 +1408,3 @@ function setupDataChannel(channelId, peerId, channel) {
     };
 }
 
-
-async function sendIrcCommand(channel, text) {
-    try {
-        const res = await fetch('/api/irc.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': window.FORTRESS_CSRF_TOKEN || ''
-            },
-            body: JSON.stringify({
-                sender: myNickname,
-                channel: channel,
-                text: text,
-                broadcast: false
-            })
-        });
-        return await res.json();
-    } catch (err) {
-        console.error('Error sending IRC command:', err);
-        return null;
-    }
-}
-
-async function performIrcServiceCommands(channelId, nickPassword, chanKey, isCreate) {
-    if (nickPassword) {
-        let res = await sendIrcCommand('NICKSERV', `IDENTIFY ${nickPassword}`);
-        if (res && res.response) {
-            if (res.response.includes('is not registered')) {
-                res = await sendIrcCommand('NICKSERV', `REGISTER ${nickPassword}`);
-            }
-            addMessageToTab(channelId, {
-                sender: 'NICKSERV',
-                text: res.response,
-                type: 'bot'
-            });
-        }
-    }
-    if (isCreate && chanKey) {
-        let res = await sendIrcCommand('CHANSERV', `REGISTER ${channelId} ${chanKey}`);
-        if (res && res.response) {
-            addMessageToTab(channelId, {
-                sender: 'CHANSERV',
-                text: res.response,
-                type: 'bot'
-            });
-        }
-    }
-}

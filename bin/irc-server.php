@@ -302,6 +302,7 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
             $clientData[$clientId]['user'] = $args;
             if ($clientData[$clientId]['nick'] !== null) {
                 welcomeClient($client, $clientId, $clientData[$clientId]['nick'], $clientData);
+                welcomeClient($client, $clientData[$clientId]['nick']);
             }
             break;
 
@@ -320,7 +321,16 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
                 if (empty($c)) continue;
                 if ($c[0] !== '#') $c = '#' . $c;
 
-                RoomManager::joinRoom($c, $nick);
+                $joinRes = RoomManager::joinRoom($c, $nick);
+                if (isset($joinRes['error']) && $joinRes['error']) {
+                    sendToClient($client, $clientId, ":server 475 $nick $c :Cannot join channel (+k) - bad key\r\n", $clientData);
+                    fwrite($client, ":server 475 $nick $c :Cannot join channel (+k) - bad key\r\n");
+                    continue;
+                }
+                if (isset($joinRes['roomId'])) {
+                    $c = $joinRes['roomId'];
+                }
+
                 $clientData[$clientId]['channels'][] = $c;
 
                 if (!isset($channels[$c])) {
@@ -339,7 +349,7 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
                 // In a full implementation, we'd sync this better.
                 fwrite($client, ":server 332 $nick $c :Welcome to $c\r\n");
 
-                $users = RoomManager::joinRoom($c, $nick)['peers'];
+                $users = isset($joinRes['peers']) ? $joinRes['peers'] : [];
                 $users[] = $nick; // Add self
                 $userList = implode(' ', $users);
 
@@ -697,5 +707,5 @@ function welcomeClient($client, $clientId, $nick, &$clientData) {
 function cloneCommandForService($nick, $service, $text) {
     // Process direct MSG to a service as if it was a command in a channel
     // e.g. PRIVMSG NAMESERV :REGISTER pass email -> /msg NAMESERV REGISTER pass email
-    return IrcServices::processCommand($nick, '#lobby', "/msg $service $text");
+    return IrcServices::processCommand($nick, '#', "/msg $service $text");
 }

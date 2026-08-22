@@ -10,7 +10,7 @@ The core mechanism for routing users to networks, local servers, and specific ch
 
 Objects targeted within the IVC protocol are classified by explicit prefix symbols. The backend `Sanitizer::sanitizeRoomId` strictly enforces multibyte validation on these prefixes:
 
-*   **`#` (Global Channel)**: A standard, network-wide chat room (e.g., `#lobby`). Broadcasts signals to all connected peers.
+*   **`#` (Global Channel)**: A standard, network-wide chat room (e.g., `#`). Broadcasts signals to all connected peers.
 *   **`&` (Local Channel)**: A chat room restricted to the local server node (e.g., `&oper`).
 *   **`@` (User)**: Targets a specific user nick for direct interaction or memo routing (e.g., `@CyberFox`).
 *   **`£` (Network)**: Targets network-wide services or broadcast channels.

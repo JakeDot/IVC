@@ -10,12 +10,13 @@ const keyInput = document.getElementById('key-input');
 const nicknameInput = document.getElementById('nickname-input');
 const nickPasswordInput = document.getElementById('nick-password-input');
 const btnRandomName = document.getElementById('btn-random-name');
-const btnCreateRoom = document.getElementById('btn-create-room');
-const btnJoinRoom = document.getElementById('btn-join-room');
+const btnJoinCreateRoom = document.getElementById('btn-join-create-room');
 
 const roomShareSection = document.getElementById('room-share-section');
 const shareUrlInput = document.getElementById('share-url');
 const btnCopyLink = document.getElementById('btn-copy-link');
+const btnQrLink = document.getElementById('btn-qr-link');
+const qrCodeContainer = document.getElementById('qr-code-container');
 
 const videoStage = document.getElementById('video-stage');
 const videoGrid = document.getElementById('video-grid');
@@ -96,8 +97,11 @@ function renderTabsNav() {
         tabEl.setAttribute('tabindex', '0');
         tabEl.setAttribute('aria-selected', isActive ? 'true' : 'false');
 
-        const icon = tab.isStats ? '📊 ' : '#';
-        const cleanTitle = tab.isStats ? 'Connection Stats' : chanId.replace(/^#/, '');
+        const icon = tab.isStats ? '📊 ' : '';
+        let displayName = tab.name || tab.alias || chanId;
+        if (window.objectNames && window.objectNames[chanId]) displayName = window.objectNames[chanId];
+        if (window.objectAliases && window.objectAliases[chanId]) displayName = window.objectAliases[chanId];
+        const cleanTitle = tab.isStats ? 'Connection Stats' : displayName;
 
         tabEl.setAttribute('aria-label', `Channel ${cleanTitle}`);
         tabEl.setAttribute('title', `Switch to ${cleanTitle}`);
@@ -116,10 +120,6 @@ function renderTabsNav() {
             const closeBtn = document.createElement('span');
             closeBtn.className = 'close-tab';
             closeBtn.textContent = '×';
-            closeBtn.title = 'Close Channel';
-            closeBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                closeTab(chanId);
             closeBtn.setAttribute('role', 'button');
             closeBtn.setAttribute('tabindex', '0');
             closeBtn.setAttribute('aria-label', `Close channel ${cleanTitle}`);
@@ -159,12 +159,23 @@ function updateTabUI(channelId) {
     channelTopicBar.textContent = `Topic: ${tab.topic || 'Welcome to IVC IRC WebRTC!'}`;
 
     // Update Share link
-    let shareUrl = `${window.location.origin}/#${encodeURIComponent(channelId.replace(/^#/, ''))}`;
+    let shareUrl = '';
+    if (channelId.startsWith('#')) {
+        shareUrl = `${window.location.origin}/#${encodeURIComponent(channelId.substring(1))}`;
+    } else {
+        shareUrl = `${window.location.origin}/${encodeURIComponent(channelId)}`;
+    }
+    
     if (tab.key) {
         shareUrl += `?key=${encodeURIComponent(tab.key)}`;
     }
     shareUrlInput.value = shareUrl;
     roomShareSection.classList.remove('hidden');
+    
+    // Hide QR code container on tab switch
+    qrCodeContainer.style.display = 'none';
+    btnQrLink.textContent = '📱 QR Code';
+    qrCodeContainer.innerHTML = '';
 
     // Render Chat Messages
     renderChatMessages(tab);
@@ -193,7 +204,16 @@ function renderChatMessages(tab) {
 
             const senderTag = document.createElement('div');
             senderTag.className = 'sender-tag';
-            senderTag.textContent = msg.sender || msg.sharerNick || 'Anonymous';
+            
+            let finalSender = msg.sender || msg.sharerNick || 'Anonymous';
+            const senderId = msg.senderId || msg.sharerClientId;
+            if (senderId) {
+                if (window.objectNames && window.objectNames[senderId]) finalSender = window.objectNames[senderId];
+                else if (window.objectAliases && window.objectAliases[senderId]) finalSender = window.objectAliases[senderId];
+                else if (tab && tab.peerNicks && tab.peerNicks[senderId]) finalSender = tab.peerNicks[senderId];
+            }
+            
+            senderTag.textContent = finalSender;
 
             const fileCard = document.createElement('div');
             fileCard.className = 'file-card';
@@ -272,7 +292,16 @@ function renderChatMessages(tab) {
 
             const senderTag = document.createElement('div');
             senderTag.className = 'sender-tag';
-            senderTag.textContent = msg.sender;
+            
+            let finalSender = msg.sender;
+            const senderId = msg.senderId;
+            if (senderId) {
+                if (window.objectNames && window.objectNames[senderId]) finalSender = window.objectNames[senderId];
+                else if (window.objectAliases && window.objectAliases[senderId]) finalSender = window.objectAliases[senderId];
+                else if (tab && tab.peerNicks && tab.peerNicks[senderId]) finalSender = tab.peerNicks[senderId];
+            }
+            
+            senderTag.textContent = finalSender;
 
             const content = document.createElement('div');
             content.textContent = msg.text;
@@ -292,14 +321,18 @@ function renderUserList(tab) {
     const selfLi = document.createElement('li');
     selfLi.className = 'user-item';
     const isSelfTalking = !!tab.speakingStates['local'];
-    selfLi.innerHTML = `<span class="op-tag">@</span> ${myNickname} (You) ${isSelfTalking ? '<span class="talking-dot" title="Speaking"></span>' : ''}`;
+    let myDisplayNick = myNickname;
+    if (window.objectAliases && window.objectAliases[myClientId]) myDisplayNick = window.objectAliases[myClientId];
+    selfLi.innerHTML = `<span class="op-tag">@</span> ${myDisplayNick} (You) ${isSelfTalking ? '<span class="talking-dot" title="Speaking"></span>' : ''}`;
     userList.appendChild(selfLi);
 
     // Add remote peers
     tab.peers.forEach(peerId => {
         const li = document.createElement('li');
         li.className = 'user-item';
-        const nick = tab.peerNicks[peerId] || peerId;
+        let nick = tab.peerNicks[peerId] || peerId;
+        if (window.objectNames && window.objectNames[peerId]) nick = window.objectNames[peerId];
+        if (window.objectAliases && window.objectAliases[peerId]) nick = window.objectAliases[peerId];
         const isPeerTalking = !!tab.speakingStates[peerId];
         li.innerHTML = `<span>👤</span> ${nick} ${isPeerTalking ? '<span class="talking-dot" title="Speaking"></span>' : ''}`;
         userList.appendChild(li);

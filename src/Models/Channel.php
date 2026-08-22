@@ -232,6 +232,58 @@ class Channel
         return ['success' => true, 'message' => "CHANSERV: Topic for {$channel} updated to: \"{$topic}\"", 'topic' => $topic];
     }
 
+    public static function admin(string $channel, string $targetNick, string $requesterNick = ''): array
+    {
+        $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
+        $targetNick = trim($targetNick);
+
+        if (!empty($requesterNick) && !self::isOp($channel, $requesterNick)) {
+            return ['success' => false, 'message' => "CHANSERV: Permission denied. You must be an OP on {$channel} to grant ADMIN status."];
+        }
+
+        self::setRole($channel, $targetNick, 'ADMIN');
+        return ['success' => true, 'message' => "CHANSERV: Granted ADMIN status (+a) to '{$targetNick}' in {$channel}."];
+    }
+
+    public static function deadmin(string $channel, string $targetNick, string $requesterNick = ''): array
+    {
+        $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
+        $targetNick = trim($targetNick);
+
+        if (!empty($requesterNick) && !self::isOp($channel, $requesterNick)) {
+            return ['success' => false, 'message' => "CHANSERV: Permission denied. You must be an OP on {$channel} to remove ADMIN status."];
+        }
+
+        self::setRole($channel, $targetNick, 'MEMBER');
+        return ['success' => true, 'message' => "CHANSERV: Removed ADMIN status (-a) from '{$targetNick}' in {$channel}."];
+    }
+
+    public static function netadmin(string $channel, string $targetNick, string $requesterNick = ''): array
+    {
+        $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
+        $targetNick = trim($targetNick);
+
+        if (!empty($requesterNick) && !self::isOp($channel, $requesterNick)) {
+            return ['success' => false, 'message' => "CHANSERV: Permission denied. You must be an OP on {$channel} to grant NETADMIN status."];
+        }
+
+        self::setRole($channel, $targetNick, 'NETADMIN');
+        return ['success' => true, 'message' => "CHANSERV: Granted NETADMIN status (+n) to '{$targetNick}' in {$channel}."];
+    }
+
+    public static function denetadmin(string $channel, string $targetNick, string $requesterNick = ''): array
+    {
+        $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
+        $targetNick = trim($targetNick);
+
+        if (!empty($requesterNick) && !self::isOp($channel, $requesterNick)) {
+            return ['success' => false, 'message' => "CHANSERV: Permission denied. You must be an OP on {$channel} to remove NETADMIN status."];
+        }
+
+        self::setRole($channel, $targetNick, 'MEMBER');
+        return ['success' => true, 'message' => "CHANSERV: Removed NETADMIN status (-n) from '{$targetNick}' in {$channel}."];
+    }
+
     public static function isRegistered(string $channel): bool
     {
         $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
@@ -245,10 +297,28 @@ class Channel
         \Fortress\Database\ChannelUserRepository::saveRole($channelUser);
     }
 
+    public static function hasVoice(string $channel, string $nickname): bool
+    {
+        $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
+        return \Fortress\Database\ChannelUserRepository::hasVoice($channel, $nickname);
+    }
+
     public static function isOp(string $channel, string $nickname): bool
     {
         $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
         return \Fortress\Database\ChannelUserRepository::isOp($channel, $nickname);
+    }
+
+    public static function isAdmin(string $channel, string $nickname): bool
+    {
+        $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
+        return \Fortress\Database\ChannelUserRepository::isAdmin($channel, $nickname);
+    }
+
+    public static function isNetAdmin(string $channel, string $nickname): bool
+    {
+        $channel = \Fortress\IRC\ChanServ::normalizeChannelName($channel);
+        return \Fortress\Database\ChannelUserRepository::isNetAdmin($channel, $nickname);
     }
 
     public static function getOperators(string $channel): array

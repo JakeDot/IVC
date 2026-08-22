@@ -68,6 +68,59 @@ class NameServ
     }
 
     /**
+     * Set custom domain (§domain) for a nickname
+     */
+    public static function setDomain(string $nickname, string $domain): array
+    {
+        $nickname = trim($nickname);
+        $domain = trim($domain);
+
+        if (empty($nickname)) {
+            return ['success' => false, 'message' => 'NICKSERV: Nickname is required.'];
+        }
+
+        if (empty($domain)) {
+            return ['success' => false, 'message' => 'NICKSERV: Domain value cannot be empty.'];
+        }
+
+        // Clean up domain if formatted with § or leading/trailing slashes
+        $domain = ltrim($domain, '§$@');
+
+        $atPos = strrpos($nickname, '@');
+        $baseUser = ($atPos !== false && $atPos > 0) ? substr($nickname, 0, $atPos) : $nickname;
+        if ($baseUser === '') {
+            $baseUser = $nickname;
+        }
+
+        UserNickRepository::updateDomain($baseUser, $domain);
+        $standardized = "{$baseUser}@{$domain}";
+
+        return [
+            'success' => true,
+            'message' => "NICKSERV: Property §domain set to '{$domain}' for user '{$baseUser}'. Standardized username: {$standardized}",
+            'user' => $baseUser,
+            'domain' => $domain,
+            'standardized' => $standardized
+        ];
+    }
+
+    /**
+     * Auto-identify a user string (user@domain.tld or raw nick or IP)
+     */
+    public static function autoIdent(string $identString): array
+    {
+        $parsed = UserNick::parseIdent($identString);
+        $user = $parsed['user'];
+        $domain = $parsed['domain'];
+
+        if ($domain !== '<anonymous>' && $domain !== '') {
+            UserNickRepository::updateDomain($user, $domain);
+        }
+
+        return $parsed;
+    }
+
+    /**
      * Get info for a registered nickname
      */
     public static function getInfo(string $nickname): array
@@ -76,15 +129,29 @@ class NameServ
         $userNick = UserNickRepository::findByNickname($nickname);
 
         if ($userNick === null) {
-            return ['success' => false, 'message' => "NAMESERV: Nickname '{$nickname}' is not registered."];
+            $parsed = UserNick::parseIdent($nickname);
+            return [
+                'success' => false,
+                'message' => "NAMESERV: Nickname '{$nickname}' is not registered. (Ident: {$parsed['standardized']})",
+                'data' => [
+                    'nickname' => $parsed['user'],
+                    'domain' => $parsed['domain'],
+                    'standardized_username' => $parsed['standardized'],
+                    'is_identified' => 0
+                ]
+            ];
         }
 
         $regDate = date('Y-m-d H:i:s', $userNick->getRegisteredAt());
         $lastSeenDate = date('Y-m-d H:i:s', $userNick->getLastSeen());
         $identifiedStr = $userNick->isIdentified() ? 'Yes' : 'No';
         $subStr = $userNick->isPremium() ? "⭐ Active ({$userNick->getSubscriptionTier()})" : 'None (Standard)';
+        $domainStr = $userNick->getDomain();
+        $stdUser = $userNick->getStandardizedUsername();
 
         $msg = "NAMESERV Information for {$userNick->getNickname()}:\n" .
+               "• Standardized Username: {$stdUser}\n" .
+               "• Domain: {$domainStr} (§domain: {$domainStr})\n" .
                "• Registered: {$regDate}\n" .
                "• Last Seen: {$lastSeenDate}\n" .
                "• Currently Identified: {$identifiedStr}\n" .

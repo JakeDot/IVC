@@ -50,7 +50,7 @@
             <!-- Room Lobby / Open Channel Panel -->
             <section id="room-lobby" class="card lobby-card">
                 <h2>Join or Create Anonymous IRC Video Channel</h2>
-                <p class="subtitle">Direct Peer-to-Peer encrypted communication. Share via <code>domain.com/#&lt;channel&gt;</code> (e.g. <code>#lobby</code>, <code>#general</code>).</p>
+                <p class="subtitle">Direct Peer-to-Peer encrypted communication. Share via <code>domain.com/#&lt;channel&gt;</code> (e.g. <code>#</code>, <code>#general</code>).</p>
 
                 <div class="lobby-controls">
                     <div class="input-row">
@@ -79,8 +79,7 @@
                     </div>
 
                     <div class="button-group">
-                        <button id="btn-create-room" class="btn btn-primary">➕ Create #channel</button>
-                        <button id="btn-join-room" class="btn btn-secondary">🚀 Join #channel</button>
+                        <button id="btn-join-create-room" class="btn btn-primary">🚀 Join / Create #channel</button>
                     </div>
                 </div>
 
@@ -88,8 +87,10 @@
                     <p>🔒 Shareable IRC Channel Link (domain.com/#&lt;channel&gt; scheme):</p>
                     <div class="share-box">
                         <input type="text" id="share-url" readonly>
-                        <button id="btn-copy-link" class="btn btn-primary btn-sm" aria-label="Copy Channel Link">📋 Copy Channel Link</button>
+                        <button id="btn-copy-link" class="btn btn-primary btn-sm">📋 Copy Channel Link</button>
+                        <button id="btn-qr-link" class="btn btn-secondary btn-sm">📱 QR Code</button>
                     </div>
+                    <div id="qr-code-container" style="display: none; margin-top: 15px; padding: 15px; background: white; border-radius: 8px; width: fit-content; margin-left: auto; margin-right: auto;"></div>
                 </div>
             </section>
 
@@ -139,7 +140,7 @@
             <section id="chat-panel" class="card chat-card hidden">
                 <div class="chat-header">
                     <div>
-                        <h3 id="chat-channel-title">💬 #lobby (P2P DataChannel Chat)</h3>
+                        <h3 id="chat-channel-title">💬 # (P2P DataChannel Chat)</h3>
                         <div id="channel-topic-bar" class="channel-topic">Topic: Welcome to IVC IRC WebRTC!</div>
                     </div>
                     <span class="chat-security-label">🔒 End-to-End Encrypted</span>
@@ -151,17 +152,17 @@
                         </div>
                     </div>
                     <div class="sidebar-container">
-                        <div class="sidebar-tabs" role="tablist" aria-label="Sidebar navigation">
-                            <button id="tab-nicks" class="sidebar-tab active" role="tab" aria-selected="true" aria-controls="user-list-sidebar">Nicks</button>
-                            <button id="tab-gallery" class="sidebar-tab" role="tab" aria-selected="false" aria-controls="gallery-sidebar">Gallery</button>
+                        <div class="sidebar-tabs">
+                            <button id="tab-nicks" class="sidebar-tab active">Nicks</button>
+                            <button id="tab-gallery" class="sidebar-tab">Gallery</button>
                         </div>
-                        <div id="user-list-sidebar" class="user-list-sidebar" role="tabpanel" aria-labelledby="tab-nicks">
+                        <div id="user-list-sidebar" class="user-list-sidebar">
                             <h4>Nicks in Channel</h4>
                             <ul id="user-list" class="user-list">
                                 <!-- Populated dynamically -->
                             </ul>
                         </div>
-                        <div id="gallery-sidebar" class="gallery-sidebar hidden" role="tabpanel" aria-labelledby="tab-gallery">
+                        <div id="gallery-sidebar" class="gallery-sidebar hidden">
                             <h4>Media Gallery</h4>
                             <div id="media-gallery" class="media-gallery">
                                 <!-- Populated dynamically -->
@@ -308,6 +309,7 @@
         window.FORTRESS_CSRF_TOKEN = "";
         window.FORTRESS_PRELOAD_ROOM = "";
     </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="assets/js/ivc.core.js"></script>
     <script src="assets/js/ivc.theme.js"></script>
     <script src="assets/js/ivc.ui.js"></script>

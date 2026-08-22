@@ -18,6 +18,7 @@ class UserNick
     private ?string $subscriptionTier;
     private string $subscriptionStatus;
     private int $subscriptionExpiresAt;
+    private ?string $customDomain;
 
     public function __construct(
         string $nickname,
@@ -28,7 +29,8 @@ class UserNick
         bool $isIdentified = false,
         ?string $subscriptionTier = null,
         string $subscriptionStatus = 'none',
-        int $subscriptionExpiresAt = 0
+        int $subscriptionExpiresAt = 0,
+        ?string $customDomain = null
     ) {
         $this->nickname = trim($nickname);
         $this->passwordHash = $passwordHash;
@@ -39,6 +41,7 @@ class UserNick
         $this->subscriptionTier = $subscriptionTier;
         $this->subscriptionStatus = strtolower(trim($subscriptionStatus));
         $this->subscriptionExpiresAt = $subscriptionExpiresAt;
+        $this->customDomain = $customDomain !== null ? trim($customDomain) : null;
     }
 
     public function getNickname(): string
@@ -49,6 +52,86 @@ class UserNick
     public function setNickname(string $nickname): void
     {
         $this->nickname = trim($nickname);
+    }
+
+    public function getCustomDomain(): ?string
+    {
+        return $this->customDomain;
+    }
+
+    public function setCustomDomain(?string $customDomain): void
+    {
+        $this->customDomain = $customDomain !== null ? trim($customDomain) : null;
+    }
+
+    public function getBaseUser(): string
+    {
+        $atPos = strrpos($this->nickname, '@');
+        if ($atPos !== false && $atPos > 0) {
+            return substr($this->nickname, 0, $atPos);
+        }
+        return $this->nickname;
+    }
+
+    public function getDomain(): string
+    {
+        if (!empty($this->customDomain)) {
+            return $this->customDomain;
+        }
+        $atPos = strrpos($this->nickname, '@');
+        if ($atPos !== false && $atPos > 0) {
+            $dom = trim(substr($this->nickname, $atPos + 1));
+            if ($dom !== '' && $dom !== '<anonymous>' && filter_var($dom, FILTER_VALIDATE_IP) === false) {
+                return $dom;
+            }
+        }
+        return '<anonymous>';
+    }
+
+    public function getStandardizedUsername(): string
+    {
+        $base = $this->getBaseUser();
+        $domain = $this->getDomain();
+        return "{$base}@{$domain}";
+    }
+
+    public static function parseIdent(string $identString): array
+    {
+        $identString = trim($identString);
+        if ($identString === '') {
+            return [
+                'user' => 'anonymous',
+                'domain' => '<anonymous>',
+                'standardized' => 'anonymous@<anonymous>'
+            ];
+        }
+
+        $atPos = strrpos($identString, '@');
+        if ($atPos !== false && $atPos > 0) {
+            $user = trim(substr($identString, 0, $atPos));
+            $domain = trim(substr($identString, $atPos + 1));
+
+            if ($user === '') {
+                $user = 'anonymous';
+            }
+
+            if ($domain === '' || $domain === '<anonymous>' || filter_var($domain, FILTER_VALIDATE_IP) !== false) {
+                $domain = '<anonymous>';
+            }
+
+            return [
+                'user' => $user,
+                'domain' => $domain,
+                'standardized' => "{$user}@{$domain}"
+            ];
+        }
+
+        // Single name or raw IP or @nick
+        return [
+            'user' => $identString,
+            'domain' => '<anonymous>',
+            'standardized' => "{$identString}@<anonymous>"
+        ];
     }
 
     public function getPasswordHash(): string
@@ -159,6 +242,9 @@ class UserNick
             'subscription_status' => $this->subscriptionStatus,
             'subscription_expires_at' => $this->subscriptionExpiresAt,
             'is_premium' => $this->isPremium() ? 1 : 0,
+            'custom_domain' => $this->customDomain,
+            'domain' => $this->getDomain(),
+            'standardized_username' => $this->getStandardizedUsername(),
         ];
     }
 
@@ -173,7 +259,8 @@ class UserNick
             !empty($data['is_identified']),
             isset($data['subscription_tier']) ? (string)$data['subscription_tier'] : null,
             (string)($data['subscription_status'] ?? 'none'),
-            isset($data['subscription_expires_at']) ? (int)$data['subscription_expires_at'] : 0
+            isset($data['subscription_expires_at']) ? (int)$data['subscription_expires_at'] : 0,
+            isset($data['custom_domain']) ? (string)$data['custom_domain'] : (isset($data['domain']) ? (string)$data['domain'] : null)
         );
     }
 

@@ -1,0 +1,3 @@
+[submodule "servlet"]
+	path = servlet
+	url = https://github.com/JakeDot/ivc-servlet

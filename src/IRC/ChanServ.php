@@ -114,17 +114,40 @@ class ChanServ
             $chanModel = ChannelRepository::findByChannelName($channel);
             if ($chanModel) {
                 $currentModes = $chanModel->getModes();
-                $hasDeltaModes = str_contains($modes, 'Δmodes') || str_contains($modes, '∆modes') || str_contains($modes, 'deltamodes');
+                $hasDeltaModes = str_contains($modes, 'Δ');
                 $cleanModes = str_replace(['Δmodes', '∆modes', 'deltamodes'], '', $modes);
                 $add = true;
                 $mbChars = preg_split('//u', $cleanModes, -1, PREG_SPLIT_NO_EMPTY) ?: [];
                 for ($i = 0; $i < count($mbChars); $i++) {
                     $char = $mbChars[$i];
+
+                // Allow specific multibyte/string modes
+                $specialModes = ['Δmodes', 'deltamodes', 'raw'];
+
+                $add = true;
+
+                // Handle special modes first
+                foreach ($specialModes as $sm) {
+                    if (str_contains($modes, "+$sm")) {
+                        if (!str_contains($currentModes, $sm)) {
+                            $currentModes .= $sm;
+                        }
+                        $modes = str_replace("+$sm", "", $modes);
+                    }
+                    if (str_contains($modes, "-$sm")) {
+                        $currentModes = str_replace($sm, '', $currentModes);
+                        $modes = str_replace("-$sm", "", $modes);
+                    }
+                }
+
+                // Handle single character modes
+                for ($i = 0; $i < mb_strlen($modes); $i++) {
+                    $char = mb_substr($modes, $i, 1);
                     if ($char === '+') {
                         $add = true;
                     } elseif ($char === '-') {
                         $add = false;
-                    } else {
+                    } elseif (preg_match('/[a-zA-ZΔ]/u', $char)) {
                         if ($add && !str_contains($currentModes, $char)) {
                             $currentModes .= $char;
                         } elseif (!$add && str_contains($currentModes, $char)) {

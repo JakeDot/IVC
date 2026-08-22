@@ -100,7 +100,6 @@ while (true) {
                 'channels' => [],
                 'is_ws' => false,
                 'ws_handshake_done' => false
-                'channels' => []
             ];
 
             echo "New client connected: $clientId\n";
@@ -113,7 +112,6 @@ while (true) {
     foreach ($read as $client) {
         $clientId = (int)$client;
         $data = fread($client, 8192);
-        $data = fread($client, 1024);
 
         if ($data === false || $data === '') {
             // Client disconnected
@@ -123,7 +121,6 @@ while (true) {
                 foreach ($clientData[$clientId]['channels'] as $chan) {
                     RoomManager::leaveRoom($chan, $nick);
                     broadcastToChannel($channels, $chan, ":$nick QUIT :Client exited\r\n", $clientData);
-                    broadcastToChannel($channels, $chan, ":$nick QUIT :Client exited\r\n");
                     // Remove from our channels tracking
                     if (isset($channels[$chan][$clientId])) {
                         unset($channels[$chan][$clientId]);
@@ -133,7 +130,6 @@ while (true) {
             if (($key = array_search($client, $clients)) !== false) {
                 unset($clients[$key]);
             }
-            unset($clients[array_search($client, $clients)]);
             unset($clientData[$clientId]);
             fclose($client);
             continue;
@@ -141,11 +137,11 @@ while (true) {
 
         $clientData[$clientId]['buffer'] .= $data;
         if (strlen($clientData[$clientId]['buffer']) > 1024 * 1024) {
-            fclose($client);
             if (($key = array_search($client, $clients)) !== false) {
                 unset($clients[$key]);
             }
             unset($clientData[$clientId]);
+            fclose($client);
             continue;
         }
 
@@ -239,16 +235,6 @@ while (true) {
                 echo "[$clientId TCP IN] $line\n";
                 processCommand($client, $clientId, $line, $clientData, $channels, $clients);
             }
-        // Process lines
-        while (($pos = strpos($clientData[$clientId]['buffer'], "\n")) !== false) {
-            $line = substr($clientData[$clientId]['buffer'], 0, $pos);
-            $clientData[$clientId]['buffer'] = substr($clientData[$clientId]['buffer'], $pos + 1);
-            $line = trim($line, "\r");
-
-            if (empty($line)) continue;
-
-            echo "[$clientId IN] $line\n";
-            processCommand($client, $clientId, $line, $clientData, $channels, $clients);
         }
     }
 
@@ -271,13 +257,11 @@ while (true) {
                     $sender = $msg['sender'];
                     if ($sender !== $nick) {
                         sendToClient($client, $clientId, ":$sender JOIN $chan\r\n", $clientData);
-                        fwrite($client, ":$sender JOIN $chan\r\n");
                     }
                 } elseif ($msg['type'] === 'peer-left') {
                     $sender = $msg['sender'];
                     if ($sender !== $nick) {
                         sendToClient($client, $clientId, ":$sender PART $chan\r\n", $clientData);
-                        fwrite($client, ":$sender PART $chan\r\n");
                     }
                 }
             }
@@ -297,7 +281,6 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
             $nick = Sanitizer::sanitizeClientId($args);
             if (empty($nick)) {
                 sendToClient($client, $clientId, ":server 432 * $args :Erroneous nickname\r\n", $clientData);
-                fwrite($client, ":server 432 * $args :Erroneous nickname\r\n");
                 return;
             }
             $oldNick = $clientData[$clientId]['nick'];
@@ -307,9 +290,6 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
                 welcomeClient($client, $clientId, $nick, $clientData);
             } elseif ($oldNick !== null) {
                 sendToClient($client, $clientId, ":$oldNick NICK $nick\r\n", $clientData);
-                welcomeClient($client, $nick);
-            } elseif ($oldNick !== null) {
-                fwrite($client, ":$oldNick NICK $nick\r\n");
                 // Update in all channels
                 foreach ($clientData[$clientId]['channels'] as $chan) {
                     RoomManager::leaveRoom($chan, $oldNick);
@@ -322,7 +302,6 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
             $clientData[$clientId]['user'] = $args;
             if ($clientData[$clientId]['nick'] !== null) {
                 welcomeClient($client, $clientId, $clientData[$clientId]['nick'], $clientData);
-                welcomeClient($client, $clientData[$clientId]['nick']);
             }
             break;
 
@@ -523,9 +502,6 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
                     sendToClient($client, $clientId, ":server 332 $nick $targetChan :{$info['data']['topic']}\r\n", $clientData);
                 } else {
                     sendToClient($client, $clientId, ":server 331 $nick $targetChan :No topic is set\r\n", $clientData);
-                    fwrite($client, ":server 332 $nick $targetChan :{$info['data']['topic']}\r\n");
-                } else {
-                    fwrite($client, ":server 331 $nick $targetChan :No topic is set\r\n");
                 }
             } else {
                 // Set topic
@@ -534,7 +510,6 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
                 // We'll broadcast the change if ChanServ accepted it (or even if it's just ephemeral for now)
                 // For simplicity, we just broadcast it to everyone in the channel right away.
                 broadcastToChannel($channels, $targetChan, ":$nick TOPIC $targetChan :$newTopic\r\n", $clientData);
-                broadcastToChannel($channels, $targetChan, ":$nick TOPIC $targetChan :$newTopic\r\n");
             }
             break;
 
@@ -557,10 +532,6 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
                 }
             }
             sendToClient($client, $clientId, ":server 315 $nick $target :End of /WHO list\r\n", $clientData);
-                    fwrite($client, ":server 352 $nick $target $cUser 127.0.0.1 server $cNick H :0 Real Name\r\n");
-                }
-            }
-            fwrite($client, ":server 315 $nick $target :End of /WHO list\r\n");
             break;
 
         case 'WHOIS':
@@ -570,7 +541,6 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
             $target = trim($args);
             if (empty($target)) {
                 sendToClient($client, $clientId, ":server 431 $nick :No nickname given\r\n", $clientData);
-                fwrite($client, ":server 431 $nick :No nickname given\r\n");
                 return;
             }
 
@@ -588,11 +558,6 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
                 sendToClient($client, $clientId, ":server 318 $nick $target :End of /WHOIS list\r\n", $clientData);
             } else {
                 sendToClient($client, $clientId, ":server 401 $nick $target :No such nick/channel\r\n", $clientData);
-                fwrite($client, ":server 311 $nick $target $user 127.0.0.1 * :Real Name\r\n");
-                fwrite($client, ":server 312 $nick $target server :Fortress IRC Server\r\n");
-                fwrite($client, ":server 318 $nick $target :End of /WHOIS list\r\n");
-            } else {
-                fwrite($client, ":server 401 $nick $target :No such nick/channel\r\n");
             }
             break;
 
@@ -610,9 +575,6 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
                 sendToClient($client, $clientId, ":server 322 $nick {$c['channel_name']} $count :$topic\r\n", $clientData);
             }
             sendToClient($client, $clientId, ":server 323 $nick :End of /LIST\r\n", $clientData);
-                fwrite($client, ":server 322 $nick {$c['channel_name']} $count :$topic\r\n");
-            }
-            fwrite($client, ":server 323 $nick :End of /LIST\r\n");
             break;
 
         case 'NAMES':
@@ -622,7 +584,6 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
             $targetChan = trim($args);
             if (empty($targetChan)) {
                 sendToClient($client, $clientId, ":server 366 $nick * :End of /NAMES list\r\n", $clientData);
-                fwrite($client, ":server 366 $nick * :End of /NAMES list\r\n");
                 return;
             }
 
@@ -638,9 +599,6 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
                     sendToClient($client, $clientId, ":server 353 $nick = $c :$userList\r\n", $clientData);
                 }
                 sendToClient($client, $clientId, ":server 366 $nick $c :End of /NAMES list\r\n", $clientData);
-                    fwrite($client, ":server 353 $nick = $c :$userList\r\n");
-                }
-                fwrite($client, ":server 366 $nick $c :End of /NAMES list\r\n");
             }
             break;
 
@@ -653,40 +611,33 @@ function processCommand($client, $clientId, $line, &$clientData, &$channels, &$c
 
             if (empty($target)) {
                 sendToClient($client, $clientId, ":server 461 $nick MODE :Not enough parameters\r\n", $clientData);
-                fwrite($client, ":server 461 $nick MODE :Not enough parameters\r\n");
                 return;
             }
 
             if (str_starts_with($target, '#')) {
-                sendToClient($client, $clientId, ":server 324 $nick $target +nt\r\n", $clientData);
-            } else {
-                if (strtolower($target) === strtolower($nick)) {
-                    sendToClient($client, $clientId, ":server 221 $nick +i\r\n", $clientData);
-                } else {
-                    sendToClient($client, $clientId, ":server 502 $nick :Cant change mode for other users\r\n", $clientData);
                 $modes = isset($modeParts[1]) ? trim($modeParts[1]) : '';
                 if (empty($modes)) {
                     // Fetch current modes
                     $info = \Fortress\IRC\ChanServ::getInfo($target);
                     if ($info['success'] && isset($info['data']['modes'])) {
-                        fwrite($client, ":server 324 $nick $target {$info['data']['modes']}\r\n");
+                        sendToClient($client, $clientId, ":server 324 $nick $target {$info['data']['modes']}\r\n", $clientData);
                     } else {
-                        fwrite($client, ":server 324 $nick $target +nt\r\n"); // fallback
+                        sendToClient($client, $clientId, ":server 324 $nick $target +nt\r\n", $clientData); // fallback
                     }
                 } else {
                     // Try to set modes using ChanServ logic
                     $res = \Fortress\IRC\ChanServ::setModes($target, $modes, $nick);
                     if ($res['success']) {
-                        broadcastToChannel($channels, $target, ":$nick MODE $target $modes\r\n");
+                        broadcastToChannel($channels, $target, ":$nick MODE $target $modes\r\n", $clientData);
                     } else {
-                        fwrite($client, ":server 482 $nick $target :You're not channel operator\r\n");
+                        sendToClient($client, $clientId, ":server 482 $nick $target :You're not channel operator\r\n", $clientData);
                     }
                 }
             } else {
                 if (strtolower($target) === strtolower($nick)) {
-                    fwrite($client, ":server 221 $nick +i\r\n");
+                    sendToClient($client, $clientId, ":server 221 $nick +i\r\n", $clientData);
                 } else {
-                    fwrite($client, ":server 502 $nick :Cant change mode for other users\r\n");
+                    sendToClient($client, $clientId, ":server 502 $nick :Cant change mode for other users\r\n", $clientData);
                 }
             }
             break;
@@ -740,28 +691,6 @@ function welcomeClient($client, $clientId, $nick, &$clientData) {
             sendToClient($client, $clientId, ":server 372 $nick :- $line\r\n", $clientData);
         }
         sendToClient($client, $clientId, ":server 376 $nick :End of /MOTD command.\r\n", $clientData);
-function broadcastToChannel(&$channels, $chan, $rawMessage) {
-    if (!isset($channels[$chan])) return;
-    foreach ($channels[$chan] as $client) {
-        if (is_resource($client)) {
-            fwrite($client, $rawMessage);
-        }
-    }
-}
-
-function welcomeClient($client, $nick) {
-    fwrite($client, ":server 001 $nick :Welcome to the Fortress IRC Network $nick\r\n");
-    fwrite($client, ":server 002 $nick :Your host is server, running version 1.0\r\n");
-    fwrite($client, ":server 003 $nick :This server was created today\r\n");
-
-    $motd = MotdServ::getMotd();
-    if ($motd) {
-        fwrite($client, ":server 375 $nick :- server Message of the day - \r\n");
-        $lines = explode("\n", $motd);
-        foreach ($lines as $line) {
-            fwrite($client, ":server 372 $nick :- $line\r\n");
-        }
-        fwrite($client, ":server 376 $nick :End of /MOTD command.\r\n");
     }
 }
 

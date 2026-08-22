@@ -519,16 +519,23 @@ class IrcServices
             return null;
         }
 
-        $parsed = parse_url($uri);
-        if (!$parsed || empty($parsed['host'])) {
+        if (!preg_match('/^(https|ivc(?:-[a-zA-Z0-9_-]+)?|irc):\/\/([^\/:#?]+)(?::(\d+))?(?:[\/#](.*))?$/i', $uri, $matches)) {
             return null;
         }
 
-        $scheme = strtolower($parsed['scheme'] ?? 'https');
-        $hostRaw = $parsed['host'];
-
-        $host = strtolower($hostRaw);
+        $scheme = strtolower($matches[1]);
+        $hostRaw = $matches[2];
+        
         $hostModes = '';
+        // Strip +modes from the host component
+        $hostModes = '';
+        if (str_contains($hostRaw, '+')) {
+            $parts = explode('+', $hostRaw);
+            $hostRaw = $parts[0];
+            array_shift($parts); // Remove the base host
+            $hostModes = implode('+', $parts); // Keep remaining string if it had multiple +'s
+        }
+        $host = $hostRaw; // Do not strtolower to preserve case in complex symbol URIs
 
         $defaultPorts = [
             'https' => 443,
@@ -538,7 +545,8 @@ class IrcServices
         if (str_starts_with($scheme, 'ivc-')) {
             $defaultPorts[$scheme] = 8080;
         }
-        $port = isset($parsed['port']) ? (int)$parsed['port'] : ($defaultPorts[$scheme] ?? 443);
+        $portStr = $matches[3] ?? '';
+        $port = $portStr !== '' ? (int)$portStr : ($defaultPorts[$scheme] ?? 443);
 
         $channel = '#lobby';
         $extractedModes = '';
@@ -551,12 +559,7 @@ class IrcServices
             return '#' . $input;
         };
 
-        $rawPathOrFragment = '';
-        if (!empty($parsed['fragment'])) {
-            $rawPathOrFragment = $parsed['fragment'];
-        } elseif (!empty($parsed['path']) && $parsed['path'] !== '/') {
-            $rawPathOrFragment = ltrim($parsed['path'], '/');
-        }
+        $rawPathOrFragment = $matches[4] ?? '';
 
         $subParsed = self::parseSubobjects($rawPathOrFragment);
         $chanRaw = $subParsed['base_target'];
@@ -592,6 +595,7 @@ class IrcServices
             'port'     => $port,
             'channel'  => $channel,
             'modes'    => $allModes,
+            'extracted_modes' => $extractedModes,
             'uri'      => $uri,
             'subobjects' => $subParsed['subobjects'],
             'props'    => $subParsed['props'],
@@ -1025,6 +1029,66 @@ class IrcServices
                 'service' => MotdServ::SERVICE_NAME,
                 'response' => $res['message'],
                 'channel' => $channel
+            ];
+        }
+
+        if ($first === '/join') {
+            $target = $parts[1] ?? $channel;
+            $parsedTarget = ChanServ::parseTargetAndModes($target);
+            $baseChannel = $parsedTarget['base_target'];
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "SERVERSERV: Joined channel {$baseChannel}",
+                'channel' => $baseChannel
+            ];
+        }
+
+        if ($first === '/part') {
+            $target = $parts[1] ?? $channel;
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "SERVERSERV: Left channel {$target}",
+                'channel' => $target
+            ];
+        }
+
+        if ($first === '/mode') {
+            $chan = (!empty($parts[1]) && str_starts_with($parts[1], '#')) ? $parts[1] : $channel;
+            $modes = (!empty($parts[1]) && !str_starts_with($parts[1], '#')) ? $parts[1] : ($parts[2] ?? '');
+            if (empty($modes)) {
+                $info = ChanServ::getInfo($chan);
+                $resp = $info['message'];
+            } else {
+                $res = ChanServ::setModes($chan, $modes, $senderNick);
+                $resp = $res['message'];
+            }
+            return [
+                'is_service_command' => true,
+                'service' => ChanServ::SERVICE_NAME,
+                'response' => $resp,
+                'channel' => $chan
+            ];
+        }
+
+        if ($first === '/raw') {
+            $payload = implode(' ', array_slice($parts, 1));
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "[RAW OUTPUT] {$payload}",
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/delta') {
+            $target = $parts[1] ?? $channel;
+            return [
+                'is_service_command' => true,
+                'service' => ChanServ::SERVICE_NAME,
+                'response' => "CHANSERV: Δmodes active for {$target}",
+                'channel' => $target
             ];
         }
 

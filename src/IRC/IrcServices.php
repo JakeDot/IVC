@@ -749,8 +749,6 @@ class IrcServices
             return null;
         }
 
-<<<<<<< HEAD
-=======
         // Standardize & automatically IDENT user@domain users or default to user@<anonymous>
         NameServ::autoIdent($senderNick);
 
@@ -758,8 +756,7 @@ class IrcServices
         $text = preg_replace('/(^|\s)@me(?=\s|$)/i', '$1' . $senderNick, $text);
         $text = preg_replace('/(^|\s)#me(?=\s|$)/i', '$1' . $channel, $text);
         $text = preg_replace('/(^|\s)\\$me(?=\s|$)/i', '$1server', $text);
-
->>>>>>> f79f4cf (local state jakedot@petar-vivo)
+        $text = preg_replace('/(^|\s)£me(?=\s|$)/i', '$1' . ($channel ?: '£'), $text);
         // Calculate AppStatus block for injection into native clients
         $appModes = $senderNick;
         $chanInfo = ChanServ::getInfo($channel);

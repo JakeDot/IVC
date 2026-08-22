@@ -13,6 +13,7 @@ $replacement = <<<PHP
         \$text = preg_replace('/(^|\s)@me(?=\s|$)/i', '\$1' . \$senderNick, \$text);
         \$text = preg_replace('/(^|\s)#me(?=\s|$)/i', '\$1' . \$channel, \$text);
         \$text = preg_replace('/(^|\s)\\\$me(?=\s|$)/i', '\$1server', \$text);
+        \$text = preg_replace('/(^|\s)£me(?=\s|$)/i', '\$1' . (\$channel ?: '£'), \$text);
 
 PHP;
 $content = preg_replace('/public static function processCommand\(string \$senderNick, string \$channel, string \$text\): \?array\s*\{\s*\$text = trim\(\$text\);\s*if \(\$text === \'\'\) \{\s*return null;\s*\}/s', $replacement, $content);

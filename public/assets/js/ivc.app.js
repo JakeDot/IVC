@@ -26,12 +26,16 @@ async function initApp() {
         tabNicks.addEventListener('click', () => {
             tabNicks.classList.add('active');
             tabGallery.classList.remove('active');
+            tabNicks.setAttribute('aria-selected', 'true');
+            tabGallery.setAttribute('aria-selected', 'false');
             userListSidebar.classList.remove('hidden');
             gallerySidebar.classList.add('hidden');
         });
         tabGallery.addEventListener('click', () => {
             tabGallery.classList.add('active');
             tabNicks.classList.remove('active');
+            tabGallery.setAttribute('aria-selected', 'true');
+            tabNicks.setAttribute('aria-selected', 'false');
             gallerySidebar.classList.remove('hidden');
             userListSidebar.classList.add('hidden');
 

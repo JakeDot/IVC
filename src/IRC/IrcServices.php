@@ -284,6 +284,7 @@ class IrcServices
             }
         }
 
+        // Modes handled as standard mode maps
         $cleanModes = str_replace('+', '', $currentModes);
         $currentModes = !empty($cleanModes) ? '+' . $cleanModes : '';
 

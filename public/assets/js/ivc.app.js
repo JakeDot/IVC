@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', initApp);
 
 // Navigation Listener (handles both hash and path changes from browser history)
 window.addEventListener('popstate', () => {
-    const chan = parseChannelFromUrl() || '#';
+    const chan = parseChannelFromUrl() || '#+T';
     if (chan && chan !== activeTabId) {
         if (!openTabs[chan]) {
             openTab(chan, true);

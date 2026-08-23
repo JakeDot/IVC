@@ -101,7 +101,7 @@ class ChanServ
 
     public static function parseModeStringToArray(string $modeStr): array {
         $modes = [];
-        $add = true;
+        $modifier = '+';
         $i = 0;
         $len = strlen($modeStr);
         $singleCharModes = 'nNsSOoAaIiVvkmMedtiplbrR$';
@@ -109,22 +109,21 @@ class ChanServ
         
         while ($i < $len) {
             $char = $modeStr[$i];
-            if ($char === '+') {
-                $add = true;
-                $i++;
-            } elseif ($char === '-') {
-                $add = false;
+            if ($char === '+' || $char === '-' || $char === '~') {
+                $modifier = $char;
                 $i++;
             } else {
-                $nextSign = strcspn($modeStr, "+-", $i);
+                $nextSign = strcspn($modeStr, "+-~", $i);
                 $part = substr($modeStr, $i, $nextSign);
                 
                 if (str_contains($part, '=')) {
-                    list($key, $val) = explode('=', $part, 2);
-                    if ($add) {
-                        $modes[$key] = $val;
+                    $parts = explode('=', $part, 2);
+                    $key = $parts[0];
+                    $val = $parts[1];
+                    if ($modifier === '~') {
+                        $modes['~' . $key] = true;
                     } else {
-                        $modes[$key] = false;
+                        $modes[$modifier . $key] = $val;
                     }
                 } else {
                     $isCluster = true;
@@ -144,10 +143,19 @@ class ChanServ
                     
                     if ($isCluster) {
                         for ($j = 0; $j < strlen($part); $j++) {
-                             $modes[$part[$j]] = $add ? true : false;
+                             $c = $part[$j];
+                             if ($modifier === '~') {
+                                 $modes['~' . $c] = true;
+                             } else {
+                                 $modes[$modifier . $c] = true;
+                             }
                         }
                     } else {
-                        $modes[$part] = $add ? true : false;
+                         if ($modifier === '~') {
+                             $modes['~' . $part] = true;
+                         } else {
+                             $modes[$modifier . $part] = true;
+                         }
                     }
                 }
                 $i += $nextSign;
@@ -157,29 +165,38 @@ class ChanServ
     }
 
     public static function arrayToModeString(array $modes): string {
-        $singleTrue = '';
+        $singleTrue  = '';
         $singleFalse = '';
-        $wordTrue = '';
-        $wordFalse = '';
-        $valModes = '';
+        $valModes    = '';
         
         foreach ($modes as $k => $v) {
-            $isWord = strlen($k) > 1;
-            if ($v === false) {
-                if ($isWord) $wordFalse .= '-' . $k;
-                else $singleFalse .= $k;
-            } elseif ($v === true) {
-                if ($isWord) $wordTrue .= '+' . $k;
-                else $singleTrue .= $k;
-            } else {
-                $valModes .= '+' . $k . '=' . $v;
+            if (str_starts_with($k, '+') || str_starts_with($k, '-')) {
+                $symbol = $k[0];
+                $keyName = substr($k, 1);
+
+                if ($v === true) {
+                    if ($symbol === '+') $singleTrue .= $keyName;
+                    else $singleFalse .= $keyName;
+                } elseif ($v !== false) {
+                    if ($symbol === '+') {
+                        $valModes .= '+' . $keyName . '=' . $v;
+                    }
+                }
+            } else if (!str_starts_with($k, '~')) {
+                 if ($v === true) {
+                     $singleTrue .= $k;
+                 } else if ($v === false) {
+                     $singleFalse .= $k;
+                 } else {
+                     $valModes .= '+' . $k . '=' . $v;
+                 }
             }
         }
         
         $res = '';
-        if ($singleTrue !== '') $res .= '+' . $singleTrue;
+        if ($singleTrue  !== '') $res .= '+' . $singleTrue;
         if ($singleFalse !== '') $res .= '-' . $singleFalse;
-        $res .= $wordTrue . $wordFalse . $valModes;
+        $res .= $valModes;
         return $res;
     }
 
@@ -201,10 +218,28 @@ class ChanServ
                 $newOperations = self::parseModeStringToArray($modes);
                 
                 foreach ($newOperations as $k => $v) {
-                    if ($v === false) {
-                        unset($currentModesArr[$k]);
-                    } else {
+                    if (str_starts_with($k, '~')) {
+                        $keyName = substr($k, 1);
+                        unset($currentModesArr['+' . $keyName]);
+                        unset($currentModesArr['-' . $keyName]);
+                        unset($currentModesArr[$keyName]); // legacy
+                    } else if (str_starts_with($k, '+')) {
+                        $keyName = substr($k, 1);
+                        unset($currentModesArr['-' . $keyName]);
                         $currentModesArr[$k] = $v;
+                    } else if (str_starts_with($k, '-')) {
+                        $keyName = substr($k, 1);
+                        unset($currentModesArr['+' . $keyName]);
+                        $currentModesArr[$k] = $v;
+                    } else {
+                        if ($v === false) {
+                            unset($currentModesArr[$k]);
+                            unset($currentModesArr['+' . $k]);
+                            $currentModesArr['-' . $k] = true;
+                        } else {
+                            unset($currentModesArr['-' . $k]);
+                            $currentModesArr['+' . $k] = $v;
+                        }
                     }
                 }
 
@@ -231,29 +266,29 @@ class ChanServ
     {
         $arr = self::parseModeStringToArray($modeStr);
         $flags = [
-            'n' => isset($arr['n']),
-            'N' => isset($arr['N']),
-            'S' => isset($arr['S']),
-            's' => isset($arr['s']),
-            'k' => isset($arr['k']) ? $arr['k'] : false,
-            'v' => isset($arr['v']),
-            'V' => isset($arr['V']),
-            'o' => isset($arr['o']),
-            'O' => isset($arr['O']),
-            'a' => isset($arr['a']),
-            'A' => isset($arr['A']),
-            'm' => isset($arr['m']),
-            'e' => isset($arr['e']),
-            'd' => isset($arr['d']),
-            't' => isset($arr['t']),
-            'no_t' => !isset($arr['t']),
-            'i' => isset($arr['i']) || isset($arr['I']),
-            'I' => isset($arr['i']) || isset($arr['I']),
-            'r' => isset($arr['r']) || isset($arr['R']),
-            'R' => isset($arr['r']) || isset($arr['R']),
-            '$' => isset($arr['$']),
-            'raw' => isset($arr['raw']),
-            'delta_modes' => isset($arr['delta_modes']) || isset($arr['deltamodes']) || isset($arr['Δmodes']) || isset($arr['Δ']),
+            'n' => isset($arr['+n']) || isset($arr['n']),
+            'N' => isset($arr['+N']) || isset($arr['N']),
+            'S' => isset($arr['+S']) || isset($arr['S']),
+            's' => isset($arr['+s']) || isset($arr['s']),
+            'k' => isset($arr['+k']) ? $arr['+k'] : (isset($arr['k']) ? $arr['k'] : false),
+            'v' => isset($arr['+v']) || isset($arr['v']),
+            'V' => isset($arr['+V']) || isset($arr['V']),
+            'o' => isset($arr['+o']) || isset($arr['o']),
+            'O' => isset($arr['+O']) || isset($arr['O']),
+            'a' => isset($arr['+a']) || isset($arr['a']),
+            'A' => isset($arr['+A']) || isset($arr['A']),
+            'm' => isset($arr['+m']) || isset($arr['m']),
+            'e' => isset($arr['+e']) || isset($arr['e']),
+            'd' => isset($arr['+d']) || isset($arr['d']),
+            't' => isset($arr['+t']) || isset($arr['t']),
+            'no_t' => !isset($arr['+t']) && !isset($arr['t']) && isset($arr['-t']),
+            'i' => isset($arr['+i']) || isset($arr['+I']) || isset($arr['i']) || isset($arr['I']),
+            'I' => isset($arr['+i']) || isset($arr['+I']) || isset($arr['i']) || isset($arr['I']),
+            'r' => isset($arr['+r']) || isset($arr['+R']) || isset($arr['r']) || isset($arr['R']),
+            'R' => isset($arr['+r']) || isset($arr['+R']) || isset($arr['r']) || isset($arr['R']),
+            '$' => isset($arr['+$']) || isset($arr['$']),
+            'raw' => isset($arr['+raw']) || isset($arr['raw']),
+            'delta_modes' => isset($arr['+delta_modes']) || isset($arr['+deltamodes']) || isset($arr['+Δmodes']) || isset($arr['+Δ']) || isset($arr['delta_modes']) || isset($arr['deltamodes']) || isset($arr['Δmodes']) || isset($arr['Δ']),
         ];
 
         return array_merge($flags, $arr);

@@ -1,0 +1,261 @@
+openapi: 3.1.0
+info:
+  title: IVC Protocol API
+  description: |
+    Machine-readable RFC-like description of the Internet Video Chat (IVC) protocol.
+    The IVC architecture seamlessly bridges legacy IRC behaviors with modern WebRTC
+    signaling contexts via a custom pseudo-protocol and advanced HTTP routing mechanisms.
+  version: 1.0.0
+servers:
+  - url: /api
+    description: Base URL for all API operations
+components:
+  schemas:
+    IvcUri:
+      type: string
+      description: |
+        The `ivc://` connection URI scheme, used for routing users to networks, local servers,
+        and specific chat rooms. Parses into destination objects and requested modes.
+
+        Format: `ivc://<host>[:<port>]/<prefix><object>[+<modes>][§prop=value][∆event=value]`
+
+        ### Object Prefixes
+        * `#` (Global Channel): Standard network-wide chat room.
+        * `&` (Local Channel): Chat room restricted to local server node.
+        * `@` (User): Specific user nick for direct interaction/memos.
+        * `£` (Network): Network-wide services or broadcast channels.
+        * `$` (Server): Server-specific administrative operations.
+
+        ### Mode Modifiers
+        Connection URIs can request immediate elevation or specific states by appending `+modes`.
+
+        * **Single/Multi-letter modes**: Modes can be single characters (`o`, `v`) or multi-letter words (e.g., `deltamodes`).
+        * **Modifiers and Properties**: Modes are stored as regular properties on an object.
+          * `+`: Set a mode as a property with a `+` prefix (e.g., `+o`).
+          * `-`: Negate a mode, stored as a property with a `-` prefix (e.g., `-v`).
+          * `~`: Unset or clear a mode. Unset properties simply do not exist on the object.
+        * **Property syntax**: Modes can be assigned values using the `+mode[=value]` syntax.
+          * Example: `ivc://local.host/#channel+k=key` (requests creating or joining `#channel` with the password/key set to `key`).
+          * Example: `ivc://local.host/#channel+deltamodes=true`
+
+        **Security Notice:**
+        All requested modes in the URI are treated as untrusted user requests. The backend evaluates these
+        requests against the user's active permissions. For example, if a user attempts to join a channel
+        using `#channel+q` to gain owner status, but the channel is already registered/in use by someone else,
+        the request will be denied.
+
+        ### Subobjects and Path Scoping
+        Subobjects within the URI are path-scoped. Syntax like `object§prop=value` and `object∆event`
+        are shorthands for `object/§prop=value` and `object/∆event`.
+
+        Objects may also possess general subobjects, such as a channel containing users. These can be
+        deeply nested to access specific properties of sub-entities.
+
+        Example: `ivc://server.ivc.cx/#channel/∆members/@1§vhost`
+        This resolves to the `vhost` property (`§vhost`) of the first user (`@1`) within the `members`
+        event collection (`∆members`) of `#channel` on `server.ivc.cx`.
+      pattern: '^(https|ivc(?:-[a-zA-Z0-9_-]+)?|irc)://([^/:#?]*)(?::(\d+))?(?:[/#](.*))?$'
+
+    SignalPayload:
+      type: object
+      description: Base schema for signaling payloads.
+      required:
+        - room
+        - client
+      properties:
+        room:
+          type: string
+          description: Sanitized room/object identifier. May include object prefixes.
+        client:
+          type: string
+          description: Unique client identifier.
+        type:
+          type: string
+          description: Signal action type.
+          enum: [offer, answer, candidate, join, leave, ping, chat, dcc, dcc_signal]
+        message:
+          type: string
+          description: Chat message or payload text.
+        text:
+          type: string
+          description: Alias for message.
+        nickname:
+          type: string
+          description: Sender nickname. Defaults to client ID if omitted.
+
+    SdpPayload:
+      allOf:
+        - $ref: '#/components/schemas/SignalPayload'
+        - type: object
+          properties:
+            sdp:
+              type: object
+              description: WebRTC Session Description Protocol object.
+              properties:
+                type:
+                  type: string
+                  enum: [offer, answer]
+                sdp:
+                  type: string
+
+    CandidatePayload:
+      allOf:
+        - $ref: '#/components/schemas/SignalPayload'
+        - type: object
+          properties:
+            candidate:
+              type: object
+              description: WebRTC ICE Candidate object.
+
+    DccPayload:
+      allOf:
+        - $ref: '#/components/schemas/SignalPayload'
+        - type: object
+          description: WebRTC DataChannel transfer or cloud link sharing.
+          properties:
+            type:
+              type: string
+              enum: [dcc, dcc_signal]
+            file:
+              type: string
+              description: File metadata or cloud link (e.g., Google Drive, Mega).
+
+  headers:
+    StatusHeader:
+      description: |
+        A custom protocol header providing inline evaluation of user permissions.
+        Format: `<httpstatus>+modes:<appstatus>`
+        Example: `200+modes:CyberFox{subs [#room+t+o]}`
+
+        The `<appstatus>` string maps the connecting user's identifier to the active channel
+        and appends any inline privileges (e.g., `+o` for operator).
+      schema:
+        type: string
+        pattern: '^\d{3}\+modes:.*$'
+
+paths:
+  /signal.php:
+    get:
+      summary: Poll Room Signaling & Messages
+      description: |
+        Fetches the active peer list and pending WebRTC signaling messages for a client.
+        Can operate in standard HTTP poll mode or Server-Sent Events (SSE) stream mode.
+      parameters:
+        - name: room
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Sanitized room identifier (alphanumeric, max 64 chars).
+        - name: client
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Unique client identifier.
+        - name: mode
+          in: query
+          schema:
+            type: string
+            enum: [poll, sse]
+            default: poll
+          description: Set to `sse` for Server-Sent Events streaming; default is HTTP poll.
+      responses:
+        '200':
+          description: Successful poll response (JSON) or SSE stream.
+          headers:
+            Status:
+              $ref: '#/components/headers/StatusHeader'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  peers:
+                    type: array
+                    items:
+                      type: string
+                  messages:
+                    type: array
+                    items:
+                      type: object
+                  csrf_token:
+                    type: string
+            text/event-stream:
+              schema:
+                type: string
+                description: Real-time event stream of WebRTC signaling events.
+        '400':
+          description: Bad Request - Missing parameters.
+    post:
+      summary: Send WebRTC Signal or Broadcast Message
+      description: |
+        Broadcasts SDP offers, SDP answers, ICE candidates, standard chat messages,
+        or explicit room disconnect notifications to active WebRTC peers in the target channel.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/SdpPayload'
+                - $ref: '#/components/schemas/CandidatePayload'
+                - $ref: '#/components/schemas/DccPayload'
+                - $ref: '#/components/schemas/SignalPayload'
+      responses:
+        '200':
+          description: Signal successfully sent.
+          headers:
+            Status:
+              $ref: '#/components/headers/StatusHeader'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: sent
+                  is_service:
+                    type: boolean
+                  response:
+                    type: string
+                    description: If the message was an IRC command, contains the bot's response.
+        '400':
+          description: Invalid request payload.
+    put:
+      summary: Send Offline Notice or Direct Memo
+      description: |
+        Handles offline notices, comments, and direct memos.
+        If the payload targets a non-channel object (prefixed with `@`, `£`, or `$`),
+        the WebRTC broadcast loop is halted and the message is routed into the `MemoServ`
+        offline messaging database as a `[PUT Notice]`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignalPayload'
+      responses:
+        '200':
+          description: Memo or signal successfully sent.
+          headers:
+            Status:
+              $ref: '#/components/headers/StatusHeader'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: sent
+                  is_memo:
+                    type: boolean
+                  message:
+                    type: string
+        '400':
+          description: Invalid request payload.

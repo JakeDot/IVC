@@ -29,13 +29,14 @@ components:
         ### Mode Modifiers
         Connection URIs can request immediate elevation or specific states by appending `+modes`.
 
-        * **Single-letter modes**: Modes are typically single characters (e.g., `o` for operator, `v` for voice).
-        * **Modifiers**: Modes can be prefixed with modifiers:
-          * `+`: Set a mode (e.g., `+o`).
-          * `-`: Negate or remove a mode (e.g., `-v`).
-          * `~`: Unset or clear a mode.
-        * **Property syntax**: Modes can be assigned values using the `=value` syntax.
+        * **Single/Multi-letter modes**: Modes can be single characters (`o`, `v`) or multi-letter words (e.g., `deltamodes`).
+        * **Modifiers and Properties**: Modes are stored as regular properties on an object.
+          * `+`: Set a mode as a property with a `+` prefix (e.g., `+o`).
+          * `-`: Negate a mode, stored as a property with a `-` prefix (e.g., `-v`).
+          * `~`: Unset or clear a mode. Unset properties simply do not exist on the object.
+        * **Property syntax**: Modes can be assigned values using the `+mode[=value]` syntax.
           * Example: `ivc://local.host/#channel+k=key` (requests creating or joining `#channel` with the password/key set to `key`).
+          * Example: `ivc://local.host/#channel+deltamodes=true`
 
         **Security Notice:**
         All requested modes in the URI are treated as untrusted user requests. The backend evaluates these

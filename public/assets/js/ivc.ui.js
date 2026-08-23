@@ -11,6 +11,7 @@ const nicknameInput = document.getElementById('nickname-input');
 const nickPasswordInput = document.getElementById('nick-password-input');
 const btnRandomName = document.getElementById('btn-random-name');
 const btnJoinCreateRoom = document.getElementById('btn-join-create-room');
+const btnJoinWhatsApp = document.getElementById('btn-join-whatsapp');
 
 const roomShareSection = document.getElementById('room-share-section');
 const shareUrlInput = document.getElementById('share-url');

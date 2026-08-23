@@ -96,6 +96,24 @@ btnJoinCreateRoom.addEventListener('click', async () => {
     performIrcServiceCommands(chan, nickPasswordInput.value, chanKey, !!chanKey);
 });
 
+btnJoinWhatsApp.addEventListener('click', () => {
+    // Generate a link or deep link to WhatsApp via the bridge
+    const domain = window.location.host;
+    let chan = roomInput.value.trim();
+    if (!chan) {
+        chan = '#room-' + Math.random().toString(36).substring(2, 8);
+        roomInput.value = chan;
+    } else {
+        chan = normalizeChannel(chan);
+    }
+
+    // Fallback/example generic whatsapp number for the bridge
+    const waNumber = '15550000000'; // Target WhatsApp bridge number
+    const message = encodeURIComponent(`/join ${chan}`);
+    const waLink = `https://wa.me/${waNumber}?text=${message}`;
+    window.open(waLink, '_blank');
+});
+
 btnCopyLink.addEventListener('click', async () => {
     shareUrlInput.select();
     try {

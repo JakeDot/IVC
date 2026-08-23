@@ -30,8 +30,16 @@ components:
         Connection URIs can request immediate elevation or specific states by appending `+modes`.
         E.g., `ivc://local.host/#fortress+ov` requests Operator (+o) and Voice (+v) states.
 
-        ### Subobjects
-        URI can contain subobjects for properties (`§prop=value`) or events (`∆event=value`).
+        ### Subobjects and Path Scoping
+        Subobjects within the URI are path-scoped. Syntax like `object§prop=value` and `object∆event`
+        are shorthands for `object/§prop=value` and `object/∆event`.
+
+        Objects may also possess general subobjects, such as a channel containing users. These can be
+        deeply nested to access specific properties of sub-entities.
+
+        Example: `ivc://server.ivc.cx/#channel/∆members/@1§vhost`
+        This resolves to the `vhost` property (`§vhost`) of the first user (`@1`) within the `members`
+        event collection (`∆members`) of `#channel` on `server.ivc.cx`.
       pattern: '^(https|ivc(?:-[a-zA-Z0-9_-]+)?|irc)://([^/:#?]*)(?::(\d+))?(?:[/#](.*))?$'
 
     SignalPayload:

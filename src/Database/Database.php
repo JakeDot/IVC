@@ -222,7 +222,8 @@ class Database
             ('GEMINI', 'ai.external-domain.org', 'https://api.external-domain.org/gemini', 'ACTIVE', $time, $time, 'Google Gemini Chat Bot'),
             ('CLAUDE', 'ai.external-domain.org', 'https://api.external-domain.org/claude', 'ACTIVE', $time, $time, 'Anthropic Claude Chat Bot'),
             ('CHATGPT', 'ai.external-domain.org', 'https://api.external-domain.org/chatgpt', 'ACTIVE', $time, $time, 'OpenAI ChatGPT Bot'),
-            ('COPILOT', 'ai.external-domain.org', 'https://api.external-domain.org/copilot', 'ACTIVE', $time, $time, 'Microsoft Copilot Chat Bot')";
+            ('COPILOT', 'ai.external-domain.org', 'https://api.external-domain.org/copilot', 'ACTIVE', $time, $time, 'Microsoft Copilot Chat Bot'),
+            ('WHATSAPP', '$whatsapp.net', 'https://api.whatsapp.net/v1/bridge', 'ACTIVE', $time, $time, 'WhatsApp Bridge Chat Bot')";
         
         $coll = self::getCollection("foreign_services");
         if ($coll->countDocuments([]) === 0) {
@@ -230,6 +231,7 @@ class Database
             $coll->insertOne(["service_name" => "CLAUDE", "host" => "ai.external-domain.org", "api_endpoint" => "https://api.external-domain.org/claude", "status" => "ACTIVE", "registered_at" => $time, "last_ping" => $time, "metadata" => "Anthropic Claude Chat Bot"]);
             $coll->insertOne(["service_name" => "CHATGPT", "host" => "ai.external-domain.org", "api_endpoint" => "https://api.external-domain.org/chatgpt", "status" => "ACTIVE", "registered_at" => $time, "last_ping" => $time, "metadata" => "OpenAI ChatGPT Bot"]);
             $coll->insertOne(["service_name" => "COPILOT", "host" => "ai.external-domain.org", "api_endpoint" => "https://api.external-domain.org/copilot", "status" => "ACTIVE", "registered_at" => $time, "last_ping" => $time, "metadata" => "Microsoft Copilot Chat Bot"]);
+            $coll->insertOne(["service_name" => "WHATSAPP", "host" => '$whatsapp.net', "api_endpoint" => "https://api.whatsapp.net/v1/bridge", "status" => "ACTIVE", "registered_at" => $time, "last_ping" => $time, "metadata" => "WhatsApp Bridge Chat Bot"]);
         }
 
     }

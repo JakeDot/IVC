@@ -1,0 +1,27 @@
+--- tests/WebRtcSiteTest.php
++++ tests/WebRtcSiteTest.php
+@@ -275,13 +275,19 @@
+ // Test 11: ServServ Bot & Foreign Service Command Dispatching
+ echo "\n11. Testing ServServ Bot & Foreign Service Routing...\n";
+ $ssList = ServServ::listAllServices();
+-assertTest($ssList['success'] === true && count($ssList['foreign_services']) >= 1, 'ServServ listed local and foreign services');
++assertTest($ssList['success'] === true && count($ssList['foreign_services']) >= 2, 'ServServ listed local and foreign services');
+
+-$ssInfo = ServServ::getServiceInfo('HELPBOT');
+-assertTest($ssInfo['success'] === true && str_contains($ssInfo['message'], 'help.external-domain.org'), 'ServServ returned foreign service info');
++$ssInfo = ServServ::getServiceInfo('WHATSAPP');
++assertTest($ssInfo['success'] === true && str_contains($ssInfo['message'], '$whatsapp.net'), 'ServServ returned foreign service info for WHATSAPP');
+
+-$ssDispatch = ServServ::dispatchForeignCommand('Alice', 'HELPBOT', 'SEARCH WebRTC security');
+-assertTest($ssDispatch['success'] === true && str_contains($ssDispatch['message'], 'HELPBOT@help.external-domain.org'), 'ServServ dispatched command to foreign service');
++$ssDispatch = ServServ::dispatchForeignCommand('Alice', 'WHATSAPP', 'CREATE CHAT');
++assertTest($ssDispatch['success'] === true && str_contains($ssDispatch['message'], 'WHATSAPP@$whatsapp.net'), 'ServServ dispatched command to WHATSAPP foreign service');
++
++$ssInfo2 = ServServ::getServiceInfo('GEMINI');
++assertTest($ssInfo2['success'] === true && str_contains($ssInfo2['message'], 'ai.external-domain.org'), 'ServServ returned foreign service info for GEMINI');
++
++$ssDispatch2 = ServServ::dispatchForeignCommand('Alice', 'GEMINI', 'SEARCH WebRTC security');
++assertTest($ssDispatch2['success'] === true && str_contains($ssDispatch2['message'], 'GEMINI@ai.external-domain.org'), 'ServServ dispatched command to GEMINI foreign service');
+
+
+ // ==========================================

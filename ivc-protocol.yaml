@@ -28,7 +28,21 @@ components:
 
         ### Mode Modifiers
         Connection URIs can request immediate elevation or specific states by appending `+modes`.
-        E.g., `ivc://local.host/#fortress+ov` requests Operator (+o) and Voice (+v) states.
+
+        * **Single/Multi-letter modes**: Modes can be single characters (`o`, `v`) or multi-letter words (e.g., `deltamodes`).
+        * **Modifiers and Properties**: Modes are stored as regular properties on an object.
+          * `+`: Set a mode as a property with a `+` prefix (e.g., `+o`).
+          * `-`: Negate a mode, stored as a property with a `-` prefix (e.g., `-v`).
+          * `~`: Unset or clear a mode. Unset properties simply do not exist on the object.
+        * **Property syntax**: Modes can be assigned values using the `+mode[=value]` syntax.
+          * Example: `ivc://local.host/#channel+k=key` (requests creating or joining `#channel` with the password/key set to `key`).
+          * Example: `ivc://local.host/#channel+deltamodes=true`
+
+        **Security Notice:**
+        All requested modes in the URI are treated as untrusted user requests. The backend evaluates these
+        requests against the user's active permissions. For example, if a user attempts to join a channel
+        using `#channel+q` to gain owner status, but the channel is already registered/in use by someone else,
+        the request will be denied.
 
         ### Subobjects and Path Scoping
         Subobjects within the URI are path-scoped. Syntax like `object§prop=value` and `object∆event`

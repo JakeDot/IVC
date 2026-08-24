@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Fortress\IRC\Serv;
+namespace cx\ivc\IRC\Serv;
 
-use Fortress\Database\UserNickRepository;
-use Fortress\IRC\IrcObject;
-use Fortress\Models\UserNick;
+use cx\ivc\Database\UserNickRepository;
+use cx\ivc\IRC\IrcObject;
+use cx\ivc\Models\UserNick;
 
 /**
  * NAMESERV (Nickname Service) IRC System Bot
@@ -26,13 +26,13 @@ class NameServ extends IrcObject
     
     protected static function getModesFromDb(string $target): ?string {
         $cleanNick = ltrim($target, '@');
-        $mUser = \Fortress\Database\Database::getCollection('nameserv_nicks')->findOne(['nickname' => ['$regex' => '^' . preg_quote($cleanNick, '/') . '$', '$options' => 'i']]);
+        $mUser = \cx\ivc\Database\Database::getCollection('nameserv_nicks')->findOne(['nickname' => ['$regex' => '^' . preg_quote($cleanNick, '/') . '$', '$options' => 'i']]);
         return $mUser['modes'] ?? null;
     }
     
     protected static function updateModesInDb(string $target, string $modes): void {
         $cleanNick = ltrim($target, '@');
-        \Fortress\Database\Database::getCollection('nameserv_nicks')->updateOne(
+        \cx\ivc\Database\Database::getCollection('nameserv_nicks')->updateOne(
             ['nickname' => ['$regex' => '^' . preg_quote($cleanNick, '/') . '$', '$options' => 'i']],
             ['$set' => ['modes' => $modes]]
         );

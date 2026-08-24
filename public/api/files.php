@@ -10,12 +10,12 @@ require_once __DIR__ . '/../../src/Database/Database.php';
 require_once __DIR__ . '/../../src/Database/SharedFileRepository.php';
 require_once __DIR__ . '/../../src/Signaling/RoomManager.php';
 
-use Fortress\Security\SecurityHeaders;
-use Fortress\Security\Sanitizer;
-use Fortress\Security\RateLimiter;
-use Fortress\Models\SharedFile;
-use Fortress\Database\SharedFileRepository;
-use Fortress\Signaling\RoomManager;
+use cx\ivc\Security\SecurityHeaders;
+use cx\ivc\Security\Sanitizer;
+use cx\ivc\Security\RateLimiter;
+use cx\ivc\Models\SharedFile;
+use cx\ivc\Database\SharedFileRepository;
+use cx\ivc\Signaling\RoomManager;
 
 SecurityHeaders::apply();
 
@@ -40,8 +40,8 @@ if ($method === 'GET') {
         exit;
     }
 
-    if (class_exists('\Fortress\IRC\ChanServ')) {
-        $access = \Fortress\IRC\ChanServ::checkAccess($channel, $client);
+    if (class_exists('\cx\ivc\IRC\ChanServ')) {
+        $access = \cx\ivc\IRC\ChanServ::checkAccess($channel, $client);
         if (!$access['success']) {
             http_response_code($access['code'] ?? 477);
             echo json_encode(['error' => $access['message']], JSON_THROW_ON_ERROR);
@@ -88,8 +88,8 @@ if ($method === 'POST') {
         exit;
     }
 
-    if (class_exists('\Fortress\IRC\ChanServ')) {
-        $access = \Fortress\IRC\ChanServ::checkAccess($channel, $sharerClientId);
+    if (class_exists('\cx\ivc\IRC\ChanServ')) {
+        $access = \cx\ivc\IRC\ChanServ::checkAccess($channel, $sharerClientId);
         if (!$access['success']) {
             http_response_code($access['code'] ?? 477);
             echo json_encode(['error' => $access['message']], JSON_THROW_ON_ERROR);

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Fortress\IRC;
+namespace cx\ivc\IRC;
 
 /**
  * Represents a single parsed mode entry.
@@ -67,11 +67,11 @@ abstract class IrcObject
      * @return array<string, ModeEntry|bool>
      */
     public static function parseModeStringToArray(string $modeStr): array {
-        return \Fortress\IRC\ChanServ::parseModeStringToArray($modeStr);
+        return \cx\ivc\IRC\ChanServ::parseModeStringToArray($modeStr);
     }
 
     public static function arrayToModeString(array $modes): string {
-        return \Fortress\IRC\ChanServ::arrayToModeString($modes);
+        return \cx\ivc\IRC\ChanServ::arrayToModeString($modes);
     }
 
     public static function parseModeFlags(string $modeStr): array

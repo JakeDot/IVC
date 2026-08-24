@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Fortress\Services;
+namespace cx\ivc\Services;
 
-use Fortress\Database\SubscriptionRepository;
-use Fortress\Database\UserNickRepository;
-use Fortress\Database\ChannelRepository;
-use Fortress\IRC\SettingsManager;
-use Fortress\IRC\MemoServ;
-use Fortress\Models\Subscription;
+use cx\ivc\Database\SubscriptionRepository;
+use cx\ivc\Database\UserNickRepository;
+use cx\ivc\Database\ChannelRepository;
+use cx\ivc\IRC\SettingsManager;
+use cx\ivc\IRC\MemoServ;
+use cx\ivc\Models\Subscription;
 
 /**
  * Service wrapper for Stripe Payment Gateway integration.

@@ -6,9 +6,9 @@ require_once __DIR__ . '/../../src/Security/SecurityHeaders.php';
 require_once __DIR__ . '/../../src/Security/TokenManager.php';
 require_once __DIR__ . '/../../src/Security/Sanitizer.php';
 
-use Fortress\Security\SecurityHeaders;
-use Fortress\Security\TokenManager;
-use Fortress\Security\Sanitizer;
+use cx\ivc\Security\SecurityHeaders;
+use cx\ivc\Security\TokenManager;
+use cx\ivc\Security\Sanitizer;
 
 SecurityHeaders::apply();
 

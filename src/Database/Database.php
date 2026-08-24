@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Fortress\Database;
+namespace cx\ivc\Database;
 
 use Throwable;
 
@@ -101,7 +101,7 @@ class Database
     public static function getCollection(string $name)
     {
         if (!isset(self::$collections[$name])) {
-            self::$collections[$name] = new \Fortress\Database\MongoCollection($name);
+            self::$collections[$name] = new \cx\ivc\Database\MongoCollection($name);
         }
         return self::$collections[$name];
     }

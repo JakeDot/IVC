@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Fortress\IRC;
+namespace cx\ivc\IRC;
 
-use Fortress\Database\Database;
+use cx\ivc\Database\Database;
 use PDO;
 
 /**

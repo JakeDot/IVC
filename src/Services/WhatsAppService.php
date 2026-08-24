@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Fortress\Services;
+namespace cx\ivc\Services;
 
-use Fortress\IRC\ServServ;
-use Fortress\IRC\IrcServices;
-use Fortress\Database\UserNickRepository;
+use cx\ivc\IRC\ServServ;
+use cx\ivc\IRC\IrcServices;
+use cx\ivc\Database\UserNickRepository;
 
 /**
  * Service Connector for WhatsApp API integration.

@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Fortress\IRC\Serv;
+namespace cx\ivc\IRC\Serv;
 
-use Fortress\Database\BotServRepository;
-use Fortress\IRC\IrcObject;
-use Fortress\IRC\NoModeTrait;
+use cx\ivc\Database\BotServRepository;
+use cx\ivc\IRC\IrcObject;
+use cx\ivc\IRC\NoModeTrait;
 
 /**
  * BOTSERV (Bot Service) IRC System Bot
@@ -44,7 +44,7 @@ class BotServ extends IrcObject
             // Let's allow it for demonstration, or maybe just standard users can't assign GLOBAL unless they are a specific admin nick. Let's just allow it for now.
         }
 
-        $fs = \Fortress\IRC\ServiceRegistry::getService($serviceName);
+        $fs = \cx\ivc\IRC\ServiceRegistry::getService($serviceName);
         if (!$fs || strtoupper($fs['status']) !== 'ACTIVE') {
             return ['success' => false, 'message' => "BOTSERV: Foreign Service '{$serviceName}' is not registered or not active."];
         }

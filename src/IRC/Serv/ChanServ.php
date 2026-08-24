@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Fortress\IRC\Serv;
+namespace cx\ivc\IRC\Serv;
 
-use Fortress\Database\ChannelRepository;
-use Fortress\IRC\IrcObject;
-use Fortress\IRC\IrcServices;
-use Fortress\Models\Channel;
+use cx\ivc\Database\ChannelRepository;
+use cx\ivc\IRC\IrcObject;
+use cx\ivc\IRC\IrcServices;
+use cx\ivc\Models\Channel;
 
 /**
  * CHANSERV (Channel Service) IRC System Bot

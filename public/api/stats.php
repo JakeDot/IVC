@@ -17,12 +17,12 @@ require_once __DIR__ . '/../../src/IRC/SettingsManager.php';
 require_once __DIR__ . '/../../src/IRC/ChanServ.php';
 require_once __DIR__ . '/../../src/Signaling/RoomManager.php';
 
-use Fortress\Security\SecurityHeaders;
-use Fortress\Security\RateLimiter;
-use Fortress\Database\Database;
-use Fortress\IRC\SettingsManager;
-use Fortress\IRC\ChanServ;
-use Fortress\Signaling\RoomManager;
+use cx\ivc\Security\SecurityHeaders;
+use cx\ivc\Security\RateLimiter;
+use cx\ivc\Database\Database;
+use cx\ivc\IRC\SettingsManager;
+use cx\ivc\IRC\ChanServ;
+use cx\ivc\Signaling\RoomManager;
 
 SecurityHeaders::apply();
 

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Fortress\Security;
+namespace cx\ivc\Security;
 
 /**
  * Ephemeral In-Memory Rate Limiter (Non-Logging / Privacy-Preserving)

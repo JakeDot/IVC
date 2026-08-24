@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Fortress\IRC\Objects;
+namespace cx\ivc\IRC\Objects;
 
-use Fortress\IRC\IrcObject;
-use Fortress\IRC\ModeEntry;
+use cx\ivc\IRC\IrcObject;
+use cx\ivc\IRC\ModeEntry;
 
 /**
  * Network — the global unnamed IRC object (£).
@@ -32,7 +32,7 @@ class Network extends IrcObject
     protected static function isAuthorizedToSetModes(string $target, string $requesterNick): bool
     {
         // Only IRCops may change server-wide configuration.
-        return \Fortress\IRC\Serv\ServServ::isOper($requesterNick);
+        return \cx\ivc\IRC\Serv\ServServ::isOper($requesterNick);
     }
 
     protected static function isTargetRegistered(string $target): bool
@@ -43,20 +43,20 @@ class Network extends IrcObject
 
     protected static function getModesFromDb(string $target): ?string
     {
-        $setting = \Fortress\Database\SettingRepository::findByKey(self::OBJECT_KEY);
+        $setting = \cx\ivc\Database\SettingRepository::findByKey(self::OBJECT_KEY);
         return $setting?->getSettingValue();
     }
 
     protected static function updateModesInDb(string $target, string $modes): void
     {
-        $setting = \Fortress\Database\SettingRepository::findByKey(self::OBJECT_KEY);
+        $setting = \cx\ivc\Database\SettingRepository::findByKey(self::OBJECT_KEY);
         if ($setting !== null) {
             $setting->setSettingValue($modes);
             $setting->setUpdatedAt(time());
         } else {
-            $setting = new \Fortress\Models\IrcSetting(self::OBJECT_KEY, $modes, 'Network object mode string (£)');
+            $setting = new \cx\ivc\Models\IrcSetting(self::OBJECT_KEY, $modes, 'Network object mode string (£)');
         }
-        \Fortress\Database\SettingRepository::save($setting);
+        \cx\ivc\Database\SettingRepository::save($setting);
     }
 
     protected static function createAndSaveDefault(string $target, string $modes, string $requesterNick): void

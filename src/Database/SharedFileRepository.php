@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
-namespace Fortress\Database;
-use Fortress\Models\SharedFile;
+namespace cx\ivc\Database;
+use cx\ivc\Models\SharedFile;
 
 class SharedFileRepository
 {

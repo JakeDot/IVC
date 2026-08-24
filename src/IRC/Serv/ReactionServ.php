@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Fortress\IRC\Serv;
+namespace cx\ivc\IRC\Serv;
 
-use Fortress\Database\ObjectReactionRepository;
-use Fortress\IRC\IrcObject;
-use Fortress\IRC\NoModeTrait;
-use Fortress\Models\ObjectReaction;
+use cx\ivc\Database\ObjectReactionRepository;
+use cx\ivc\IRC\IrcObject;
+use cx\ivc\IRC\NoModeTrait;
+use cx\ivc\Models\ObjectReaction;
 
 /**
  * REACTSERV / REACTIONSERV (Object Reaction Service)

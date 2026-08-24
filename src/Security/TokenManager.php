@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Fortress\Security;
+namespace cx\ivc\Security;
 
 /**
  * CSRF Protection & Ephemeral WebRTC Room Session Token Manager

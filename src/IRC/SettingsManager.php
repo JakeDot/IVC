@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Fortress\IRC;
+namespace cx\ivc\IRC;
 
-use Fortress\Database\SettingRepository;
-use Fortress\Models\IrcSetting;
+use cx\ivc\Database\SettingRepository;
+use cx\ivc\Models\IrcSetting;
 
 /**
  * Manages serverwide IRC settings stored in MySQL (or fallback DB).

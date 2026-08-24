@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Fortress\Database;
+namespace cx\ivc\Database;
 
-use Fortress\Models\ObjectReaction;
+use cx\ivc\Models\ObjectReaction;
 
 /**
  * ObjectReactionRepository

@@ -30,15 +30,15 @@ require_once __DIR__ . '/../../src/IRC/TextServ.php';
 require_once __DIR__ . '/../../src/IRC/IrcServices.php';
 require_once __DIR__ . '/../../src/Signaling/RoomManager.php';
 
-use Fortress\Security\SecurityHeaders;
-use Fortress\Security\Sanitizer;
-use Fortress\Security\RateLimiter;
-use Fortress\IRC\SettingsManager;
-use Fortress\IRC\NameServ;
-use Fortress\IRC\ChanServ;
-use Fortress\IRC\MotdServ;
-use Fortress\IRC\IrcServices;
-use Fortress\Signaling\RoomManager;
+use cx\ivc\Security\SecurityHeaders;
+use cx\ivc\Security\Sanitizer;
+use cx\ivc\Security\RateLimiter;
+use cx\ivc\IRC\SettingsManager;
+use cx\ivc\IRC\NameServ;
+use cx\ivc\IRC\ChanServ;
+use cx\ivc\IRC\MotdServ;
+use cx\ivc\IRC\IrcServices;
+use cx\ivc\Signaling\RoomManager;
 
 header('Content-Type: application/json');
 

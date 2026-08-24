@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Fortress\IRC\Serv;
+namespace cx\ivc\IRC\Serv;
 
-use Fortress\IRC\IrcObject;
-use Fortress\IRC\NoModeTrait;
-use Fortress\IRC\Objects\Network;
+use cx\ivc\IRC\IrcObject;
+use cx\ivc\IRC\NoModeTrait;
+use cx\ivc\IRC\Objects\Network;
 
 /**
  * MOTDSERV (Message of the Day Service) IRC System Bot

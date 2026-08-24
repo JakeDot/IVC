@@ -18,11 +18,11 @@ require_once __DIR__ . '/../../src/IRC/SettingsManager.php';
 require_once __DIR__ . '/../../src/IRC/MemoServ.php';
 require_once __DIR__ . '/../../src/Services/StripeService.php';
 
-use Fortress\Security\SecurityHeaders;
-use Fortress\Security\Sanitizer;
-use Fortress\Security\RateLimiter;
-use Fortress\Services\StripeService;
-use Fortress\Database\SubscriptionRepository;
+use cx\ivc\Security\SecurityHeaders;
+use cx\ivc\Security\Sanitizer;
+use cx\ivc\Security\RateLimiter;
+use cx\ivc\Services\StripeService;
+use cx\ivc\Database\SubscriptionRepository;
 
 SecurityHeaders::apply();
 header('Content-Type: application/json');

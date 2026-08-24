@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../src/IRC/IrcServices.php';
 
-use Fortress\IRC\IrcServices;
+use cx\ivc\IRC\IrcServices;
 
 function testModeParsing(string $command, string $expectedChan, string $expectedMode, string $expectedUser) {
     $parts = preg_split('/\s+/', $command);

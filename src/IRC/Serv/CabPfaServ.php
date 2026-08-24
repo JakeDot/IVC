@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Fortress\IRC\Serv;
+namespace cx\ivc\IRC\Serv;
 
-use Fortress\IRC\IrcObject;
-use Fortress\IRC\NoModeTrait;
+use cx\ivc\IRC\IrcObject;
+use cx\ivc\IRC\NoModeTrait;
 
 /**
  * CABPFASERV (Computer Aided Best Practice Favorite Algorithm Service)

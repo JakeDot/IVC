@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Fortress\IRC;
+namespace cx\ivc\IRC;
 
 /**
  * IRC Service Command Dispatcher & Parser
@@ -472,7 +472,7 @@ class IrcServices
             }
         }
 
-        $channel = \Fortress\Security\Sanitizer::sanitizeRoomId($channel);
+        $channel = \cx\ivc\Security\Sanitizer::sanitizeRoomId($channel);
 
         // Combine host modes and channel modes
         $allModes = trim($hostModes . $extractedModes, '+');
@@ -588,7 +588,7 @@ class IrcServices
             }
             $reactText = '/REACT ' . $emoji . ' ' . implode(' ', $reactArgs);
 
-            \Fortress\Signaling\RoomManager::broadcastSignal($channel, $senderNick, [
+            \cx\ivc\Signaling\RoomManager::broadcastSignal($channel, $senderNick, [
                 'type' => 'chat',
                 'sender' => $senderNick,
                 'message' => $reactText
@@ -887,6 +887,205 @@ class IrcServices
         }
 
         // 4. Convenience Slash Commands
+        if ($first === '/knock') {
+            $targetChan = $parts[1] ?? '';
+            if (empty($targetChan)) {
+                return [
+                    'is_service_command' => true,
+                    'service' => 'SERVERSERV',
+                    'response' => "SERVERSERV: Usage: /knock <#channel> <message>",
+                    'channel' => $channel
+                ];
+            }
+            $msgText = implode(' ', array_slice($parts, 2));
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "Knocked on channel {$targetChan} with message: {$msgText}",
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/invite') {
+            $targetNick = $parts[1] ?? '';
+            $targetChan = $parts[2] ?? $channel;
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "Invited {$targetNick} to {$targetChan}",
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/quit') {
+            $msgText = implode(' ', array_slice($parts, 1));
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "Disconnected from server. Reason: {$msgText}",
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/list') {
+            $list = ChanServ::listChannels();
+            $lines = ["Channels on IVC-IRC Network:"];
+            foreach ($list as $c) {
+                $lines[] = "• {$c['channel_name']} - " . ($c['topic'] ?? 'No topic');
+            }
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => implode("\n", $lines),
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/links') {
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "Servers on this network:\n• fortress.ivc.local (IVC-IRC Network)",
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/nick') {
+            $newNick = $parts[1] ?? '';
+            if (empty($newNick)) {
+                return [
+                    'is_service_command' => true,
+                    'service' => 'SERVERSERV',
+                    'response' => "SERVERSERV: Usage: /nick <newname>",
+                    'channel' => $channel
+                ];
+            }
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "NICK: Nickname changes are restricted in this environment. To use a different nickname, please register it via: /msg NAMESERV REGISTER {$newNick} <pass> and reconnect.",
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/names') {
+            $targetChan = $parts[1] ?? $channel;
+            $members = \cx\ivc\Database\ChannelUserRepository::getMembers($targetChan);
+            $names = [];
+            foreach ($members as $m) {
+                $role = $m['role'] ?? 'MEMBER';
+                $prefix = $role === 'OP' || $role === 'OWNER' ? '@' : ($role === 'VOICE' ? '+' : '');
+                $names[] = $prefix . $m['nickname'];
+            }
+            if (empty($names)) {
+                $names[] = '@' . $senderNick;
+            }
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "Users on {$targetChan}: " . implode(' ', $names),
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/query') {
+            $targetNick = $parts[1] ?? '';
+            $msgText = implode(' ', array_slice($parts, 2));
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "Query opened for {$targetNick}. Use /msg {$targetNick} <msg>",
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/me') {
+            $msgText = implode(' ', array_slice($parts, 1));
+            \cx\ivc\Signaling\RoomManager::broadcastSignal($channel, $senderNick, [
+                'type' => 'chat',
+                'sender' => $senderNick,
+                'message' => "* {$senderNick} {$msgText}",
+                'is_action' => true
+            ], false);
+
+            return [
+                'is_service_command' => true,
+                'service' => 'REACT',
+                'response' => "[Action sent]",
+                'channel' => $channel,
+                'skip_bot_broadcast' => true
+            ];
+        }
+
+        if ($first === '/notice') {
+            $targetNick = $parts[1] ?? '';
+            $msgText = implode(' ', array_slice($parts, 2));
+            \cx\ivc\IRC\MemoServ::send($senderNick, $targetNick, "[Notice] " . $msgText);
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "Notice sent to {$targetNick}.",
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/away') {
+            $msgText = implode(' ', array_slice($parts, 1));
+            if (empty($msgText)) {
+                \cx\ivc\Database\UserNickRepository::updateDomain($senderNick, \cx\ivc\Database\UserNickRepository::getStandardizedUsername($senderNick));
+                $resp = "You are no longer marked as away.";
+            } else {
+                $resp = "You have been marked as away: {$msgText}";
+            }
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => $resp,
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/whowas') {
+            return self::handleWhoisCommand($senderNick, $channel, $parts);
+        }
+
+        if ($first === '/dns') {
+            $targetNick = $parts[1] ?? '';
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "DNS resolving for {$targetNick}... (Simulated: not available on this network)",
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/ping') {
+            $targetNick = $parts[1] ?? '';
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "PONG :{$targetNick}",
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/rules') {
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "Server Rules:\n1. Be respectful.\n2. No spamming.\n3. Follow the terms of service.",
+                'channel' => $channel
+            ];
+        }
+
+        if ($first === '/version') {
+            return [
+                'is_service_command' => true,
+                'service' => 'SERVERSERV',
+                'response' => "IVC-IRC Network v1.0",
+                'channel' => $channel
+            ];
+        }
         if ($first === '/react') {
             $reactArgs = array_slice($parts, 1);
             if (empty($reactArgs)) {
@@ -902,7 +1101,7 @@ class IrcServices
             }
             $reactText = '/REACT ' . implode(' ', $reactArgs);
 
-            \Fortress\Signaling\RoomManager::broadcastSignal($channel, $senderNick, [
+            \cx\ivc\Signaling\RoomManager::broadcastSignal($channel, $senderNick, [
                 'type' => 'chat',
                 'sender' => $senderNick,
                 'message' => $reactText
@@ -1288,7 +1487,7 @@ class IrcServices
                 ];
             }
 
-            \Fortress\Signaling\RoomManager::broadcastSignal($channel, $senderNick, [
+            \cx\ivc\Signaling\RoomManager::broadcastSignal($channel, $senderNick, [
                 'type' => 'chat',
                 'sender' => $senderNick,
                 'message' => $msgText,
@@ -1409,8 +1608,8 @@ class IrcServices
 
         // If no arguments, show current ident for sender
         if ($arg === '') {
-            $std = \Fortress\Database\UserNickRepository::getStandardizedUsername($senderNick);
-            $userNick = \Fortress\Database\UserNickRepository::findByNickname($senderNick);
+            $std = \cx\ivc\Database\UserNickRepository::getStandardizedUsername($senderNick);
+            $userNick = \cx\ivc\Database\UserNickRepository::findByNickname($senderNick);
             $dom = $userNick ? $userNick->getDomain() : (str_contains($senderNick, '@') ? explode('@', $senderNick, 2)[1] : '<anonymous>');
             $base = $userNick ? $userNick->getBaseUser() : (str_contains($senderNick, '@') ? explode('@', $senderNick, 2)[0] : $senderNick);
             $isIdent = ($userNick && $userNick->isIdentified()) || str_contains($senderNick, '@') ? 'Identified' : 'Unidentified';
@@ -1424,7 +1623,7 @@ class IrcServices
 
         // Check if argument is in user@domain format
         if (str_contains($arg, '@')) {
-            $parsed = \Fortress\Models\UserNick::parseIdent($arg);
+            $parsed = \cx\ivc\Models\UserNick::parseIdent($arg);
             $targetUser = $parsed['user'];
             $targetDomain = $parsed['domain'];
             $res = NameServ::setDomain($targetUser, $targetDomain);
@@ -1450,7 +1649,7 @@ class IrcServices
         }
 
         // Check if it's password identification
-        $userNick = \Fortress\Database\UserNickRepository::findByNickname($senderNick);
+        $userNick = \cx\ivc\Database\UserNickRepository::findByNickname($senderNick);
         if ($userNick !== null && $userNick->verifyPassword($arg)) {
             $res = NameServ::identify($senderNick, $arg);
             return [
@@ -1462,8 +1661,8 @@ class IrcServices
         }
 
         // Target lookup
-        $targetUser = \Fortress\Database\UserNickRepository::findByNickname($arg);
-        $targetStd = \Fortress\Database\UserNickRepository::getStandardizedUsername($arg);
+        $targetUser = \cx\ivc\Database\UserNickRepository::findByNickname($arg);
+        $targetStd = \cx\ivc\Database\UserNickRepository::getStandardizedUsername($arg);
         $targetDom = $targetUser ? $targetUser->getDomain() : (str_contains($arg, '@') ? explode('@', $arg, 2)[1] : '<anonymous>');
         $targetBase = $targetUser ? $targetUser->getBaseUser() : (str_contains($arg, '@') ? explode('@', $arg, 2)[0] : $arg);
         return [
@@ -1481,14 +1680,14 @@ class IrcServices
             $target = $senderNick;
         }
 
-        $userNick = \Fortress\Database\UserNickRepository::findByNickname($target);
-        $parsed = \Fortress\Models\UserNick::parseIdent($target);
+        $userNick = \cx\ivc\Database\UserNickRepository::findByNickname($target);
+        $parsed = \cx\ivc\Models\UserNick::parseIdent($target);
         $baseUser = $userNick ? $userNick->getBaseUser() : $parsed['user'];
         $domain = $userNick ? $userNick->getDomain() : $parsed['domain'];
         $stdUser = $userNick ? $userNick->getStandardizedUsername() : $parsed['standardized'];
         $isIdent = ($userNick && $userNick->isIdentified()) || str_contains($target, '@') ? 'Yes' : 'No';
 
-        $userChannels = \Fortress\Database\ChannelUserRepository::getUserChannels($baseUser);
+        $userChannels = \cx\ivc\Database\ChannelUserRepository::getUserChannels($baseUser);
         $chanList = !empty($userChannels)
             ? implode(', ', array_map(fn($c) => "{$c['channel_name']} (+{$c['role']})", $userChannels))
             : ($channel !== '' ? "{$channel}" : 'None');
@@ -1522,7 +1721,7 @@ class IrcServices
         }
 
         if (str_starts_with($target, '#') || str_starts_with($target, '&')) {
-            $members = \Fortress\Database\ChannelUserRepository::getMembers($target);
+            $members = \cx\ivc\Database\ChannelUserRepository::getMembers($target);
             if (empty($members)) {
                 $chanInfo = ChanServ::getInfo($target);
                 $owner = $chanInfo['success'] ? ($chanInfo['data']['owner_nick'] ?? $senderNick) : $senderNick;
@@ -1539,8 +1738,8 @@ class IrcServices
                 $nick = $m['nickname'];
                 $role = $m['role'] ?? 'MEMBER';
                 $roleTag = $role === 'OP' || $role === 'OWNER' ? '+o' : ($role === 'VOICE' ? '+v' : 'user');
-                $std = \Fortress\Database\UserNickRepository::getStandardizedUsername($nick);
-                $uObj = \Fortress\Database\UserNickRepository::findByNickname($nick);
+                $std = \cx\ivc\Database\UserNickRepository::getStandardizedUsername($nick);
+                $uObj = \cx\ivc\Database\UserNickRepository::findByNickname($nick);
                 $dom = $uObj ? $uObj->getDomain() : (str_contains($nick, '@') ? explode('@', $nick, 2)[1] : '<anonymous>');
                 $lines[] = "• {$nick} ({$std}) [{$roleTag}] (Domain: {$dom})";
             }
@@ -1554,8 +1753,8 @@ class IrcServices
         }
 
         // Single user WHO
-        $userNick = \Fortress\Database\UserNickRepository::findByNickname($target);
-        $std = \Fortress\Database\UserNickRepository::getStandardizedUsername($target);
+        $userNick = \cx\ivc\Database\UserNickRepository::findByNickname($target);
+        $std = \cx\ivc\Database\UserNickRepository::getStandardizedUsername($target);
         $dom = $userNick ? $userNick->getDomain() : (str_contains($target, '@') ? explode('@', $target, 2)[1] : '<anonymous>');
         $base = $userNick ? $userNick->getBaseUser() : (str_contains($target, '@') ? explode('@', $target, 2)[0] : $target);
 

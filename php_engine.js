@@ -315,7 +315,7 @@ export async function getPhp() {
   // Load classes
   await phpInstance.run(`<?php
     spl_autoload_register(function ($class) {
-        $prefix = 'Fortress\\\\';
+        $prefix = 'cx\\ivc\\\\';
         $base_dir = '/src/';
         $len = strlen($prefix);
         if (strncmp($prefix, $class, $len) !== 0) return;
@@ -360,7 +360,7 @@ export async function getPhp() {
         }
     }
 
-    Fortress\\Database\\Database::initialize();
+    cx\\ivc\\Database\\Database::initialize();
   `);
   
   return phpInstance;
@@ -380,7 +380,7 @@ export async function processIrcCommand(senderNick, channel, text) {
   const safeText = JSON.stringify(text || '');
 
   const code = `<?php
-    $res = Fortress\\IRC\\IrcServices::processCommand(${safeSender}, ${safeChannel}, ${safeText});
+    $res = cx\\ivc\\IRC\\IrcServices::processCommand(${safeSender}, ${safeChannel}, ${safeText});
     if ($res) {
         $js = new vrzno();
         // Convert to stdClass for JSON

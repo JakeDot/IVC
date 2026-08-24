@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Fortress\IRC;
+namespace cx\ivc\IRC;
 
-use Fortress\Database\UserNickRepository;
-use Fortress\Models\UserNick;
+use cx\ivc\Database\UserNickRepository;
+use cx\ivc\Models\UserNick;
 
 /**
  * NAMESERV (Nickname Service) IRC System Bot

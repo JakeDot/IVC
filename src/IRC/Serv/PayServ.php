@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Fortress\IRC\Serv;
+namespace cx\ivc\IRC\Serv;
 
-use Fortress\Database\ChannelRepository;
-use Fortress\Database\SubscriptionRepository;
-use Fortress\Database\UserNickRepository;
-use Fortress\IRC\IrcObject;
-use Fortress\IRC\NoModeTrait;
-use Fortress\Services\StripeService;
+use cx\ivc\Database\ChannelRepository;
+use cx\ivc\Database\SubscriptionRepository;
+use cx\ivc\Database\UserNickRepository;
+use cx\ivc\IRC\IrcObject;
+use cx\ivc\IRC\NoModeTrait;
+use cx\ivc\Services\StripeService;
 
 /**
  * PAYSERV IRC System Bot & Payment Service

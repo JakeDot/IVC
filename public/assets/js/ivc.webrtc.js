@@ -14,13 +14,19 @@ function parseChannelFromUrl() {
         return normalizeChannel(params.get('room'));
     }
     const pathSegments = window.location.pathname.split('/').filter(p => p.length > 0 && !p.includes('.'));
-    if (pathSegments.length > 0 && pathSegments[0] !== 'api') {
-        return normalizeChannel(pathSegments[0]);
+    let startIndex = 0;
+    const ivcIndex = pathSegments.findIndex(segment => segment.toLowerCase() === 'ivc');
+    if (ivcIndex !== -1) {
+        startIndex = ivcIndex + 1;
+    }
+
+    if (pathSegments.length > startIndex && pathSegments[startIndex] !== 'api') {
+        return normalizeChannel(pathSegments.slice(startIndex).join('/'));
     }
     if (window.FORTRESS_PRELOAD_ROOM) {
         return normalizeChannel(window.FORTRESS_PRELOAD_ROOM);
     }
-    return '#';
+    return '#+T';
 }
 
 async function openTab(channelId, switchImmediately = true, key = '') {

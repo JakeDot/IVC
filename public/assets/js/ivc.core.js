@@ -419,7 +419,7 @@ function generateAnonymousName() {
 
 // Helper: Normalize channel name
 function normalizeChannel(name) {
-    if (!name) return '#';
+    if (!name) return '#+T';
     name = name.trim();
     if (name === 'stats' || name === '#stats') return '#stats';
     if (!/^[#&$£@!+~%]/.test(name)) {

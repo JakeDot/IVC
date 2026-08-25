@@ -455,6 +455,14 @@ function getFileIcon(fileName = '', fileType = '') {
 }
 
 async function loadConnectionStats() {
+    if (btnRefreshStats) {
+        btnRefreshStats.disabled = true;
+        btnRefreshStats.setAttribute('aria-busy', 'true');
+        btnRefreshStats.textContent = '🔄 Refreshing...';
+        btnRefreshStats.setAttribute('aria-label', 'Refreshing connection statistics');
+    }
+
+    let isSuccess = true;
     try {
         const res = await fetch('/api/stats.php');
         const json = await res.json();
@@ -474,8 +482,12 @@ async function loadConnectionStats() {
                 <div class="stats-row"><span class="stats-label">Server Memory Usage:</span><span class="stats-value">${st.memory_usage_mb} MB (Peak: ${st.memory_peak_mb} MB)</span></div>
                 <div class="stats-row"><span class="stats-label">Server Time:</span><span class="stats-value">${st.server_time}</span></div>
             `;
+        } else {
+            isSuccess = false;
+            serverStatsContent.innerHTML = `<p style="color: var(--danger-color);">Failed to fetch server stats: ${json.message || 'Unknown error'}</p>`;
         }
     } catch (err) {
+        isSuccess = false;
         serverStatsContent.innerHTML = `<p style="color: var(--danger-color);">Failed to fetch server stats: ${err.message}</p>`;
     }
 
@@ -503,6 +515,17 @@ async function loadConnectionStats() {
         <div class="stats-row"><span class="stats-label">DataChannel Encryption:</span><span class="stats-value" style="color: #10b981;">AES-GCM (P2P Direct Mesh)</span></div>
         <div class="stats-row"><span class="stats-label">Signaling Mode:</span><span class="stats-value">Server-Sent Events (SSE)</span></div>
     `;
+
+    if (btnRefreshStats) {
+        btnRefreshStats.removeAttribute('aria-busy');
+        btnRefreshStats.textContent = isSuccess ? '✅ Refreshed!' : '❌ Refresh Failed';
+        btnRefreshStats.setAttribute('aria-label', isSuccess ? 'Connection statistics refreshed' : 'Failed to refresh connection statistics');
+        setTimeout(() => {
+            btnRefreshStats.textContent = '🔄 Refresh Stats';
+            btnRefreshStats.setAttribute('aria-label', 'Refresh connection statistics');
+            btnRefreshStats.disabled = false;
+        }, 1200);
+    }
 }
 
 function toggleMicrophone() {

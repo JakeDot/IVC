@@ -625,6 +625,12 @@ $bb->writeInt32(-123456789);
 $bb->rewind();
 assertTest($bb->readInt32() === -123456789, 'BitBuffer read/write 32-bit signed integer');
 
+$bbType = BitBuffer::allocate(32);
+$bbType->writeUInt16(0x1234, true);
+$bbType->writeUInt16(0x5678, false);
+$bbType->rewind();
+assertTest($bbType->readUInt16(true) === 0x1234 && $bbType->readUInt16(false) === 0x5678, 'BitBuffer read/write 16-bit typed unsigned integers (endianness)');
+
 $schema = [
     ['name' => 'ver', 'bits' => 4],
     ['name' => 'flags', 'bits' => 4],

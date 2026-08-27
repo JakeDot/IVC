@@ -39,39 +39,39 @@ require_once __DIR__ . '/../src/Services/StripeService.php';
 require_once __DIR__ . '/../src/Signaling/RoomManager.php';
 require_once __DIR__ . '/../src/Utils/BitBuffer.php';
 
-use Fortress\Security\Sanitizer;
-use Fortress\Security\RateLimiter;
-use Fortress\Security\TokenManager;
-use Fortress\Models\UserNick;
-use Fortress\Models\Channel;
-use Fortress\Models\ChannelUser;
-use Fortress\Models\IrcSetting;
-use Fortress\Models\SharedFile;
-use Fortress\Models\Subscription;
-use Fortress\Database\Database;
-use Fortress\Database\SharedFileRepository;
-use Fortress\Database\UserNickRepository;
-use Fortress\Database\ChannelRepository;
-use Fortress\Database\ChannelUserRepository;
-use Fortress\Database\SettingRepository;
-use Fortress\Database\BotServRepository;
-use Fortress\Database\TextServRepository;
-use Fortress\Database\SubscriptionRepository;
-use Fortress\IRC\SettingsManager;
-use Fortress\IRC\NameServ;
-use Fortress\IRC\ChanServ;
-use Fortress\IRC\PayServ;
-use Fortress\IRC\MotdServ;
-use Fortress\IRC\MemoServ;
-use Fortress\IRC\HostServ;
-use Fortress\IRC\ServiceRegistry;
-use Fortress\IRC\ServServ;
-use Fortress\IRC\BotServ;
-use Fortress\IRC\TextServ;
-use Fortress\IRC\IrcServices;
-use Fortress\Services\StripeService;
-use Fortress\Signaling\RoomManager;
-use Fortress\Utils\BitBuffer;
+use cx\ivc\Security\Sanitizer;
+use cx\ivc\Security\RateLimiter;
+use cx\ivc\Security\TokenManager;
+use cx\ivc\Models\UserNick;
+use cx\ivc\Models\Channel;
+use cx\ivc\Models\ChannelUser;
+use cx\ivc\Models\IrcSetting;
+use cx\ivc\Models\SharedFile;
+use cx\ivc\Models\Subscription;
+use cx\ivc\Database\Database;
+use cx\ivc\Database\SharedFileRepository;
+use cx\ivc\Database\UserNickRepository;
+use cx\ivc\Database\ChannelRepository;
+use cx\ivc\Database\ChannelUserRepository;
+use cx\ivc\Database\SettingRepository;
+use cx\ivc\Database\BotServRepository;
+use cx\ivc\Database\TextServRepository;
+use cx\ivc\Database\SubscriptionRepository;
+use cx\ivc\IRC\SettingsManager;
+use cx\ivc\IRC\NameServ;
+use cx\ivc\IRC\ChanServ;
+use cx\ivc\IRC\PayServ;
+use cx\ivc\IRC\MotdServ;
+use cx\ivc\IRC\MemoServ;
+use cx\ivc\IRC\HostServ;
+use cx\ivc\IRC\ServiceRegistry;
+use cx\ivc\IRC\ServServ;
+use cx\ivc\IRC\BotServ;
+use cx\ivc\IRC\TextServ;
+use cx\ivc\IRC\IrcServices;
+use cx\ivc\Services\StripeService;
+use cx\ivc\Signaling\RoomManager;
+use cx\ivc\Utils\BitBuffer;
 
 echo "=========================================\n";
 echo " 🧪 Running Fortress WebRTC & IRC Test Suite\n";
@@ -178,7 +178,7 @@ assertTest($infoRes['success'] === true && str_contains($infoRes['message'], 'Re
 
 NameServ::register('ExpiredUser', 'pass', 'test@example.com');
 // Manually set last_seen to 2 hours ago
-\Fortress\Database\UserNickRepository::updateIdentification('ExpiredUser', false, time() - 7200);
+\cx\ivc\Database\UserNickRepository::updateIdentification('ExpiredUser', false, time() - 7200);
 $purged = NameServ::purgeExpired(3600);
 assertTest($purged === 1, 'NameServ::purgeExpired successfully purged 1 expired nickname');
 assertTest(NameServ::isRegistered('ExpiredUser') === false, 'ExpiredUser was correctly deleted by purgeExpired');
@@ -275,13 +275,19 @@ assertTest(count($svcList) >= 1, 'ServiceRegistry listed registered foreign serv
 // Test 11: ServServ Bot & Foreign Service Command Dispatching
 echo "\n11. Testing ServServ Bot & Foreign Service Routing...\n";
 $ssList = ServServ::listAllServices();
-assertTest($ssList['success'] === true && count($ssList['foreign_services']) >= 1, 'ServServ listed local and foreign services');
+assertTest($ssList['success'] === true && count($ssList['foreign_services']) >= 2, 'ServServ listed local and foreign services');
 
-$ssInfo = ServServ::getServiceInfo('HELPBOT');
-assertTest($ssInfo['success'] === true && str_contains($ssInfo['message'], 'help.external-domain.org'), 'ServServ returned foreign service info');
+$ssInfo = ServServ::getServiceInfo('WHATSAPP');
+assertTest($ssInfo['success'] === true && str_contains($ssInfo['message'], '$whatsapp.net'), 'ServServ returned foreign service info for WHATSAPP');
 
-$ssDispatch = ServServ::dispatchForeignCommand('Alice', 'HELPBOT', 'SEARCH WebRTC security');
-assertTest($ssDispatch['success'] === true && str_contains($ssDispatch['message'], 'HELPBOT@help.external-domain.org'), 'ServServ dispatched command to foreign service');
+$ssDispatch = ServServ::dispatchForeignCommand('Alice', 'WHATSAPP', 'CREATE CHAT');
+assertTest($ssDispatch['success'] === true && str_contains($ssDispatch['message'], 'WHATSAPP@$whatsapp.net'), 'ServServ dispatched command to WHATSAPP foreign service');
+
+$ssInfo2 = ServServ::getServiceInfo('GEMINI');
+assertTest($ssInfo2['success'] === true && str_contains($ssInfo2['message'], 'ai.external-domain.org'), 'ServServ returned foreign service info for GEMINI');
+
+$ssDispatch2 = ServServ::dispatchForeignCommand('Alice', 'GEMINI', 'SEARCH WebRTC security');
+assertTest($ssDispatch2['success'] === true && str_contains($ssDispatch2['message'], 'GEMINI@ai.external-domain.org'), 'ServServ dispatched command to GEMINI foreign service');
 
 // Test 12: IrcServices Command Parser with All Services
 echo "\n12. Testing IrcServices Command Parser with new Services...\n";
@@ -703,3 +709,38 @@ echo "-----------------------------------------\n\n";
 if ($testsFailed > 0) {
     exit(1);
 }
+
+// Test 22: WhatsApp Service Bridge Logic
+echo "\n22. Testing WhatsApp Service Connector...\n";
+require_once __DIR__ . '/../src/Services/WhatsAppService.php';
+use cx\ivc\Services\WhatsAppService;
+
+$ident1 = WhatsAppService::identifyUser('johndoe', '+1234567890');
+assertTest($ident1 === 'johndoe@$whatsapp.net', 'WhatsAppService identified user with username correctly');
+
+$ident2 = WhatsAppService::identifyUser(null, '+0987654321');
+assertTest($ident2 === '+0987654321@$whatsapp.net', 'WhatsAppService identified user with phone number correctly');
+
+$webhookPayload = [
+    'entry' => [
+        [
+            'changes' => [
+                [
+                    'value' => [
+                        'contacts' => [
+                            ['profile' => ['name' => 'janedoe']]
+                        ],
+                        'messages' => [
+                            [
+                                'from' => '+1112223333',
+                                'text' => ['body' => 'Hello World!']
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+    ]
+];
+$webhookRes = WhatsAppService::handleWebhook($webhookPayload);
+assertTest($webhookRes['success'] === true && $webhookRes['ident'] === 'janedoe@$whatsapp.net', 'WhatsAppService handled webhook successfully and extracted ident');

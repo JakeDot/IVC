@@ -9,3 +9,7 @@
 ## 2025-04-15 - ARIA Tablist/Tab/Tabpanel Semantics for Chat Sidebar Panels
 **Learning:** In static HTML templates with JS-driven tab switching (like chat sidebars), defining explicit `role="tablist"`, `role="tab"`, `aria-selected`, `aria-controls`, `role="tabpanel"`, and `aria-labelledby` attributes—and dynamically updating `aria-selected` in JS click handlers—enables screen readers to accurately identify active sub-panels and navigate controls seamlessly.
 **Action:** Always pair sidebar tab UI toggle logic with `aria-selected` state updates and link tabs to panel containers using `aria-controls` / `aria-labelledby`.
+
+## 2025-05-10 - ARIA Expanded & Controls Attributes for Expandable Elements
+**Learning:** For interactive UI buttons that toggle hidden panels or containers (such as QR code generator boxes), setting initial `aria-expanded="false"`, `aria-controls`, and `aria-label` in HTML and dynamically updating `aria-expanded` ("true"/"false") and `aria-label` during state transitions enables screen readers to perceive state changes instantly.
+**Action:** Always pair toggle buttons controlling expandable containers with `aria-expanded`, `aria-controls`, and dynamic `aria-label` state updates.

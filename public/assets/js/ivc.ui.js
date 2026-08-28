@@ -175,6 +175,8 @@ function updateTabUI(channelId) {
     // Hide QR code container on tab switch
     qrCodeContainer.style.display = 'none';
     btnQrLink.textContent = '📱 QR Code';
+    btnQrLink.setAttribute('aria-expanded', 'false');
+    btnQrLink.setAttribute('aria-label', 'Show QR Code for Channel Link');
     qrCodeContainer.innerHTML = '';
 
     // Render Chat Messages

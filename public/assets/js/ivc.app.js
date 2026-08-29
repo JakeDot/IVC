@@ -80,6 +80,18 @@ window.addEventListener('click', () => {
 btnOpenNewTab.addEventListener('click', () => {
     roomLobby.classList.remove('hidden');
     window.scrollTo({ top: roomLobby.offsetTop, behavior: 'smooth' });
+    if (roomInput) roomInput.focus();
+});
+
+[roomInput, keyInput, nicknameInput, nickPasswordInput].forEach(input => {
+    if (input) {
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                btnJoinCreateRoom.click();
+            }
+        });
+    }
 });
 
 btnJoinCreateRoom.addEventListener('click', async () => {

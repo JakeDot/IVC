@@ -239,9 +239,9 @@ function renderSavedThemesList() {
                 </div>
             </div>
             <div class="theme-actions">
-                <button class="btn btn-primary btn-sm btn-apply-theme" type="button">Apply</button>
-                <button class="btn btn-secondary btn-sm btn-edit-theme" type="button">Edit</button>
-                <button class="btn btn-danger btn-sm btn-delete-theme" type="button">Delete</button>
+                <button class="btn btn-primary btn-sm btn-apply-theme" type="button" aria-label="Apply theme ${theme.name}">Apply</button>
+                <button class="btn btn-secondary btn-sm btn-edit-theme" type="button" aria-label="Edit theme ${theme.name}">Edit</button>
+                <button class="btn btn-danger btn-sm btn-delete-theme" type="button" aria-label="Delete theme ${theme.name}">Delete</button>
             </div>
         `;
 

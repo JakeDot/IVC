@@ -80,6 +80,9 @@ window.addEventListener('click', () => {
 btnOpenNewTab.addEventListener('click', () => {
     roomLobby.classList.remove('hidden');
     window.scrollTo({ top: roomLobby.offsetTop, behavior: 'smooth' });
+    if (roomInput) {
+        roomInput.focus();
+    }
 });
 
 btnJoinCreateRoom.addEventListener('click', async () => {

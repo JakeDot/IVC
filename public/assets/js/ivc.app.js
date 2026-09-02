@@ -6,6 +6,12 @@ nicknameInput.value = myNickname;
 btnRandomName.addEventListener('click', () => {
     myNickname = generateAnonymousName();
     nicknameInput.value = myNickname;
+    btnRandomName.setAttribute('aria-label', `Randomize Nick. Generated nickname: ${myNickname}`);
+    const origText = btnRandomName.textContent;
+    btnRandomName.textContent = '🎲 Generated!';
+    setTimeout(() => {
+        btnRandomName.textContent = origText;
+    }, 1500);
 });
 
 // Initialize Theme System & Tabs on startup
@@ -80,6 +86,9 @@ window.addEventListener('click', () => {
 btnOpenNewTab.addEventListener('click', () => {
     roomLobby.classList.remove('hidden');
     window.scrollTo({ top: roomLobby.offsetTop, behavior: 'smooth' });
+    if (roomInput) {
+        roomInput.focus();
+    }
 });
 
 btnJoinCreateRoom.addEventListener('click', async () => {
@@ -164,4 +173,16 @@ if (btnAttachFile && chatFileInput) {
     chatFileInput.addEventListener('change', handleShareFileSelect);
 }
 
-btnRefreshStats.addEventListener('click', loadConnectionStats);
+btnRefreshStats.addEventListener('click', async () => {
+    btnRefreshStats.setAttribute('aria-label', 'Refreshing connection statistics...');
+    btnRefreshStats.disabled = true;
+    const origText = btnRefreshStats.textContent;
+    btnRefreshStats.textContent = '🔄 Refreshing...';
+    try {
+        await loadConnectionStats();
+    } finally {
+        btnRefreshStats.textContent = origText;
+        btnRefreshStats.disabled = false;
+        btnRefreshStats.setAttribute('aria-label', 'Refresh connection statistics');
+    }
+});

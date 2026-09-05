@@ -88,7 +88,7 @@
                     <div class="share-box">
                         <input type="text" id="share-url" readonly>
                         <button id="btn-copy-link" class="btn btn-primary btn-sm">📋 Copy Channel Link</button>
-                        <button id="btn-qr-link" class="btn btn-secondary btn-sm">📱 QR Code</button>
+                        <button id="btn-qr-link" class="btn btn-secondary btn-sm" aria-expanded="false" aria-controls="qr-code-container" aria-label="Show QR Code">📱 QR Code</button>
                     </div>
                     <div id="qr-code-container" style="display: none; margin-top: 15px; padding: 15px; background: white; border-radius: 8px; width: fit-content; margin-left: auto; margin-right: auto;"></div>
                 </div>
@@ -182,7 +182,7 @@
             <section id="stats-stage" class="card stats-card hidden">
                 <div class="stats-header">
                     <h2>📊 IRC Server & WebRTC Connection Stats (#stats)</h2>
-                    <button id="btn-refresh-stats" class="btn btn-secondary btn-sm">🔄 Refresh Stats</button>
+                    <button id="btn-refresh-stats" class="btn btn-secondary btn-sm" aria-label="Refresh connection statistics" aria-controls="server-stats-content client-stats-content">🔄 Refresh Stats</button>
                 </div>
 
                 <div class="stats-grid">

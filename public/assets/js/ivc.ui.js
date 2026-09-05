@@ -175,6 +175,8 @@ function updateTabUI(channelId) {
     // Hide QR code container on tab switch
     qrCodeContainer.style.display = 'none';
     btnQrLink.textContent = '📱 QR Code';
+    btnQrLink.setAttribute('aria-expanded', 'false');
+    btnQrLink.setAttribute('aria-label', 'Show QR Code');
     qrCodeContainer.innerHTML = '';
 
     // Render Chat Messages
@@ -455,6 +457,13 @@ function getFileIcon(fileName = '', fileType = '') {
 }
 
 async function loadConnectionStats() {
+    if (btnRefreshStats) {
+        btnRefreshStats.disabled = true;
+        btnRefreshStats.textContent = '⌛ Refreshing...';
+        btnRefreshStats.setAttribute('aria-busy', 'true');
+        btnRefreshStats.setAttribute('aria-label', 'Refreshing connection statistics');
+    }
+
     try {
         const res = await fetch('/api/stats.php');
         const json = await res.json();
@@ -503,6 +512,17 @@ async function loadConnectionStats() {
         <div class="stats-row"><span class="stats-label">DataChannel Encryption:</span><span class="stats-value" style="color: #10b981;">AES-GCM (P2P Direct Mesh)</span></div>
         <div class="stats-row"><span class="stats-label">Signaling Mode:</span><span class="stats-value">Server-Sent Events (SSE)</span></div>
     `;
+
+    if (btnRefreshStats) {
+        btnRefreshStats.textContent = '✅ Refreshed!';
+        btnRefreshStats.setAttribute('aria-label', 'Connection statistics refreshed');
+        btnRefreshStats.setAttribute('aria-busy', 'false');
+        setTimeout(() => {
+            btnRefreshStats.textContent = '🔄 Refresh Stats';
+            btnRefreshStats.setAttribute('aria-label', 'Refresh connection statistics');
+            btnRefreshStats.disabled = false;
+        }, 1500);
+    }
 }
 
 function toggleMicrophone() {

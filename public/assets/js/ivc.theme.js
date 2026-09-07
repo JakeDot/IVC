@@ -199,7 +199,10 @@ function getFormDataAsThemeData() {
     };
 }
 
+let lastFocusedElement = null;
+
 function openThemeModal() {
+    lastFocusedElement = document.activeElement;
     renderSavedThemesList();
     themeModal.classList.remove('hidden');
     if (themeNameInput) {
@@ -213,6 +216,9 @@ function closeThemeModal() {
     // Re-apply saved active theme if user was previewing
     const activeTheme = localStorage.getItem(STORAGE_ACTIVE_THEME) || 'dark';
     applyTheme(activeTheme);
+    if (lastFocusedElement && typeof lastFocusedElement.focus === 'function') {
+        lastFocusedElement.focus();
+    }
 }
 
 function renderSavedThemesList() {
@@ -230,6 +236,7 @@ function renderSavedThemesList() {
         const item = document.createElement('div');
         item.className = 'custom-theme-item';
 
+        const safeName = (theme.name || '').replace(/"/g, '&quot;');
         item.innerHTML = `
             <div>
                 <strong>✨ ${theme.name}</strong>
@@ -239,9 +246,9 @@ function renderSavedThemesList() {
                 </div>
             </div>
             <div class="theme-actions">
-                <button class="btn btn-primary btn-sm btn-apply-theme" type="button">Apply</button>
-                <button class="btn btn-secondary btn-sm btn-edit-theme" type="button">Edit</button>
-                <button class="btn btn-danger btn-sm btn-delete-theme" type="button">Delete</button>
+                <button class="btn btn-primary btn-sm btn-apply-theme" type="button" aria-label="Apply theme ${safeName}">Apply</button>
+                <button class="btn btn-secondary btn-sm btn-edit-theme" type="button" aria-label="Edit theme ${safeName}">Edit</button>
+                <button class="btn btn-danger btn-sm btn-delete-theme" type="button" aria-label="Delete theme ${safeName}">Delete</button>
             </div>
         `;
 

@@ -6,6 +6,7 @@ nicknameInput.value = myNickname;
 btnRandomName.addEventListener('click', () => {
     myNickname = generateAnonymousName();
     nicknameInput.value = myNickname;
+    btnRandomName.setAttribute('aria-label', `Randomize Nickname, generated ${myNickname}`);
 });
 
 // Initialize Theme System & Tabs on startup
@@ -80,6 +81,7 @@ window.addEventListener('click', () => {
 btnOpenNewTab.addEventListener('click', () => {
     roomLobby.classList.remove('hidden');
     window.scrollTo({ top: roomLobby.offsetTop, behavior: 'smooth' });
+    if (roomInput) roomInput.focus();
 });
 
 btnJoinCreateRoom.addEventListener('click', async () => {
@@ -124,6 +126,7 @@ btnQrLink.addEventListener('click', () => {
     if (qrCodeContainer.style.display === 'block') {
         qrCodeContainer.style.display = 'none';
         btnQrLink.textContent = '📱 QR Code';
+        btnQrLink.setAttribute('aria-expanded', 'false');
     } else {
         qrCodeContainer.innerHTML = '';
         let ivcUri = '';
@@ -142,6 +145,7 @@ btnQrLink.addEventListener('click', () => {
         });
         qrCodeContainer.style.display = 'block';
         btnQrLink.textContent = '📱 Hide QR';
+        btnQrLink.setAttribute('aria-expanded', 'true');
     }
 });
 

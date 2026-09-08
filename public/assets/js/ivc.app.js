@@ -6,7 +6,6 @@ nicknameInput.value = myNickname;
 btnRandomName.addEventListener('click', () => {
     myNickname = generateAnonymousName();
     nicknameInput.value = myNickname;
-    btnRandomName.setAttribute('aria-label', `Randomize Nickname, generated ${myNickname}`);
 });
 
 // Initialize Theme System & Tabs on startup
@@ -81,7 +80,8 @@ window.addEventListener('click', () => {
 btnOpenNewTab.addEventListener('click', () => {
     roomLobby.classList.remove('hidden');
     window.scrollTo({ top: roomLobby.offsetTop, behavior: 'smooth' });
-    if (roomInput) roomInput.focus();
+    const inputEl = document.getElementById('room-input');
+    if (inputEl) inputEl.focus();
 });
 
 btnJoinCreateRoom.addEventListener('click', async () => {

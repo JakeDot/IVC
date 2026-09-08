@@ -46,7 +46,13 @@
     "typescript": "^5.0.0"
   },
   "overrides": {
-    "minimatch": "^9.0.7"
+    "minimatch": "^9.0.7",
+    "qs": "^6.16.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "qs": "^6.16.0"
+    }
   },
   "dependencies": {
     "@php-wasm/node": "^3.1.50",

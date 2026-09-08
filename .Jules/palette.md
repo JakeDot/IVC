@@ -9,3 +9,7 @@
 ## 2025-04-15 - ARIA Tablist/Tab/Tabpanel Semantics for Chat Sidebar Panels
 **Learning:** In static HTML templates with JS-driven tab switching (like chat sidebars), defining explicit `role="tablist"`, `role="tab"`, `aria-selected`, `aria-controls`, `role="tabpanel"`, and `aria-labelledby` attributes—and dynamically updating `aria-selected` in JS click handlers—enables screen readers to accurately identify active sub-panels and navigate controls seamlessly.
 **Action:** Always pair sidebar tab UI toggle logic with `aria-selected` state updates and link tabs to panel containers using `aria-controls` / `aria-labelledby`.
+
+## 2025-05-10 - Focus Shift & Expanded States for Unveiled Panels & Toggles
+**Learning:** Revealing an interactive form card (e.g. channel lobby) via navigation buttons without shifting keyboard focus forces keyboard users to manually tab through header controls. Shifting focus directly to the primary input while associating the toggle button via `aria-controls` and `aria-expanded` provides instant keyboard usability.
+**Action:** Always pair panel reveal buttons with `aria-controls` and shift focus to the primary form input element upon activation.

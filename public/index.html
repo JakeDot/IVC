@@ -33,7 +33,7 @@
                         <option value="manage-custom" style="font-weight: bold;">➕ Custom Themes...</option>
                     </select>
                 </div>
-                <button id="btn-theme-modal" class="btn-custom-theme" title="Manage Custom Themes">🎨 Custom</button>
+                <button id="btn-theme-modal" class="btn-custom-theme" title="Manage Custom Themes" aria-label="Manage Custom Themes">🎨 Custom</button>
             </div>
         </header>
 
@@ -69,7 +69,7 @@
                             <label for="nickname-input">Your IRC Nickname (Generated or Custom)</label>
                             <div class="nickname-box">
                                 <input type="text" id="nickname-input" placeholder="e.g. CyberFox" autocomplete="off">
-                                <button id="btn-random-name" class="btn btn-secondary btn-sm" type="button">🎲 Randomize Nick</button>
+                                <button id="btn-random-name" class="btn btn-secondary btn-sm" type="button" title="Randomize Nickname" aria-label="Randomize Nickname">🎲 Randomize Nick</button>
                             </div>
                         </div>
                         <div class="input-group">
@@ -171,10 +171,10 @@
                     </div>
                 </div>
                 <div class="chat-input-area">
-                    <input type="text" id="chat-input" placeholder="Type a message or IRC command (/msg CHANSERV, /theme, /op, /topic, /help)..." autocomplete="off">
-                    <button id="btn-attach-file" class="btn btn-secondary" title="Share File / Attachment">📎 File</button>
+                    <input type="text" id="chat-input" placeholder="Type a message or IRC command (/msg CHANSERV, /theme, /op, /topic, /help)..." autocomplete="off" aria-label="Chat message or IRC command input">
+                    <button id="btn-attach-file" class="btn btn-secondary" title="Share File / Attachment" aria-label="Share File or Attachment">📎 File</button>
                     <input type="file" id="chat-file-input" class="hidden">
-                    <button id="btn-send-chat" class="btn btn-primary">Send</button>
+                    <button id="btn-send-chat" class="btn btn-primary" aria-label="Send Message">Send</button>
                 </div>
             </section>
 
@@ -182,7 +182,7 @@
             <section id="stats-stage" class="card stats-card hidden">
                 <div class="stats-header">
                     <h2>📊 IRC Server & WebRTC Connection Stats (#stats)</h2>
-                    <button id="btn-refresh-stats" class="btn btn-secondary btn-sm">🔄 Refresh Stats</button>
+                    <button id="btn-refresh-stats" class="btn btn-secondary btn-sm" aria-label="Refresh Connection Stats">🔄 Refresh Stats</button>
                 </div>
 
                 <div class="stats-grid">
@@ -206,10 +206,10 @@
         </main>
 
         <!-- Custom Theme Creator Modal -->
-        <div id="theme-modal" class="modal-overlay hidden">
+        <div id="theme-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="theme-modal-title">
             <div class="modal-card">
                 <div class="modal-header">
-                    <h3>🎨 User-Defined Custom Theme Creator</h3>
+                    <h3 id="theme-modal-title">🎨 User-Defined Custom Theme Creator</h3>
                     <button id="btn-close-theme-modal" class="btn-close-modal" type="button" aria-label="Close modal">&times;</button>
                 </div>
 

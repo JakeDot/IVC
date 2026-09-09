@@ -9,3 +9,7 @@
 ## 2025-04-15 - ARIA Tablist/Tab/Tabpanel Semantics for Chat Sidebar Panels
 **Learning:** In static HTML templates with JS-driven tab switching (like chat sidebars), defining explicit `role="tablist"`, `role="tab"`, `aria-selected`, `aria-controls`, `role="tabpanel"`, and `aria-labelledby` attributes—and dynamically updating `aria-selected` in JS click handlers—enables screen readers to accurately identify active sub-panels and navigate controls seamlessly.
 **Action:** Always pair sidebar tab UI toggle logic with `aria-selected` state updates and link tabs to panel containers using `aria-controls` / `aria-labelledby`.
+
+## 2025-05-10 - Keyboard Navigation for Dynamic Media Gallery Items
+**Learning:** Client-rendered grid containers (like media galleries) built with `<div>` items require `role="button"`, `tabindex="0"`, descriptive `aria-label`, and `keydown` event listeners for `Enter` and `Space` keys to allow keyboard and screen reader users to activate or download media items seamlessly.
+**Action:** Always pair dynamic media card elements with keyboard listeners (`Enter`/`Space`), `role="button"`, `tabindex="0"`, and image `alt` text.

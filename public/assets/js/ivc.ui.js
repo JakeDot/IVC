@@ -610,8 +610,26 @@ function renderGallery(tab) {
         const fileType = msg.fileType || '';
         const itemDiv = document.createElement('div');
         itemDiv.className = 'gallery-item';
+        itemDiv.setAttribute('role', 'button');
+        itemDiv.setAttribute('tabindex', '0');
+        const mediaName = msg.fileName || 'media file';
+        itemDiv.setAttribute('aria-label', `Download or preview ${mediaName}`);
 
         const isReady = !!localSharedFilesMap[msg.fileId];
+
+        const handleGalleryClick = () => {
+            if (isReady && localSharedFilesMap[msg.fileId].blob) {
+                const localFile = localSharedFilesMap[msg.fileId];
+                const mediaUrl = URL.createObjectURL(localFile.blob);
+                const a = document.createElement('a');
+                a.href = mediaUrl;
+                a.download = msg.fileName || 'media';
+                a.click();
+                URL.revokeObjectURL(mediaUrl);
+            } else {
+                handleFileDownloadOrRequest(tab.id, msg.fileId, msg.sharerClientId, msg.fileName, msg.fileType, msg.cloudLink, null);
+            }
+        };
 
         if (isReady && localSharedFilesMap[msg.fileId].blob) {
             const localFile = localSharedFilesMap[msg.fileId];
@@ -621,6 +639,7 @@ function renderGallery(tab) {
             if (fileType.startsWith('image/')) {
                 const img = document.createElement('img');
                 img.src = mediaUrl;
+                img.alt = msg.fileName || 'Shared image preview';
                 itemDiv.appendChild(img);
             } else if (fileType.startsWith('video/')) {
                 const video = document.createElement('video');
@@ -632,13 +651,6 @@ function renderGallery(tab) {
                 playIcon.innerHTML = '▶';
                 itemDiv.appendChild(playIcon);
             }
-
-            itemDiv.addEventListener('click', () => {
-                const a = document.createElement('a');
-                a.href = mediaUrl;
-                a.download = msg.fileName || 'media';
-                a.click();
-            });
         } else {
             const placeholderIcon = document.createElement('div');
             placeholderIcon.style.fontSize = '2rem';
@@ -654,11 +666,15 @@ function renderGallery(tab) {
             statusText.style.borderRadius = '4px';
             statusText.innerHTML = msg.cloudLink ? '☁️ Cloud' : '📥 Click to DL';
             itemDiv.appendChild(statusText);
-
-            itemDiv.addEventListener('click', () => {
-                handleFileDownloadOrRequest(tab.id, msg.fileId, msg.sharerClientId, msg.fileName, msg.fileType, msg.cloudLink, null);
-            });
         }
+
+        itemDiv.addEventListener('click', handleGalleryClick);
+        itemDiv.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleGalleryClick();
+            }
+        });
 
         mediaGallery.appendChild(itemDiv);
     });

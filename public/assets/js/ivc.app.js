@@ -6,7 +6,6 @@ nicknameInput.value = myNickname;
 btnRandomName.addEventListener('click', () => {
     myNickname = generateAnonymousName();
     nicknameInput.value = myNickname;
-    btnRandomName.setAttribute('aria-label', `Randomized nickname to ${myNickname}`);
 });
 
 // Initialize Theme System & Tabs on startup
@@ -165,11 +164,4 @@ if (btnAttachFile && chatFileInput) {
     chatFileInput.addEventListener('change', handleShareFileSelect);
 }
 
-btnRefreshStats.addEventListener('click', async () => {
-    btnRefreshStats.setAttribute('aria-label', 'Refreshing connection statistics...');
-    await loadConnectionStats();
-    btnRefreshStats.setAttribute('aria-label', 'Connection statistics refreshed');
-    setTimeout(() => {
-        btnRefreshStats.setAttribute('aria-label', 'Refresh connection statistics');
-    }, 2000);
-});
+btnRefreshStats.addEventListener('click', loadConnectionStats);

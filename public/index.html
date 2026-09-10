@@ -42,7 +42,7 @@
             <div class="tabs-bar" id="tabs-bar">
                 <!-- Dynamically populated room tabs -->
             </div>
-            <button id="btn-open-new-tab" class="btn btn-sm btn-primary" title="Join or Open Channel">➕ Open #channel</button>
+            <button id="btn-open-new-tab" class="btn btn-sm btn-primary" title="Join or Open Channel" aria-label="Join or open new channel lobby">➕ Open #channel</button>
         </nav>
 
         <!-- Main Grid Layout -->
@@ -69,7 +69,7 @@
                             <label for="nickname-input">Your IRC Nickname (Generated or Custom)</label>
                             <div class="nickname-box">
                                 <input type="text" id="nickname-input" placeholder="e.g. CyberFox" autocomplete="off">
-                                <button id="btn-random-name" class="btn btn-secondary btn-sm" type="button">🎲 Randomize Nick</button>
+                                <button id="btn-random-name" class="btn btn-secondary btn-sm" type="button" aria-label="Randomize Nickname">🎲 Randomize Nick</button>
                             </div>
                         </div>
                         <div class="input-group">
@@ -172,7 +172,7 @@
                 </div>
                 <div class="chat-input-area">
                     <input type="text" id="chat-input" placeholder="Type a message or IRC command (/msg CHANSERV, /theme, /op, /topic, /help)..." autocomplete="off">
-                    <button id="btn-attach-file" class="btn btn-secondary" title="Share File / Attachment">📎 File</button>
+                    <button id="btn-attach-file" class="btn btn-secondary" title="Share File / Attachment" aria-label="Attach or share a file">📎 File</button>
                     <input type="file" id="chat-file-input" class="hidden">
                     <button id="btn-send-chat" class="btn btn-primary">Send</button>
                 </div>
@@ -182,7 +182,7 @@
             <section id="stats-stage" class="card stats-card hidden">
                 <div class="stats-header">
                     <h2>📊 IRC Server & WebRTC Connection Stats (#stats)</h2>
-                    <button id="btn-refresh-stats" class="btn btn-secondary btn-sm">🔄 Refresh Stats</button>
+                    <button id="btn-refresh-stats" class="btn btn-secondary btn-sm" aria-label="Refresh connection statistics">🔄 Refresh Stats</button>
                 </div>
 
                 <div class="stats-grid">
@@ -206,10 +206,10 @@
         </main>
 
         <!-- Custom Theme Creator Modal -->
-        <div id="theme-modal" class="modal-overlay hidden">
+        <div id="theme-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="theme-modal-title">
             <div class="modal-card">
                 <div class="modal-header">
-                    <h3>🎨 User-Defined Custom Theme Creator</h3>
+                    <h3 id="theme-modal-title">🎨 User-Defined Custom Theme Creator</h3>
                     <button id="btn-close-theme-modal" class="btn-close-modal" type="button" aria-label="Close modal">&times;</button>
                 </div>
 

@@ -455,6 +455,12 @@ function getFileIcon(fileName = '', fileType = '') {
 }
 
 async function loadConnectionStats() {
+    if (btnRefreshStats) {
+        btnRefreshStats.disabled = true;
+        btnRefreshStats.textContent = '🔄 Refreshing...';
+        btnRefreshStats.setAttribute('aria-label', 'Refreshing connection stats');
+    }
+
     try {
         const res = await fetch('/api/stats.php');
         const json = await res.json();
@@ -503,6 +509,16 @@ async function loadConnectionStats() {
         <div class="stats-row"><span class="stats-label">DataChannel Encryption:</span><span class="stats-value" style="color: #10b981;">AES-GCM (P2P Direct Mesh)</span></div>
         <div class="stats-row"><span class="stats-label">Signaling Mode:</span><span class="stats-value">Server-Sent Events (SSE)</span></div>
     `;
+
+    if (btnRefreshStats) {
+        btnRefreshStats.textContent = '✅ Refreshed!';
+        btnRefreshStats.setAttribute('aria-label', 'Connection stats refreshed successfully');
+        setTimeout(() => {
+            btnRefreshStats.disabled = false;
+            btnRefreshStats.textContent = '🔄 Refresh Stats';
+            btnRefreshStats.setAttribute('aria-label', 'Refresh connection stats');
+        }, 1500);
+    }
 }
 
 function toggleMicrophone() {

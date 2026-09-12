@@ -9,3 +9,7 @@
 ## 2025-04-15 - ARIA Tablist/Tab/Tabpanel Semantics for Chat Sidebar Panels
 **Learning:** In static HTML templates with JS-driven tab switching (like chat sidebars), defining explicit `role="tablist"`, `role="tab"`, `aria-selected`, `aria-controls`, `role="tabpanel"`, and `aria-labelledby` attributes—and dynamically updating `aria-selected` in JS click handlers—enables screen readers to accurately identify active sub-panels and navigate controls seamlessly.
 **Action:** Always pair sidebar tab UI toggle logic with `aria-selected` state updates and link tabs to panel containers using `aria-controls` / `aria-labelledby`.
+
+## 2025-05-10 - ARIA Disclosure State Synchronization for Collapsible Content
+**Learning:** Collapsible trigger buttons (such as QR code reveal toggles) must declare `aria-expanded` and `aria-controls` referencing the target region (`role="region"` with `aria-label`). Furthermore, when parent context transitions or tab switches cause the collapsible container to close programmatically, `aria-expanded` and dynamic `aria-label` text must be explicitly reset to stay in sync for screen reader users.
+**Action:** Always link expandable UI triggers to target regions via `aria-controls`, maintain dynamic `aria-expanded` states, and handle reset logic on context switches.

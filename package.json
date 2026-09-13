@@ -46,7 +46,12 @@
     "typescript": "^5.0.0"
   },
   "overrides": {
-    "minimatch": "^9.0.7"
+    "minimatch": "^9.0.7",
+    "js-yaml": "^4.3.2",
+    "qs": "^6.16.0",
+    "@istanbuljs/load-nyc-config": {
+      "js-yaml": "^3.15.2"
+    }
   },
   "dependencies": {
     "@php-wasm/node": "^3.1.50",

@@ -138,8 +138,25 @@ function initThemeSystem() {
     btnCloseThemeModal.addEventListener('click', closeThemeModal);
 
     window.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !themeModal.classList.contains('hidden')) {
+        if (themeModal.classList.contains('hidden')) return;
+
+        if (e.key === 'Escape') {
             closeThemeModal();
+        } else if (e.key === 'Tab') {
+            const focusableElements = themeModal.querySelectorAll(
+                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+            );
+            if (focusableElements.length === 0) return;
+            const firstEl = focusableElements[0];
+            const lastEl = focusableElements[focusableElements.length - 1];
+
+            if (e.shiftKey && document.activeElement === firstEl) {
+                e.preventDefault();
+                lastEl.focus();
+            } else if (!e.shiftKey && document.activeElement === lastEl) {
+                e.preventDefault();
+                firstEl.focus();
+            }
         }
     });
 
@@ -199,7 +216,10 @@ function getFormDataAsThemeData() {
     };
 }
 
+let previouslyFocusedElement = null;
+
 function openThemeModal() {
+    previouslyFocusedElement = document.activeElement;
     renderSavedThemesList();
     themeModal.classList.remove('hidden');
     if (themeNameInput) {
@@ -213,6 +233,9 @@ function closeThemeModal() {
     // Re-apply saved active theme if user was previewing
     const activeTheme = localStorage.getItem(STORAGE_ACTIVE_THEME) || 'dark';
     applyTheme(activeTheme);
+    if (previouslyFocusedElement && typeof previouslyFocusedElement.focus === 'function') {
+        previouslyFocusedElement.focus();
+    }
 }
 
 function renderSavedThemesList() {

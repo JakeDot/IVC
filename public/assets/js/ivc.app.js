@@ -124,6 +124,8 @@ btnQrLink.addEventListener('click', () => {
     if (qrCodeContainer.style.display === 'block') {
         qrCodeContainer.style.display = 'none';
         btnQrLink.textContent = '📱 QR Code';
+        btnQrLink.setAttribute('aria-expanded', 'false');
+        btnQrLink.setAttribute('aria-label', 'Show QR code for channel link');
     } else {
         qrCodeContainer.innerHTML = '';
         let ivcUri = '';
@@ -142,6 +144,8 @@ btnQrLink.addEventListener('click', () => {
         });
         qrCodeContainer.style.display = 'block';
         btnQrLink.textContent = '📱 Hide QR';
+        btnQrLink.setAttribute('aria-expanded', 'true');
+        btnQrLink.setAttribute('aria-label', 'Hide QR code for channel link');
     }
 });
 
@@ -164,4 +168,23 @@ if (btnAttachFile && chatFileInput) {
     chatFileInput.addEventListener('change', handleShareFileSelect);
 }
 
-btnRefreshStats.addEventListener('click', loadConnectionStats);
+btnRefreshStats.addEventListener('click', async () => {
+    btnRefreshStats.disabled = true;
+    const originalText = '🔄 Refresh Stats';
+    btnRefreshStats.textContent = '⏳ Refreshing...';
+    btnRefreshStats.setAttribute('aria-label', 'Refreshing statistics...');
+    try {
+        await loadConnectionStats();
+        btnRefreshStats.textContent = '✅ Refreshed!';
+        btnRefreshStats.setAttribute('aria-label', 'Statistics refreshed');
+    } catch (err) {
+        btnRefreshStats.textContent = '❌ Error';
+        btnRefreshStats.setAttribute('aria-label', 'Failed to refresh statistics');
+    } finally {
+        setTimeout(() => {
+            btnRefreshStats.textContent = originalText;
+            btnRefreshStats.setAttribute('aria-label', 'Refresh Statistics');
+            btnRefreshStats.disabled = false;
+        }, 1500);
+    }
+});

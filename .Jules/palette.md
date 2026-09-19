@@ -9,3 +9,7 @@
 ## 2025-04-15 - ARIA Tablist/Tab/Tabpanel Semantics for Chat Sidebar Panels
 **Learning:** In static HTML templates with JS-driven tab switching (like chat sidebars), defining explicit `role="tablist"`, `role="tab"`, `aria-selected`, `aria-controls`, `role="tabpanel"`, and `aria-labelledby` attributes—and dynamically updating `aria-selected` in JS click handlers—enables screen readers to accurately identify active sub-panels and navigate controls seamlessly.
 **Action:** Always pair sidebar tab UI toggle logic with `aria-selected` state updates and link tabs to panel containers using `aria-controls` / `aria-labelledby`.
+
+## 2025-05-20 - Dynamic ARIA Busy and Loading Feedback for Async Fetch Buttons
+**Learning:** Performing asynchronous fetch actions on interactive buttons without disabling them, setting `aria-busy="true"`, or dynamically updating `aria-label` leaves screen readers and visual users with no indication that data is being fetched. Disabling the button, toggling `aria-busy="true"`, updating `aria-label="Refreshing..."`, and resetting states in a `finally` block creates a responsive and accessible user experience.
+**Action:** Always pair async button fetch handlers with disabled, `aria-busy`, and dynamic `aria-label` updates, cleaning them up in `finally`.

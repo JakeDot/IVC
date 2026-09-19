@@ -455,6 +455,13 @@ function getFileIcon(fileName = '', fileType = '') {
 }
 
 async function loadConnectionStats() {
+    if (btnRefreshStats) {
+        btnRefreshStats.disabled = true;
+        btnRefreshStats.setAttribute('aria-busy', 'true');
+        btnRefreshStats.textContent = '⏳ Refreshing...';
+        btnRefreshStats.setAttribute('aria-label', 'Refreshing connection stats');
+    }
+
     try {
         const res = await fetch('/api/stats.php');
         const json = await res.json();
@@ -477,6 +484,13 @@ async function loadConnectionStats() {
         }
     } catch (err) {
         serverStatsContent.innerHTML = `<p style="color: var(--danger-color);">Failed to fetch server stats: ${err.message}</p>`;
+    } finally {
+        if (btnRefreshStats) {
+            btnRefreshStats.disabled = false;
+            btnRefreshStats.removeAttribute('aria-busy');
+            btnRefreshStats.textContent = '🔄 Refresh Stats';
+            btnRefreshStats.setAttribute('aria-label', 'Refresh connection stats');
+        }
     }
 
     // Gather WebRTC Client Telemetry Metrics

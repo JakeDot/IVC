@@ -164,4 +164,19 @@ if (btnAttachFile && chatFileInput) {
     chatFileInput.addEventListener('change', handleShareFileSelect);
 }
 
-btnRefreshStats.addEventListener('click', loadConnectionStats);
+btnRefreshStats.addEventListener('click', async () => {
+    btnRefreshStats.disabled = true;
+    btnRefreshStats.textContent = '🔄 Refreshing...';
+    btnRefreshStats.setAttribute('aria-label', 'Refreshing server and connection statistics');
+
+    await loadConnectionStats();
+
+    btnRefreshStats.textContent = '✅ Refreshed!';
+    btnRefreshStats.setAttribute('aria-label', 'Server and connection statistics refreshed');
+
+    setTimeout(() => {
+        btnRefreshStats.textContent = '🔄 Refresh Stats';
+        btnRefreshStats.disabled = false;
+        btnRefreshStats.setAttribute('aria-label', 'Refresh connection and server statistics');
+    }, 1500);
+});

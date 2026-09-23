@@ -462,58 +462,60 @@ async function loadConnectionStats() {
     }
 
     try {
-        const res = await fetch('/api/stats.php');
-        const json = await res.json();
+        try {
+            const res = await fetch('/api/stats.php');
+            const json = await res.json();
 
-        if (json.status === 'ok' && json.stats) {
-            const st = json.stats;
+            if (json.status === 'ok' && json.stats) {
+                const st = json.stats;
 
-            serverStatsContent.innerHTML = `
-                <div class="stats-row"><span class="stats-label">Network Name:</span><span class="stats-value">${st.network_settings.network_name}</span></div>
-                <div class="stats-row"><span class="stats-label">IRC Server Host:</span><span class="stats-value">${st.network_settings.server_name}</span></div>
-                <div class="stats-row"><span class="stats-label">PHP Version:</span><span class="stats-value">${st.php_version}</span></div>
-                <div class="stats-row"><span class="stats-label">Database Status:</span><span class="stats-value" style="color: #10b981;">${st.database.status} (${st.database.driver.toUpperCase()})</span></div>
-                <div class="stats-row"><span class="stats-label">Registered Channels:</span><span class="stats-value">${st.database.registered_channels}</span></div>
-                <div class="stats-row"><span class="stats-label">Registered Nicks:</span><span class="stats-value">${st.database.registered_nicks}</span></div>
-                <div class="stats-row"><span class="stats-label">Active RAM Channels:</span><span class="stats-value">${st.signaling.active_rooms_count}</span></div>
-                <div class="stats-row"><span class="stats-label">Total Connected Clients:</span><span class="stats-value">${st.signaling.total_clients_count}</span></div>
-                <div class="stats-row"><span class="stats-label">Server Memory Usage:</span><span class="stats-value">${st.memory_usage_mb} MB (Peak: ${st.memory_peak_mb} MB)</span></div>
-                <div class="stats-row"><span class="stats-label">Server Time:</span><span class="stats-value">${st.server_time}</span></div>
-            `;
+                serverStatsContent.innerHTML = `
+                    <div class="stats-row"><span class="stats-label">Network Name:</span><span class="stats-value">${st.network_settings.network_name}</span></div>
+                    <div class="stats-row"><span class="stats-label">IRC Server Host:</span><span class="stats-value">${st.network_settings.server_name}</span></div>
+                    <div class="stats-row"><span class="stats-label">PHP Version:</span><span class="stats-value">${st.php_version}</span></div>
+                    <div class="stats-row"><span class="stats-label">Database Status:</span><span class="stats-value" style="color: #10b981;">${st.database.status} (${st.database.driver.toUpperCase()})</span></div>
+                    <div class="stats-row"><span class="stats-label">Registered Channels:</span><span class="stats-value">${st.database.registered_channels}</span></div>
+                    <div class="stats-row"><span class="stats-label">Registered Nicks:</span><span class="stats-value">${st.database.registered_nicks}</span></div>
+                    <div class="stats-row"><span class="stats-label">Active RAM Channels:</span><span class="stats-value">${st.signaling.active_rooms_count}</span></div>
+                    <div class="stats-row"><span class="stats-label">Total Connected Clients:</span><span class="stats-value">${st.signaling.total_clients_count}</span></div>
+                    <div class="stats-row"><span class="stats-label">Server Memory Usage:</span><span class="stats-value">${st.memory_usage_mb} MB (Peak: ${st.memory_peak_mb} MB)</span></div>
+                    <div class="stats-row"><span class="stats-label">Server Time:</span><span class="stats-value">${st.server_time}</span></div>
+                `;
+            }
+        } catch (err) {
+            serverStatsContent.innerHTML = `<p style="color: var(--danger-color);">Failed to fetch server stats: ${err.message}</p>`;
         }
-    } catch (err) {
-        serverStatsContent.innerHTML = `<p style="color: var(--danger-color);">Failed to fetch server stats: ${err.message}</p>`;
-    }
 
-    // Gather WebRTC Client Telemetry Metrics
-    const openTabsCount = Object.keys(openTabs).length;
-    let activePeerCount = 0;
-    let rtcState = 'Disconnected';
+        // Gather WebRTC Client Telemetry Metrics
+        const openTabsCount = Object.keys(openTabs).length;
+        let activePeerCount = 0;
+        let rtcState = 'Disconnected';
 
-    const currentActive = openTabs[activeTabId];
-    if (currentActive) {
-        activePeerCount = currentActive.peers.length;
-        const pcs = Object.values(currentActive.peerConnections);
-        if (pcs.length > 0) {
-            rtcState = pcs[0].connectionState || pcs[0].iceConnectionState || 'Connected';
+        const currentActive = openTabs[activeTabId];
+        if (currentActive) {
+            activePeerCount = currentActive.peers.length;
+            const pcs = Object.values(currentActive.peerConnections);
+            if (pcs.length > 0) {
+                rtcState = pcs[0].connectionState || pcs[0].iceConnectionState || 'Connected';
+            }
         }
-    }
 
-    clientStatsContent.innerHTML = `
-        <div class="stats-row"><span class="stats-label">Your Client ID:</span><span class="stats-value">${myClientId}</span></div>
-        <div class="stats-row"><span class="stats-label">Your Nickname:</span><span class="stats-value">${myNickname}</span></div>
-        <div class="stats-row"><span class="stats-label">Open Channel Tabs:</span><span class="stats-value">${openTabsCount}</span></div>
-        <div class="stats-row"><span class="stats-label">Current Active Tab:</span><span class="stats-value">${activeTabId || 'None'}</span></div>
-        <div class="stats-row"><span class="stats-label">Active Channel Peers:</span><span class="stats-value">${activePeerCount}</span></div>
-        <div class="stats-row"><span class="stats-label">WebRTC Peer Connection State:</span><span class="stats-value">${rtcState}</span></div>
-        <div class="stats-row"><span class="stats-label">DataChannel Encryption:</span><span class="stats-value" style="color: #10b981;">AES-GCM (P2P Direct Mesh)</span></div>
-        <div class="stats-row"><span class="stats-label">Signaling Mode:</span><span class="stats-value">Server-Sent Events (SSE)</span></div>
-    `;
-
-    if (btnRefreshStats) {
-        btnRefreshStats.disabled = false;
-        btnRefreshStats.textContent = '🔄 Refresh Stats';
-        btnRefreshStats.setAttribute('aria-label', 'Refresh stats');
+        clientStatsContent.innerHTML = `
+            <div class="stats-row"><span class="stats-label">Your Client ID:</span><span class="stats-value">${myClientId}</span></div>
+            <div class="stats-row"><span class="stats-label">Your Nickname:</span><span class="stats-value">${myNickname}</span></div>
+            <div class="stats-row"><span class="stats-label">Open Channel Tabs:</span><span class="stats-value">${openTabsCount}</span></div>
+            <div class="stats-row"><span class="stats-label">Current Active Tab:</span><span class="stats-value">${activeTabId || 'None'}</span></div>
+            <div class="stats-row"><span class="stats-label">Active Channel Peers:</span><span class="stats-value">${activePeerCount}</span></div>
+            <div class="stats-row"><span class="stats-label">WebRTC Peer Connection State:</span><span class="stats-value">${rtcState}</span></div>
+            <div class="stats-row"><span class="stats-label">DataChannel Encryption:</span><span class="stats-value" style="color: #10b981;">AES-GCM (P2P Direct Mesh)</span></div>
+            <div class="stats-row"><span class="stats-label">Signaling Mode:</span><span class="stats-value">Server-Sent Events (SSE)</span></div>
+        `;
+    } finally {
+        if (btnRefreshStats) {
+            btnRefreshStats.disabled = false;
+            btnRefreshStats.textContent = '🔄 Refresh Stats';
+            btnRefreshStats.setAttribute('aria-label', 'Refresh stats');
+        }
     }
 }
 

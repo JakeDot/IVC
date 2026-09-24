@@ -83,17 +83,29 @@ btnOpenNewTab.addEventListener('click', () => {
 });
 
 btnJoinCreateRoom.addEventListener('click', async () => {
-    let chan = roomInput.value.trim();
-    if (!chan) {
-        chan = '#room-' + Math.random().toString(36).substring(2, 8);
-        roomInput.value = chan;
-    } else {
-        chan = normalizeChannel(chan);
+    btnJoinCreateRoom.disabled = true;
+    btnJoinCreateRoom.setAttribute('aria-busy', 'true');
+    const originalText = btnJoinCreateRoom.textContent;
+    btnJoinCreateRoom.textContent = '⏳ Joining channel...';
+    try {
+        let chan = roomInput.value.trim();
+        if (!chan) {
+            chan = '#room-' + Math.random().toString(36).substring(2, 8);
+            roomInput.value = chan;
+        } else {
+            chan = normalizeChannel(chan);
+        }
+        myNickname = nicknameInput.value.trim() || myNickname;
+        const chanKey = keyInput.value.trim();
+        await openTab(chan, true, chanKey);
+        await performIrcServiceCommands(chan, nickPasswordInput.value, chanKey, !!chanKey);
+    } catch (err) {
+        console.error('Error joining or creating channel:', err);
+    } finally {
+        btnJoinCreateRoom.disabled = false;
+        btnJoinCreateRoom.setAttribute('aria-busy', 'false');
+        btnJoinCreateRoom.textContent = originalText;
     }
-    myNickname = nicknameInput.value.trim() || myNickname;
-    const chanKey = keyInput.value.trim();
-    await openTab(chan, true, chanKey);
-    performIrcServiceCommands(chan, nickPasswordInput.value, chanKey, !!chanKey);
 });
 
 btnCopyLink.addEventListener('click', async () => {

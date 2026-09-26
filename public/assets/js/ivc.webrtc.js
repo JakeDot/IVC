@@ -699,7 +699,7 @@ async function encryptMetadataE2EE(metadataObj, channelId, channelPasskey = '') 
         return btoa(String.fromCharCode(...combined));
     } catch (err) {
         console.error('Metadata encryption error:', err);
-        return btoa(JSON.stringify(metadataObj));
+        throw err;
     }
 }
 
@@ -707,7 +707,7 @@ async function decryptMetadataE2EE(encryptedBase64, channelId, channelPasskey = 
     try {
         const combined = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
         if (combined.length <= 12) {
-            return JSON.parse(atob(encryptedBase64));
+            throw new Error('Invalid encrypted payload');
         }
         const iv = combined.slice(0, 12);
         const ciphertext = combined.slice(12);

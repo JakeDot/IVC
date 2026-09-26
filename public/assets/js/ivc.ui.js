@@ -175,6 +175,7 @@ function updateTabUI(channelId) {
     // Hide QR code container on tab switch
     qrCodeContainer.style.display = 'none';
     btnQrLink.textContent = '📱 QR Code';
+    btnQrLink.setAttribute('aria-expanded', 'false');
     qrCodeContainer.innerHTML = '';
 
     // Render Chat Messages
@@ -455,6 +456,11 @@ function getFileIcon(fileName = '', fileType = '') {
 }
 
 async function loadConnectionStats() {
+    if (btnRefreshStats) {
+        btnRefreshStats.disabled = true;
+        btnRefreshStats.textContent = '⏳ Refreshing...';
+        btnRefreshStats.setAttribute('aria-busy', 'true');
+    }
     try {
         const res = await fetch('/api/stats.php');
         const json = await res.json();
@@ -477,6 +483,12 @@ async function loadConnectionStats() {
         }
     } catch (err) {
         serverStatsContent.innerHTML = `<p style="color: var(--danger-color);">Failed to fetch server stats: ${err.message}</p>`;
+    } finally {
+        if (btnRefreshStats) {
+            btnRefreshStats.disabled = false;
+            btnRefreshStats.textContent = '🔄 Refresh Stats';
+            btnRefreshStats.removeAttribute('aria-busy');
+        }
     }
 
     // Gather WebRTC Client Telemetry Metrics

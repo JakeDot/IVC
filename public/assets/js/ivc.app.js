@@ -82,6 +82,17 @@ btnOpenNewTab.addEventListener('click', () => {
     window.scrollTo({ top: roomLobby.offsetTop, behavior: 'smooth' });
 });
 
+[roomInput, keyInput, nicknameInput, nickPasswordInput].forEach(inputEl => {
+    if (inputEl) {
+        inputEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                btnJoinCreateRoom.click();
+            }
+        });
+    }
+});
+
 btnJoinCreateRoom.addEventListener('click', async () => {
     let chan = roomInput.value.trim();
     if (!chan) {

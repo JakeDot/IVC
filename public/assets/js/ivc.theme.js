@@ -202,6 +202,9 @@ function getFormDataAsThemeData() {
 function openThemeModal() {
     renderSavedThemesList();
     themeModal.classList.remove('hidden');
+    if (btnThemeModal) {
+        btnThemeModal.setAttribute('aria-expanded', 'true');
+    }
     if (themeNameInput) {
         themeNameInput.focus();
     }
@@ -209,6 +212,10 @@ function openThemeModal() {
 
 function closeThemeModal() {
     themeModal.classList.add('hidden');
+    if (btnThemeModal) {
+        btnThemeModal.setAttribute('aria-expanded', 'false');
+        btnThemeModal.focus();
+    }
     editingCustomThemeId = null;
     // Re-apply saved active theme if user was previewing
     const activeTheme = localStorage.getItem(STORAGE_ACTIVE_THEME) || 'dark';

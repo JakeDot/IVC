@@ -78,6 +78,7 @@ const btnImportThemes = document.getElementById('btn-import-themes');
 const importThemeFile = document.getElementById('import-theme-file');
 
 let editingCustomThemeId = null;
+let previouslyFocusedElement = null;
 
 // Store active object URLs to prevent memory leaks
 const activeMediaUrls = new Set();

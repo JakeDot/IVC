@@ -4,6 +4,8 @@
    THEME MANAGEMENT & CUSTOM USER THEMES
    ========================================================================== */
 
+let previouslyFocusedElement = null;
+
 function getCustomThemes() {
     try {
         const json = localStorage.getItem(STORAGE_CUSTOM_THEMES);

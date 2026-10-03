@@ -9,3 +9,7 @@
 ## 2025-04-15 - ARIA Tablist/Tab/Tabpanel Semantics for Chat Sidebar Panels
 **Learning:** In static HTML templates with JS-driven tab switching (like chat sidebars), defining explicit `role="tablist"`, `role="tab"`, `aria-selected`, `aria-controls`, `role="tabpanel"`, and `aria-labelledby` attributes—and dynamically updating `aria-selected` in JS click handlers—enables screen readers to accurately identify active sub-panels and navigate controls seamlessly.
 **Action:** Always pair sidebar tab UI toggle logic with `aria-selected` state updates and link tabs to panel containers using `aria-controls` / `aria-labelledby`.
+
+## 2025-05-10 - Accessible Modal Dialog Focus Restoration & Expandable Control ARIA States
+**Learning:** Modal dialog overlay elements must specify `role="dialog"`, `aria-modal="true"`, and `aria-labelledby` referencing the modal title heading. Furthermore, storing `document.activeElement` when opening the modal and restoring focus on modal closure prevents focus loss for keyboard users. For toggle buttons controlling collapsible UI elements (such as QR code views), setting `aria-controls` and dynamically updating `aria-expanded` ("true"/"false") provides essential state feedback to assistive technologies.
+**Action:** Always assign explicit modal dialog ARIA attributes and focus restoration logic when opening/closing overlays, and pair UI toggle controls with `aria-controls` and dynamic `aria-expanded` state updates.

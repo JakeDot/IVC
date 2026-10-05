@@ -7,11 +7,11 @@ let randomizeNickTimeout = null;
 btnRandomName.addEventListener('click', () => {
     myNickname = generateAnonymousName();
     nicknameInput.value = myNickname;
-    btnRandomName.setAttribute('aria-label', `Nickname randomized to ${myNickname}`);
+    btnRandomName.setAttribute('aria-label', `Randomize Nick (Randomized to ${myNickname})`);
     btnRandomName.setAttribute('title', `Randomized to ${myNickname}`);
     if (randomizeNickTimeout) clearTimeout(randomizeNickTimeout);
     randomizeNickTimeout = setTimeout(() => {
-        btnRandomName.setAttribute('aria-label', 'Randomize Nickname');
+        btnRandomName.setAttribute('aria-label', 'Randomize Nick');
         btnRandomName.setAttribute('title', 'Randomize Nickname');
     }, 2000);
 });

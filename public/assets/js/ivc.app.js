@@ -6,6 +6,10 @@ nicknameInput.value = myNickname;
 btnRandomName.addEventListener('click', () => {
     myNickname = generateAnonymousName();
     nicknameInput.value = myNickname;
+    const announceEl = document.getElementById('nick-announce-region');
+    if (announceEl) {
+        announceEl.textContent = `Nickname randomized to ${myNickname}`;
+    }
 });
 
 // Initialize Theme System & Tabs on startup

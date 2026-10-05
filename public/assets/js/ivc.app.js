@@ -3,9 +3,17 @@
 // Initialize Nickname input
 nicknameInput.value = myNickname;
 
+let randomizeNickTimeout = null;
 btnRandomName.addEventListener('click', () => {
     myNickname = generateAnonymousName();
     nicknameInput.value = myNickname;
+    btnRandomName.setAttribute('aria-label', `Nickname randomized to ${myNickname}`);
+    btnRandomName.setAttribute('title', `Randomized to ${myNickname}`);
+    if (randomizeNickTimeout) clearTimeout(randomizeNickTimeout);
+    randomizeNickTimeout = setTimeout(() => {
+        btnRandomName.setAttribute('aria-label', 'Randomize Nickname');
+        btnRandomName.setAttribute('title', 'Randomize Nickname');
+    }, 2000);
 });
 
 // Initialize Theme System & Tabs on startup

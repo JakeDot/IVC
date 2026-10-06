@@ -6,6 +6,8 @@ nicknameInput.value = myNickname;
 btnRandomName.addEventListener('click', () => {
     myNickname = generateAnonymousName();
     nicknameInput.value = myNickname;
+    btnRandomName.setAttribute('aria-label', `Randomize Nick (Randomized to ${myNickname})`);
+    btnRandomName.setAttribute('title', `Randomized to ${myNickname}`);
 });
 
 // Initialize Theme System & Tabs on startup
@@ -124,6 +126,8 @@ btnQrLink.addEventListener('click', () => {
     if (qrCodeContainer.style.display === 'block') {
         qrCodeContainer.style.display = 'none';
         btnQrLink.textContent = '📱 QR Code';
+        btnQrLink.setAttribute('aria-label', 'Show QR Code');
+        btnQrLink.setAttribute('title', 'Show QR Code');
     } else {
         qrCodeContainer.innerHTML = '';
         let ivcUri = '';
@@ -142,6 +146,8 @@ btnQrLink.addEventListener('click', () => {
         });
         qrCodeContainer.style.display = 'block';
         btnQrLink.textContent = '📱 Hide QR';
+        btnQrLink.setAttribute('aria-label', 'Hide QR Code');
+        btnQrLink.setAttribute('title', 'Hide QR Code');
     }
 });
 

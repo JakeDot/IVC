@@ -3,11 +3,14 @@
 // Initialize Nickname input
 nicknameInput.value = myNickname;
 
+const nickStatusAnnouncer = document.getElementById('nick-status-announcer');
+
 btnRandomName.addEventListener('click', () => {
     myNickname = generateAnonymousName();
     nicknameInput.value = myNickname;
-    btnRandomName.setAttribute('aria-label', `Randomize Nick (Randomized to ${myNickname})`);
-    btnRandomName.setAttribute('title', `Randomized to ${myNickname}`);
+    if (nickStatusAnnouncer) {
+        nickStatusAnnouncer.textContent = `Randomized nickname to ${myNickname}`;
+    }
 });
 
 // Initialize Theme System & Tabs on startup

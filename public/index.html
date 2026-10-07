@@ -69,8 +69,9 @@
                             <label for="nickname-input">Your IRC Nickname (Generated or Custom)</label>
                             <div class="nickname-box">
                                 <input type="text" id="nickname-input" placeholder="e.g. CyberFox" autocomplete="off">
-                                <button id="btn-random-name" class="btn btn-secondary btn-sm" type="button" aria-label="Randomize Nick" title="Randomize Nick">🎲 Randomize Nick</button>
+                                <button id="btn-random-name" class="btn btn-secondary btn-sm" type="button" title="Randomize Nick">🎲 Randomize Nick</button>
                             </div>
+                            <span id="nick-status-announcer" style="position: absolute; width: 1px; height: 1px; clip: rect(0, 0, 0, 0); overflow: hidden;" aria-live="polite" aria-atomic="true"></span>
                         </div>
                         <div class="input-group">
                             <label for="nick-password-input">NickServ Password (Optional)</label>

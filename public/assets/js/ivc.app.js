@@ -126,7 +126,6 @@ btnQrLink.addEventListener('click', () => {
         qrCodeContainer.style.display = 'none';
         btnQrLink.textContent = '📱 QR Code';
         btnQrLink.setAttribute('aria-expanded', 'false');
-        btnQrLink.setAttribute('aria-label', 'Show Channel QR Code');
     } else {
         qrCodeContainer.innerHTML = '';
         let ivcUri = '';
@@ -146,7 +145,6 @@ btnQrLink.addEventListener('click', () => {
         qrCodeContainer.style.display = 'block';
         btnQrLink.textContent = '📱 Hide QR';
         btnQrLink.setAttribute('aria-expanded', 'true');
-        btnQrLink.setAttribute('aria-label', 'Hide Channel QR Code');
     }
 });
 

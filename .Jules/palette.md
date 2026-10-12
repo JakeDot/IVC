@@ -9,3 +9,7 @@
 ## 2025-04-15 - ARIA Tablist/Tab/Tabpanel Semantics for Chat Sidebar Panels
 **Learning:** In static HTML templates with JS-driven tab switching (like chat sidebars), defining explicit `role="tablist"`, `role="tab"`, `aria-selected`, `aria-controls`, `role="tabpanel"`, and `aria-labelledby` attributes—and dynamically updating `aria-selected` in JS click handlers—enables screen readers to accurately identify active sub-panels and navigate controls seamlessly.
 **Action:** Always pair sidebar tab UI toggle logic with `aria-selected` state updates and link tabs to panel containers using `aria-controls` / `aria-labelledby`.
+
+## 2025-05-10 - WCAG 2.5.3 Label in Name for Dynamic Action Buttons
+**Learning:** When dynamically updating an interactive button's `aria-label` after an action (such as nickname randomization or section expanding), the new `aria-label` must explicitly include the visible text label (e.g., `Randomize Nick (Randomized to ${nick})`). Omitting the visible label text violates WCAG 2.5.3 (Label in Name) and impairs voice control users.
+**Action:** Always preserve and prepend the visible text label when dynamically updating button `aria-label` attributes.

@@ -60,8 +60,8 @@
       "js-yaml": "3.15.2"
     },
     "brace-expansion": "2.1.7",
-    "braces": "^3.0.3",
-    "micromatch": "^4.0.8"
+    "braces": "3.0.3",
+    "micromatch": "4.0.8"
   },
   "dependencies": {
     "@php-wasm/node": "^3.1.50",
@@ -87,8 +87,12 @@
       "eslint>js-yaml": "4.3.2",
       "@istanbuljs/load-nyc-config>js-yaml": "3.15.2",
       "brace-expansion": "2.1.7",
-      "braces": "^3.0.3",
-      "micromatch": "^4.0.8"
+      "braces": "3.0.3",
+      "micromatch": "4.0.8"
     }
+  },
+  "resolutions": {
+    "braces": "^3.0.3",
+    "micromatch": "^4.0.8"
   }
 }

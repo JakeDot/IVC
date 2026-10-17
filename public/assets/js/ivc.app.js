@@ -23,15 +23,16 @@ async function initApp() {
 
     // Sidebar Tabs Toggle
     if (tabNicks && tabGallery) {
-        tabNicks.addEventListener('click', () => {
+        const switchTabToNicks = () => {
             tabNicks.classList.add('active');
             tabGallery.classList.remove('active');
             tabNicks.setAttribute('aria-selected', 'true');
             tabGallery.setAttribute('aria-selected', 'false');
             userListSidebar.classList.remove('hidden');
             gallerySidebar.classList.add('hidden');
-        });
-        tabGallery.addEventListener('click', () => {
+        };
+
+        const switchTabToGallery = () => {
             tabGallery.classList.add('active');
             tabNicks.classList.remove('active');
             tabGallery.setAttribute('aria-selected', 'true');
@@ -42,6 +43,22 @@ async function initApp() {
             // Re-render gallery when tab is switched to ensure it's up to date
             if (activeTabId && openTabs[activeTabId]) {
                 renderGallery(openTabs[activeTabId]);
+            }
+        };
+
+        tabNicks.addEventListener('click', switchTabToNicks);
+        tabNicks.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                switchTabToNicks();
+            }
+        });
+
+        tabGallery.addEventListener('click', switchTabToGallery);
+        tabGallery.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                switchTabToGallery();
             }
         });
     }

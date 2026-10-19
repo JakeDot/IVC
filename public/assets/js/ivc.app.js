@@ -6,6 +6,7 @@ nicknameInput.value = myNickname;
 btnRandomName.addEventListener('click', () => {
     myNickname = generateAnonymousName();
     nicknameInput.value = myNickname;
+    btnRandomName.setAttribute('aria-label', `Randomize Nick (Randomized to ${myNickname})`);
 });
 
 // Initialize Theme System & Tabs on startup
@@ -105,14 +106,14 @@ btnCopyLink.addEventListener('click', async () => {
             document.execCommand('copy');
         }
         btnCopyLink.textContent = '✅ Copied!';
-        btnCopyLink.setAttribute('aria-label', 'Channel link copied to clipboard');
+        btnCopyLink.setAttribute('aria-label', 'Copy Channel Link (Copied to clipboard)');
         setTimeout(() => {
             btnCopyLink.textContent = '📋 Copy Channel Link';
             btnCopyLink.setAttribute('aria-label', 'Copy Channel Link');
         }, 2000);
     } catch (err) {
         btnCopyLink.textContent = '❌ Failed to copy';
-        btnCopyLink.setAttribute('aria-label', 'Failed to copy channel link');
+        btnCopyLink.setAttribute('aria-label', 'Copy Channel Link (Failed to copy)');
         setTimeout(() => {
             btnCopyLink.textContent = '📋 Copy Channel Link';
             btnCopyLink.setAttribute('aria-label', 'Copy Channel Link');
@@ -124,6 +125,7 @@ btnQrLink.addEventListener('click', () => {
     if (qrCodeContainer.style.display === 'block') {
         qrCodeContainer.style.display = 'none';
         btnQrLink.textContent = '📱 QR Code';
+        btnQrLink.setAttribute('aria-expanded', 'false');
     } else {
         qrCodeContainer.innerHTML = '';
         let ivcUri = '';
@@ -142,6 +144,7 @@ btnQrLink.addEventListener('click', () => {
         });
         qrCodeContainer.style.display = 'block';
         btnQrLink.textContent = '📱 Hide QR';
+        btnQrLink.setAttribute('aria-expanded', 'true');
     }
 });
 

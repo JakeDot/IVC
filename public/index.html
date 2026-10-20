@@ -33,7 +33,7 @@
                         <option value="manage-custom" style="font-weight: bold;">➕ Custom Themes...</option>
                     </select>
                 </div>
-                <button id="btn-theme-modal" class="btn-custom-theme" title="Manage Custom Themes">🎨 Custom</button>
+                <button id="btn-theme-modal" class="btn-custom-theme" title="Manage Custom Themes" aria-label="Manage Custom Themes">🎨 Custom</button>
             </div>
         </header>
 
@@ -69,7 +69,7 @@
                             <label for="nickname-input">Your IRC Nickname (Generated or Custom)</label>
                             <div class="nickname-box">
                                 <input type="text" id="nickname-input" placeholder="e.g. CyberFox" autocomplete="off">
-                                <button id="btn-random-name" class="btn btn-secondary btn-sm" type="button">🎲 Randomize Nick</button>
+                                <button id="btn-random-name" class="btn btn-secondary btn-sm" type="button" title="Generate random nickname" aria-label="Randomize Nick">🎲 Randomize Nick</button>
                             </div>
                         </div>
                         <div class="input-group">
@@ -171,9 +171,9 @@
                     </div>
                 </div>
                 <div class="chat-input-area">
-                    <input type="text" id="chat-input" placeholder="Type a message or IRC command (/msg CHANSERV, /theme, /op, /topic, /help)..." autocomplete="off">
-                    <button id="btn-attach-file" class="btn btn-secondary" title="Share File / Attachment">📎 File</button>
-                    <input type="file" id="chat-file-input" class="hidden">
+                    <input type="text" id="chat-input" placeholder="Type a message or IRC command (/msg CHANSERV, /theme, /op, /topic, /help)..." autocomplete="off" aria-label="Chat message or command">
+                    <button id="btn-attach-file" class="btn btn-secondary" title="Share File / Attachment" aria-label="Share File or Attachment">📎 File</button>
+                    <input type="file" id="chat-file-input" class="hidden" aria-label="File Upload Input">
                     <button id="btn-send-chat" class="btn btn-primary">Send</button>
                 </div>
             </section>
@@ -182,7 +182,7 @@
             <section id="stats-stage" class="card stats-card hidden">
                 <div class="stats-header">
                     <h2>📊 IRC Server & WebRTC Connection Stats (#stats)</h2>
-                    <button id="btn-refresh-stats" class="btn btn-secondary btn-sm">🔄 Refresh Stats</button>
+                    <button id="btn-refresh-stats" class="btn btn-secondary btn-sm" title="Refresh Statistics" aria-label="Refresh Stats">🔄 Refresh Stats</button>
                 </div>
 
                 <div class="stats-grid">

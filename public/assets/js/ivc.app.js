@@ -6,12 +6,11 @@ nicknameInput.value = myNickname;
 btnRandomName.addEventListener('click', () => {
     myNickname = generateAnonymousName();
     nicknameInput.value = myNickname;
-    btnRandomName.setAttribute('aria-label', `Randomize Nick (Randomized to ${myNickname})`);
-    btnRandomName.setAttribute('title', `Randomized to ${myNickname}`);
-    setTimeout(() => {
-        btnRandomName.setAttribute('aria-label', 'Randomize Nick');
-        btnRandomName.setAttribute('title', 'Randomize Nickname');
-    }, 3000);
+
+    const nickStatusEl = document.getElementById('nick-live-status');
+    if (nickStatusEl) {
+        nickStatusEl.textContent = `Randomized nickname to ${myNickname}`;
+    }
 });
 
 // Initialize Theme System & Tabs on startup

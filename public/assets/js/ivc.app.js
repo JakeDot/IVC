@@ -6,6 +6,12 @@ nicknameInput.value = myNickname;
 btnRandomName.addEventListener('click', () => {
     myNickname = generateAnonymousName();
     nicknameInput.value = myNickname;
+    btnRandomName.setAttribute('aria-label', `Randomize Nick (Randomized to ${myNickname})`);
+    btnRandomName.setAttribute('title', `Randomized to ${myNickname}`);
+    setTimeout(() => {
+        btnRandomName.setAttribute('aria-label', 'Randomize Nick');
+        btnRandomName.setAttribute('title', 'Randomize Nickname');
+    }, 3000);
 });
 
 // Initialize Theme System & Tabs on startup

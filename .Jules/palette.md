@@ -10,6 +10,6 @@
 **Learning:** In static HTML templates with JS-driven tab switching (like chat sidebars), defining explicit `role="tablist"`, `role="tab"`, `aria-selected`, `aria-controls`, `role="tabpanel"`, and `aria-labelledby` attributes—and dynamically updating `aria-selected` in JS click handlers—enables screen readers to accurately identify active sub-panels and navigate controls seamlessly.
 **Action:** Always pair sidebar tab UI toggle logic with `aria-selected` state updates and link tabs to panel containers using `aria-controls` / `aria-labelledby`.
 
-## 2025-05-20 - Action Button ARIA Label Preservation vs Status Announcements
-**Learning:** Action buttons with visible text should maintain a clean accessible name describing their function (e.g. 'Randomize Nick'). Mutating an action button's `aria-label` to inject dynamic result status text ('Randomized to VectorWolf#474') degrades usability for screen reader users. Dynamic status updates should use an `aria-live` region instead.
-**Action:** Do not mutate action button `aria-label` attributes to convey dynamic status results; reserve `aria-label` for describing the control's action.
+## 2025-05-20 - ARIA Labels for Unlabeled Static Form Inputs
+**Learning:** In static HTML forms, input elements that rely on placeholder text or implicit visual grouping without dedicated `<label>` tags (such as share URLs, chat inputs, or file triggers) are announced as contextless text fields by screen readers. Providing explicit `aria-label` attributes ensures screen readers clearly convey input purpose.
+**Action:** Always verify that input fields without explicit `<label>` tags define a descriptive `aria-label` attribute.

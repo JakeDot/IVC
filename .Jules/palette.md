@@ -9,3 +9,7 @@
 ## 2025-04-15 - ARIA Tablist/Tab/Tabpanel Semantics for Chat Sidebar Panels
 **Learning:** In static HTML templates with JS-driven tab switching (like chat sidebars), defining explicit `role="tablist"`, `role="tab"`, `aria-selected`, `aria-controls`, `role="tabpanel"`, and `aria-labelledby` attributes—and dynamically updating `aria-selected` in JS click handlers—enables screen readers to accurately identify active sub-panels and navigate controls seamlessly.
 **Action:** Always pair sidebar tab UI toggle logic with `aria-selected` state updates and link tabs to panel containers using `aria-controls` / `aria-labelledby`.
+
+## 2025-05-20 - ARIA Labels for Unlabeled Static Form Inputs
+**Learning:** In static HTML forms, input elements that rely on placeholder text or implicit visual grouping without dedicated `<label>` tags (such as share URLs, chat inputs, or file triggers) are announced as contextless text fields by screen readers. Providing explicit `aria-label` attributes ensures screen readers clearly convey input purpose.
+**Action:** Always verify that input fields without explicit `<label>` tags define a descriptive `aria-label` attribute.

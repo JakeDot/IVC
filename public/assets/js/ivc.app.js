@@ -2,10 +2,14 @@
 
 // Initialize Nickname input
 nicknameInput.value = myNickname;
+if (btnRandomName) {
+    btnRandomName.setAttribute('aria-label', `Randomize Nick (Current: ${myNickname})`);
+}
 
 btnRandomName.addEventListener('click', () => {
     myNickname = generateAnonymousName();
     nicknameInput.value = myNickname;
+    btnRandomName.setAttribute('aria-label', `Randomize Nick (Randomized to ${myNickname})`);
 });
 
 // Initialize Theme System & Tabs on startup
@@ -124,6 +128,8 @@ btnQrLink.addEventListener('click', () => {
     if (qrCodeContainer.style.display === 'block') {
         qrCodeContainer.style.display = 'none';
         btnQrLink.textContent = '📱 QR Code';
+        btnQrLink.setAttribute('aria-expanded', 'false');
+        btnQrLink.setAttribute('aria-label', 'Show QR Code');
     } else {
         qrCodeContainer.innerHTML = '';
         let ivcUri = '';
@@ -142,6 +148,8 @@ btnQrLink.addEventListener('click', () => {
         });
         qrCodeContainer.style.display = 'block';
         btnQrLink.textContent = '📱 Hide QR';
+        btnQrLink.setAttribute('aria-expanded', 'true');
+        btnQrLink.setAttribute('aria-label', 'Hide QR Code');
     }
 });
 
@@ -164,4 +172,16 @@ if (btnAttachFile && chatFileInput) {
     chatFileInput.addEventListener('change', handleShareFileSelect);
 }
 
-btnRefreshStats.addEventListener('click', loadConnectionStats);
+btnRefreshStats.addEventListener('click', async () => {
+    btnRefreshStats.disabled = true;
+    btnRefreshStats.textContent = '🔄 Refreshing...';
+    btnRefreshStats.setAttribute('aria-label', 'Refreshing stats...');
+    await loadConnectionStats();
+    btnRefreshStats.textContent = '✅ Refreshed!';
+    btnRefreshStats.setAttribute('aria-label', 'Stats refreshed');
+    setTimeout(() => {
+        btnRefreshStats.textContent = '🔄 Refresh Stats';
+        btnRefreshStats.setAttribute('aria-label', 'Refresh Stats');
+        btnRefreshStats.disabled = false;
+    }, 1500);
+});

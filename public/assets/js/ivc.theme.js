@@ -4,6 +4,8 @@
    THEME MANAGEMENT & CUSTOM USER THEMES
    ========================================================================== */
 
+let previousActiveElement = null;
+
 function getCustomThemes() {
     try {
         const json = localStorage.getItem(STORAGE_CUSTOM_THEMES);
@@ -200,6 +202,7 @@ function getFormDataAsThemeData() {
 }
 
 function openThemeModal() {
+    previousActiveElement = document.activeElement;
     renderSavedThemesList();
     themeModal.classList.remove('hidden');
     if (themeNameInput) {
@@ -213,6 +216,9 @@ function closeThemeModal() {
     // Re-apply saved active theme if user was previewing
     const activeTheme = localStorage.getItem(STORAGE_ACTIVE_THEME) || 'dark';
     applyTheme(activeTheme);
+    if (previousActiveElement && typeof previousActiveElement.focus === 'function') {
+        previousActiveElement.focus();
+    }
 }
 
 function renderSavedThemesList() {
@@ -239,9 +245,9 @@ function renderSavedThemesList() {
                 </div>
             </div>
             <div class="theme-actions">
-                <button class="btn btn-primary btn-sm btn-apply-theme" type="button">Apply</button>
-                <button class="btn btn-secondary btn-sm btn-edit-theme" type="button">Edit</button>
-                <button class="btn btn-danger btn-sm btn-delete-theme" type="button">Delete</button>
+                <button class="btn btn-primary btn-sm btn-apply-theme" type="button" aria-label="Apply ${theme.name} theme">Apply</button>
+                <button class="btn btn-secondary btn-sm btn-edit-theme" type="button" aria-label="Edit ${theme.name} theme">Edit</button>
+                <button class="btn btn-danger btn-sm btn-delete-theme" type="button" aria-label="Delete ${theme.name} theme">Delete</button>
             </div>
         `;
 

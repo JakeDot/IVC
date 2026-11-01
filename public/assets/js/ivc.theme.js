@@ -137,6 +137,12 @@ function initThemeSystem() {
     btnThemeModal.addEventListener('click', openThemeModal);
     btnCloseThemeModal.addEventListener('click', closeThemeModal);
 
+    themeModal.addEventListener('click', (e) => {
+        if (e.target === themeModal) {
+            closeThemeModal();
+        }
+    });
+
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && !themeModal.classList.contains('hidden')) {
             closeThemeModal();
@@ -199,7 +205,10 @@ function getFormDataAsThemeData() {
     };
 }
 
+let previousModalActiveElement = null;
+
 function openThemeModal() {
+    previousModalActiveElement = document.activeElement;
     renderSavedThemesList();
     themeModal.classList.remove('hidden');
     if (themeNameInput) {
@@ -213,6 +222,11 @@ function closeThemeModal() {
     // Re-apply saved active theme if user was previewing
     const activeTheme = localStorage.getItem(STORAGE_ACTIVE_THEME) || 'dark';
     applyTheme(activeTheme);
+
+    if (previousModalActiveElement && typeof previousModalActiveElement.focus === 'function') {
+        previousModalActiveElement.focus();
+        previousModalActiveElement = null;
+    }
 }
 
 function renderSavedThemesList() {

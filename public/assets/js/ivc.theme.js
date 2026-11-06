@@ -199,7 +199,10 @@ function getFormDataAsThemeData() {
     };
 }
 
+let previousFocusedElement = null;
+
 function openThemeModal() {
+    previousFocusedElement = document.activeElement;
     renderSavedThemesList();
     themeModal.classList.remove('hidden');
     if (themeNameInput) {
@@ -213,6 +216,11 @@ function closeThemeModal() {
     // Re-apply saved active theme if user was previewing
     const activeTheme = localStorage.getItem(STORAGE_ACTIVE_THEME) || 'dark';
     applyTheme(activeTheme);
+
+    if (previousFocusedElement && typeof previousFocusedElement.focus === 'function') {
+        previousFocusedElement.focus();
+        previousFocusedElement = null;
+    }
 }
 
 function renderSavedThemesList() {

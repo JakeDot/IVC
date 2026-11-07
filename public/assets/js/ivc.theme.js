@@ -225,6 +225,7 @@ function closeThemeModal() {
     if (previouslyFocusedElement && typeof previouslyFocusedElement.focus === 'function') {
         previouslyFocusedElement.focus();
     }
+    previouslyFocusedElement = null;
 }
 
 function renderSavedThemesList() {

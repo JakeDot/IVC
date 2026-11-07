@@ -143,6 +143,12 @@ function initThemeSystem() {
         }
     });
 
+    themeModal.addEventListener('click', (e) => {
+        if (e.target === themeModal) {
+            closeThemeModal();
+        }
+    });
+
     btnPreviewTheme.addEventListener('click', () => {
         const previewData = getFormDataAsThemeData();
         applyTheme('custom', previewData);
@@ -199,7 +205,10 @@ function getFormDataAsThemeData() {
     };
 }
 
+let previouslyFocusedElement = null;
+
 function openThemeModal() {
+    previouslyFocusedElement = document.activeElement;
     renderSavedThemesList();
     themeModal.classList.remove('hidden');
     if (themeNameInput) {
@@ -213,6 +222,10 @@ function closeThemeModal() {
     // Re-apply saved active theme if user was previewing
     const activeTheme = localStorage.getItem(STORAGE_ACTIVE_THEME) || 'dark';
     applyTheme(activeTheme);
+    if (previouslyFocusedElement && typeof previouslyFocusedElement.focus === 'function') {
+        previouslyFocusedElement.focus();
+    }
+    previouslyFocusedElement = null;
 }
 
 function renderSavedThemesList() {

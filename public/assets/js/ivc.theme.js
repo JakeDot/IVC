@@ -4,6 +4,16 @@
    THEME MANAGEMENT & CUSTOM USER THEMES
    ========================================================================== */
 
+let themeModalPreviousFocus = null;
+
+function announceThemeStatus(msg) {
+    const el = document.getElementById('theme-status-msg');
+    if (el) {
+        el.textContent = '';
+        setTimeout(() => { el.textContent = msg; }, 50);
+    }
+}
+
 function getCustomThemes() {
     try {
         const json = localStorage.getItem(STORAGE_CUSTOM_THEMES);
@@ -169,6 +179,7 @@ function initThemeSystem() {
 
         editingCustomThemeId = null;
         customThemeForm.reset();
+        announceThemeStatus(`Theme "${themeData.name}" saved successfully.`);
         alert(`Theme "${themeData.name}" saved successfully!`);
     });
 
@@ -200,11 +211,13 @@ function getFormDataAsThemeData() {
 }
 
 function openThemeModal() {
+    themeModalPreviousFocus = document.activeElement;
     renderSavedThemesList();
     themeModal.classList.remove('hidden');
     if (themeNameInput) {
         themeNameInput.focus();
     }
+    announceThemeStatus('Theme creator dialog opened');
 }
 
 function closeThemeModal() {
@@ -213,6 +226,9 @@ function closeThemeModal() {
     // Re-apply saved active theme if user was previewing
     const activeTheme = localStorage.getItem(STORAGE_ACTIVE_THEME) || 'dark';
     applyTheme(activeTheme);
+    if (themeModalPreviousFocus && typeof themeModalPreviousFocus.focus === 'function') {
+        themeModalPreviousFocus.focus();
+    }
 }
 
 function renderSavedThemesList() {
@@ -247,6 +263,7 @@ function renderSavedThemesList() {
 
         item.querySelector('.btn-apply-theme').addEventListener('click', () => {
             applyTheme(id);
+            announceThemeStatus(`Theme "${theme.name}" applied.`);
             closeThemeModal();
         });
 
